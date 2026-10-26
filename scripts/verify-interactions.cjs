@@ -32,12 +32,13 @@ async (page) => {
       const observer = new MutationObserver(() => {
         const overlay = document.querySelector("#whiteout"),
           state = document.querySelector("#app").dataset.state;
-        if (overlay.style.opacity === "1" && !window.__whiteAt)
+        if (overlay.dataset.white === "true" && !window.__whiteAt)
           window.__whiteAt = performance.now();
-        if (overlay.style.opacity !== "1") window.__whiteAt = null;
+        if (overlay.dataset.white !== "true") window.__whiteAt = null;
         if (state === "redirect")
           window.recordVisualState({
             opacity: getComputedStyle(overlay).opacity,
+            white: overlay.dataset.white,
             state,
             whiteAt: window.__whiteAt,
             now: performance.now(),
@@ -58,6 +59,7 @@ async (page) => {
     if (
       requests !== 1 ||
       atNavigation.opacity !== "1" ||
+      atNavigation.white !== "true" ||
       atNavigation.state !== "redirect" ||
       atNavigation.now - atNavigation.whiteAt < 380 ||
       errors.length
@@ -88,7 +90,7 @@ async (page) => {
     await target.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await target.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await target.waitForFunction(
-      () => document.querySelector("#whiteout").style.opacity === "1",
+      () => document.querySelector("#whiteout").dataset.white === "true",
     );
     await target.screenshot({
       path: "output/playwright/pure-white-before-navigation.png",
@@ -181,7 +183,7 @@ async (page) => {
       await target.locator("#box-button").focus();
       await target.keyboard.press("Enter");
       await target.waitForFunction(
-        () => document.querySelector("#whiteout").style.opacity === "1",
+        () => document.querySelector("#whiteout").dataset.white === "true",
       );
       await target.emulateMedia({ reducedMotion: "no-preference" });
     },
@@ -199,12 +201,12 @@ async (page) => {
           get: () => true,
         });
         document.dispatchEvent(new Event("visibilitychange"));
-        return document.querySelector("#whiteout").style.opacity;
+        return document.querySelector("#whiteout").dataset.spread;
       });
       await target.waitForTimeout(300);
       const after = await target
         .locator("#whiteout")
-        .evaluate((element) => element.style.opacity);
+        .evaluate((element) => element.dataset.spread);
       if (before !== after) throw new Error("Hidden transition advanced");
       await target.evaluate(() => {
         delete document.hidden;

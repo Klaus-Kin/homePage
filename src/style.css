@@ -40,14 +40,21 @@ button:disabled {
   /* 截图原尺寸与宝盒投影共同维护；所有降级元素共享同一个 cover 平面。 */
   --static-image: url("/assets/scene-desktop.webp");
   --static-aspect: calc(1920 / 1080);
-  --static-box-x: calc(1216.390625 / 1920);
-  --static-box-y: calc(718.484375 / 1080);
-  --static-box-w: calc(417.4375 / 1920);
-  --static-box-h: calc(186.296875 / 1080);
+  --static-box-x: calc(1371.500000 / 1920);
+  --static-box-y: calc(766.656250 / 1080);
+  --static-box-w: calc(274.218750 / 1920);
+  --static-box-h: calc(105.343750 / 1080);
   --static-width: max(100vw, calc(var(--view-height) * var(--static-aspect)));
   --static-height: calc(var(--static-width) / var(--static-aspect));
   --static-left: calc((100vw - var(--static-width)) / 2);
-  --static-top: calc((var(--view-height) - var(--static-height)) / 2);
+  /* 方形屏幕向上调整裁切，为盒底提示留出空间；图片和热点始终共用同一个偏移。 */
+  --static-top: min(
+    calc((var(--view-height) - var(--static-height)) / 2),
+    calc(
+      var(--view-height) - var(--static-caption-bottom) - var(--static-caption-gap) -
+        var(--static-height) * (var(--static-box-y) + var(--static-box-h))
+    )
+  );
   --static-caption-width: min(350px, calc(100vw - 24px));
   --static-caption-bottom: 60px;
   --static-caption-gap: 12px;
@@ -316,9 +323,19 @@ h1 > strong {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: #fff;
+  /* 渐变中心取自盒内光源投影，实心半径逐步吞没周围与远角。 */
+  background: radial-gradient(
+    circle at var(--light-x, 50%) var(--light-y, 75%),
+    #fff 0px,
+    #fff var(--light-radius, 0px),
+    #fff0 var(--light-edge, 0px)
+  );
   opacity: 0;
   pointer-events: none;
+}
+#whiteout[data-white="true"] {
+  /* 完成态明确使用纯白，消除插值误差、羽化残留和横竖屏边角漏光。 */
+  background: #fff;
 }
 #app[data-state="transition"] #whiteout,
 #app[data-state="redirect"] #whiteout {
@@ -711,33 +728,39 @@ h1 > strong {
   #app {
     --static-image: url("/assets/scene-tablet.webp");
     --static-aspect: calc(768 / 1024);
-    --static-box-x: calc(358.90625 / 768);
-    --static-box-y: calc(692.734375 / 1024);
-    --static-box-w: calc(293.78125 / 768);
-    --static-box-h: calc(141.75 / 1024);
+    --static-box-x: calc(480.515625 / 768);
+    --static-box-y: calc(729.093750 / 1024);
+    --static-box-w: calc(198.484375 / 768);
+    --static-box-h: calc(82.000000 / 1024);
+    /* 方形平板裁切时额外避开页脚，让两行提示与底部文字各有空间。 */
+    --static-caption-bottom: 100px;
   }
 }
 @media (max-width: 767px) and (min-height: 500px) {
   .intro {
     top: 22%;
   }
+  .noscript-entry {
+    /* 横放闭合的待机宝盒靠右下，备用文字入口放在文案下方，避免盖住原生热点。 */
+    bottom: 30%;
+  }
   #app {
     --static-image: url("/assets/scene-mobile.webp");
     --static-aspect: calc(390 / 844);
-    --static-box-x: calc(58.015625 / 390);
-    --static-box-y: calc(562.09375 / 844);
-    --static-box-w: calc(278.5 / 390);
-    --static-box-h: calc(134.40625 / 844);
+    --static-box-x: calc(174.953125 / 390);
+    --static-box-y: calc(596.015625 / 844);
+    --static-box-w: calc(183.234375 / 390);
+    --static-box-h: calc(77.390625 / 844);
   }
 }
 @media (max-height: 499px) {
   #app {
     --static-image: url("/assets/scene-short.webp");
     --static-aspect: calc(844 / 390);
-    --static-box-x: calc(530.1875 / 844);
-    --static-box-y: calc(238.390625 / 390);
-    --static-box-w: calc(170.84375 / 844);
-    --static-box-h: calc(80.28125 / 390);
+    --static-box-x: calc(587.140625 / 844);
+    --static-box-y: calc(255.609375 / 390);
+    --static-box-w: calc(115.765625 / 844);
+    --static-box-h: calc(51.656250 / 390);
     --static-caption-width: min(270px, calc(100vw - 24px));
     --static-caption-bottom: 65px;
     --static-caption-gap: 5px;

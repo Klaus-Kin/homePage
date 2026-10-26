@@ -21,10 +21,10 @@ test("meteor head leads its tapering tail down and left", () => {
   }
 });
 
-// 盒脚所在平台是连续坡面的平缓区域，不另加悬浮底座。
-test("all four chest feet touch a level region of the continuous slope", () => {
-  for (const x of [-1.52, 1.52])
-    for (const z of [-0.57, 0.57]) assert.equal(groundHeight(x, z), 0);
+// 木盒底面所在区域是连续坡面的平缓区域，不另加悬浮底座。
+test("the wooden chest base touches a level region of the continuous slope", () => {
+  for (const x of [-1.93, 1.93])
+    for (const z of [-0.61, 0.61]) assert.equal(groundHeight(x, z), 0);
   assert.ok(Number.isFinite(groundHeight(-25, 14)));
   assert.ok(Math.abs(groundHeight(3, 2) - groundHeight(3.001, 2)) < 0.01);
 });

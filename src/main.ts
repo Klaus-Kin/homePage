@@ -1,5 +1,11 @@
 import { pageConfig } from "./config";
-import { JourneyState, isActivation, transitionFrame } from "./transition";
+import {
+  JourneyState,
+  isActivation,
+  transitionFrame,
+  lightSpread,
+  WhiteoutGate,
+} from "./transition";
 import type { MoonScene } from "./scene";
 
 // 启动守卫由 HTML 的无依赖脚本提供，类型声明不会引入新的运行时加载依赖。
@@ -25,7 +31,7 @@ let fallback = window.__moonBoot?.failed ?? false;
 let transitionRaf = 0;
 let transitionElapsed = 0;
 let transitionLast = 0;
-let whiteSince: number | null = null;
+const whiteGate = new WhiteoutGate();
 let gesture: { x: number; y: number; time: number; id: number } | null = null;
 
 // 文案只从配置写入文本节点，避免配置内容经由 HTML 注入页面。
@@ -94,17 +100,31 @@ function animateTransition(now: number) {
     motionPreference.matches,
     pageConfig.transition,
   );
-  whiteout.style.opacity = String(frame.opacity);
-  scene?.setTransition(frame.glow);
+  scene?.setTransition(frame.progress);
+  // 正常场景读取盒内锚点；降级时以截图热点中心定位，不依赖 WebGL。
+  let source = scene?.getLightScreenPosition();
+  if (!source) {
+    // 正常 WebGL 帧不读 DOM 尺寸，避免逐帧写入扩散样式后强制同步布局。
+    const rect = button.getBoundingClientRect();
+    source = { x: rect.left + rect.width / 2, y: rect.top + rect.height * 0.6 };
+  }
+  const spread = lightSpread(
+    window.innerWidth,
+    window.innerHeight,
+    source,
+    frame.spread,
+  );
+  whiteout.style.setProperty("--light-x", `${spread.x}px`);
+  whiteout.style.setProperty("--light-y", `${spread.y}px`);
+  whiteout.style.setProperty("--light-radius", `${spread.radius}px`);
+  whiteout.style.setProperty("--light-edge", `${spread.radius + spread.feather}px`);
+  whiteout.dataset.white = String(frame.white);
+  whiteout.dataset.spread = String(frame.spread);
+  // 扩散层自身保持不透明，局部渐变决定光照范围；不用整屏透明度代替空间扩散。
+  whiteout.style.opacity = frame.spread > 0 ? "1" : "0";
   // 以首次实际渲染纯白的时刻计算停留，避免运行中切换动态偏好提前导航。
-  if (frame.white && whiteSince === null) whiteSince = transitionElapsed;
   // 过渡中由减少动态切回普通模式时，重新计算下一次连续纯白的停留时间。
-  if (!frame.white) whiteSince = null;
-  if (
-    frame.white &&
-    whiteSince !== null &&
-    transitionElapsed - whiteSince >= pageConfig.transition.hold
-  ) {
+  if (whiteGate.present(transitionElapsed, frame.white, pageConfig.transition.hold)) {
     state.redirect();
     app.dataset.state = state.phase;
     status.textContent = "月光之旅即将启程";

@@ -35,7 +35,11 @@ export function fbm(x: number, y: number) {
 
 /** 宝盒附近平缓，远离后自然起伏并向山谷下降；近坡一直延伸到相机后方。 */
 export function groundHeight(x: number, z: number) {
-  const distance = Math.hypot(x / 2.5, z / 1.5);
+  // 平缓区覆盖上盖翻到左侧后的落点，避免完全展开时末端悬在山谷上方。
+  const distance = Math.min(
+    Math.hypot(x / 2.5, z / 1.5),
+    Math.hypot((x - 0.2) / 3.5, (z + 1.2) / 4),
+  );
   const blend = Math.min(1, Math.max(0, distance - 1));
   const smooth = blend * blend * (3 - 2 * blend);
   if (smooth === 0) return 0;

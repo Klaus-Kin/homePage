@@ -29,7 +29,10 @@ async (page) => {
       .locator("canvas")
       .screenshot({ path: `output/playwright/scene-${name}.png` });
     await style.evaluate((el) => el.remove());
-    results.push({ name, width, height });
+    // 随最终静态图保存独立的投影证据，CSS 热点与恢复测试都使用同一轮导出的范围。
+    const bounds = await page.locator("#scene").evaluate((el) => JSON.parse(el.dataset.boxBounds));
+    const hitBounds = await page.locator("#box-button").boundingBox();
+    results.push({ name, width, height, bounds, hitBounds });
   }
   await page.emulateMedia({ reducedMotion: "no-preference" });
   return results;

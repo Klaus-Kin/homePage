@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { fitCamera, projectBounds } from "./responsive";
-import { sceneConfig } from "./config";
+import { sceneConfig, pageConfig } from "./config";
+import { transitionFrame } from "./transition";
 import { createChest } from "./scene/chest";
 import { createTerrain } from "./scene/terrain";
 import { createSky } from "./scene/sky";
@@ -8,6 +9,7 @@ import { createSky } from "./scene/sky";
 export interface MoonScene {
   setHover(value: boolean): void;
   setTransition(value: number): void;
+  getLightScreenPosition(): { x: number; y: number };
   setReducedMotion(value: boolean): void;
   setPointer(x: number, y: number): void;
   resize(): void;
@@ -38,7 +40,7 @@ export async function createScene(
   renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
-  // 地形、宝盒与主光都不移动，只在初始化和画质切换时更新阴影。
+  // 待机与扩散阶段按需更新阴影；盒盖运动时逐帧请求新的实体阴影。
   renderer.shadowMap.autoUpdate = false;
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x203552, 0.009);
@@ -106,18 +108,19 @@ export async function createScene(
     terrain: ReturnType<typeof createTerrain>,
     sky: ReturnType<typeof createSky>;
   let size: ReturnType<typeof fitCamera>;
-  const boxBounds = new THREE.Box3(
-    new THREE.Vector3(-1.84, -0.23, -0.84),
-    new THREE.Vector3(1.84, 0.88, 0.94),
-  );
   const moonBounds = new THREE.Box3(
     new THREE.Vector3(-1, -1, -1),
     new THREE.Vector3(1, 1, 1),
   );
-  const warmLight = new THREE.PointLight(0xffb34f, 12, 9, 2);
-  warmLight.position.set(0, 0.8, 1.0);
-  const backGlow = new THREE.PointLight(0xffbf66, 5, 7, 2);
-  backGlow.position.set(0, 0.8, -0.8);
+  // 柔和冷色补光显出灰黑木纹，暖白微光始终来自盒口。
+  const warmLight = new THREE.PointLight(0xcbd6dd, 8, 7, 2);
+  warmLight.position.set(-0.5, 2.3, 2.5);
+  const lightPoint = new THREE.Vector3();
+  function getLightScreenPosition() {
+    camera.updateMatrixWorld();
+    chest.lightAnchor.getWorldPosition(lightPoint).project(camera);
+    return { x: (lightPoint.x + 1) * size.width / 2, y: (1 - lightPoint.y) * size.height / 2 };
+  }
   const moonLight = new THREE.DirectionalLight(0xb3ceff, 2.0);
   moonLight.position.set(8, 14, -6);
   moonLight.castShadow = true;
@@ -137,7 +140,7 @@ export async function createScene(
     chest.box.updateMatrixWorld();
     sky.moon.updateMatrixWorld();
     const b = projectBounds(
-      boxBounds,
+      chest.bounds,
       chest.box.matrixWorld,
       camera,
       size.width,
@@ -145,13 +148,33 @@ export async function createScene(
     );
     // 验收读取完整模型投影，而非已裁到视口内的按钮，避免把模型裁切误判为可见。
     host.dataset.boxBounds = JSON.stringify(b);
+    // 同时记录真实端点的投影、高度与纵深，确保右端真正上抬，而非朝镜头水平旋开。
+    const projectChestPoint = (point: THREE.Vector3) => {
+      point.project(camera);
+      return { x: (point.x + 1) * size.width / 2, y: (1 - point.y) * size.height / 2 };
+    };
+    const hingePoint = chest.openingPivot.getWorldPosition(new THREE.Vector3());
+    const tipPoint = chest.movingHalf.localToWorld(new THREE.Vector3(-1.85, 0.22, 0.3));
+    host.dataset.chestPath = JSON.stringify({
+      hingeWorldZ: hingePoint.z,
+      tipWorldZ: tipPoint.z,
+      hingeWorldY: hingePoint.y,
+      tipWorldY: tipPoint.y,
+      hinge: projectChestPoint(hingePoint),
+      tip: projectChestPoint(tipPoint),
+    });
     const left = Math.max(0, b.left - 10),
       top = Math.max(0, b.top - 10);
+    // 横屏手机给提示保留间距，投影周围的点击留白不能压到提示文字上。
+    const captionTop = Math.min(
+      size.height - (size.name === "short" ? 65 : 105),
+      b.bottom + (size.name === "short" ? 15 : 32),
+    );
     Object.assign(hitTarget.style, {
       left: `${left}px`,
       top: `${top}px`,
       width: `${Math.max(44, Math.min(size.width, b.right + 10) - left)}px`,
-      height: `${Math.max(44, Math.min(size.height, b.bottom + 10) - top)}px`,
+      height: `${Math.max(44, Math.min(size.height, b.bottom + 10, captionTop - 5) - top)}px`,
     });
     const captionWidth = Math.min(
       size.width - 24,
@@ -159,7 +182,7 @@ export async function createScene(
     );
     Object.assign(caption.style, {
       left: `${Math.min(size.width - captionWidth - 12, Math.max(12, (b.left + b.right - captionWidth) / 2))}px`,
-      top: `${Math.min(size.height - (size.name === "short" ? 65 : 105), b.bottom + (size.name === "short" ? 15 : 32))}px`,
+      top: `${captionTop}px`,
       width: `${captionWidth}px`,
     });
     // 只暴露投影和帧计数供验收，不向页面暴露场景修改接口。
@@ -175,13 +198,23 @@ export async function createScene(
   }
   function render() {
     if (disposed || document.hidden || !sky) return;
-    warmLight.intensity = 8 + (hovered ? 5 : 0) + transition * 65;
-    backGlow.intensity = 5 + transition * 20;
-    chest.glowMaterial.opacity = Math.min(
-      1,
-      0.85 + (hovered ? 0.12 : 0) + transition,
-    );
-    renderer.toneMappingExposure = 1.05 + transition * 2;
+    const duration = reduced ? pageConfig.transition.reducedFade
+      : pageConfig.transition.charge + pageConfig.transition.fade;
+    const frame = transitionFrame(transition * duration, reduced, pageConfig.transition);
+    if (chest.update(frame.lid, frame.glow, reduced)) {
+      renderer.shadowMap.needsUpdate = true;
+      syncTargets();
+    }
+    warmLight.intensity = 8 + (hovered ? 0.5 : 0) + frame.glow * 3;
+    renderer.toneMappingExposure = 1.05 + frame.glow * 0.35;
+    // 只读验收数据对应真实转轴与阴影行为，光圈从同一盒内锚点读取中心。
+    host.dataset.lidAngle = String(-chest.openingPivot.rotation.z * 180 / Math.PI);
+    // 验收同时检查水平转轴、变化的抬升高度与固定纵深，不能仅凭角度数字判断方向。
+    host.dataset.openingRotation = JSON.stringify(chest.openingPivot.rotation.toArray().slice(0, 3));
+    host.dataset.chestHeight = JSON.stringify([chest.bounds.min.y, chest.bounds.max.y]);
+    host.dataset.lightSource = JSON.stringify(getLightScreenPosition());
+    host.dataset.shadowMoving = String(frame.lid > 0 && frame.lid < 1);
+    host.dataset.beamsVisible = String(!reduced && frame.glow > 0);
     terrain.update(time, reduced);
     sky.update(time, reduced);
     renderer.render(scene, camera);
@@ -244,7 +277,6 @@ export async function createScene(
       new THREE.HemisphereLight(0x9ebde8, 0x292719, 1.1),
       moonLight,
       warmLight,
-      backGlow,
     );
     host.appendChild(renderer.domElement);
     renderer.domElement.addEventListener("webglcontextlost", contextLost);
@@ -268,6 +300,7 @@ export async function createScene(
       transition = value;
       if (reduced) render();
     },
+    getLightScreenPosition,
     setReducedMotion(value) {
       reduced = value;
       resize();

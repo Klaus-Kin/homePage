@@ -122,10 +122,10 @@ async (page) => {
 
   // 下列点取自源截图中的宝盒中心，独立于页面按钮样式，防止测到错误按钮自身仍判通过。
   const shots = {
-    desktop: { width: 1920, height: 1080, x: 1425.109375, y: 811.6328125 },
-    tablet: { width: 768, height: 1024, x: 505.796875, y: 763.609375 },
-    mobile: { width: 390, height: 844, x: 197.265625, y: 629.296875 },
-    short: { width: 844, height: 390, x: 615.609375, y: 278.53125 },
+    desktop: { width: 1920, height: 1080, x: 1508.624337, y: 819.336711, bottom: 872.000000 },
+    tablet: { width: 768, height: 1024, x: 579.761370, y: 770.100484, bottom: 811.093750 },
+    mobile: { width: 390, height: 844, x: 266.573927, y: 634.712228, bottom: 673.406250 },
+    short: { width: 844, height: 390, x: 645.040436, y: 281.454605, bottom: 307.265625 },
   };
   const sizes = [
     [1920, 1080],
@@ -171,9 +171,15 @@ async (page) => {
                 : "desktop";
         const shot = shots[name];
         const scale = Math.max(width / shot.width, height / shot.height);
+        // 以源截图中的盒底独立计算裁切，给提示预留空间；不读取按钮位置来选择点击点。
+        const captionSpace = name === "short" ? 70 : name === "tablet" ? 112 : 72;
+        const imageTop = Math.min(
+          (height - shot.height * scale) / 2,
+          height - captionSpace - shot.bottom * scale,
+        );
         const point = {
           x: (width - shot.width * scale) / 2 + shot.x * scale,
-          y: (height - shot.height * scale) / 2 + shot.y * scale,
+          y: imageTop + shot.y * scale,
         };
         await target.waitForTimeout(100);
         const layout = await target.evaluate(
@@ -189,16 +195,23 @@ async (page) => {
             const caption = document
               .querySelector(".box-caption")
               .getBoundingClientRect();
+            const plane = document
+              .querySelector(".scene-fallback")
+              .getBoundingClientRect();
+            const footer = document.querySelector(".site-footer").getBoundingClientRect();
             return {
               hit: hit?.id === expectedId,
               minSize: button.width >= 44 && button.height >= 44,
               imageMatches: image.includes(`scene-${name}.webp`),
+              planeCovers: plane.top <= 0 && plane.bottom >= innerHeight,
+              buttonVisible: button.top >= 0 && button.bottom <= innerHeight,
               captionVisible:
                 !javaScriptEnabled ||
                 (caption.left >= 0 &&
                   caption.right <= innerWidth &&
                   caption.top >= button.bottom &&
-                  caption.bottom <= innerHeight),
+                  caption.bottom <= innerHeight &&
+                  (name !== "tablet" || caption.bottom + 8 <= footer.top)),
             };
           },
           { point, name, javaScriptEnabled },
@@ -207,15 +220,17 @@ async (page) => {
           !layout.hit ||
           !layout.minSize ||
           !layout.imageMatches ||
+          !layout.planeCovers ||
+          !layout.buttonVisible ||
           !layout.captionVisible
         )
           throw new Error(
             `降级布局 ${width}x${height} JS=${javaScriptEnabled}: ${JSON.stringify({ point, layout })}`,
           );
         layouts.push({ width, height, image: name, ...layout });
-        if (width === 1023 && height === 768)
+        if ((width === 1023 && height === 768) || (width === 1024 && height === 1024))
           await target.screenshot({
-            path: `output/playwright/recovery-tablet-landscape-${javaScriptEnabled}.png`,
+            path: `output/playwright/recovery-tablet-${width === height ? "square" : "landscape"}-${javaScriptEnabled}.png`,
           });
       }
       const shot = shots.desktop,
