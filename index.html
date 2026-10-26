@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#080f20" />
+    <meta
+      name="description"
+      content="程序猿的月光宝盒。开发者、写作者、时空旅人，写代码也写故事。循着月光，走进我的数字世界。"
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- 样式独立于模块脚本加载，开发模式禁用 JavaScript 时也保留完整静态页面。 -->
+    <link rel="stylesheet" href="/src/style.css" />
+    <title>程序猿的月光宝盒</title>
+    <noscript
+      ><style>
+        /* 无脚本时直接展示静态页面；提高优先级，兼容构建后样式链接顺序变化。 */
+        html #app[data-state="loading"] {
+          visibility: visible;
+        }
+        #app .scene-fallback {
+          display: block;
+        }
+        #app #static-box,
+        #app .noscript-entry {
+          display: block;
+        }
+        #app .box-caption,
+        #app #box-button,
+        #app #status {
+          display: none;
+        }
+      </style></noscript
+    >
+  </head>
+  <body>
+    <main id="app" data-state="loading">
+      <!-- 静态图由同一新场景导出，只在 WebGL 失败或禁用脚本时显示。 -->
+      <div class="scene-fallback">
+        <!-- 原生链接独立于主模块；位置跟随截图平面缩放，脚本失效时仍能点击宝盒。 -->
+        <a
+          id="static-box"
+          href="__MOON_BLOG_URL__"
+          aria-label="开启月光宝盒，前往博客"
+        ></a>
+      </div>
+      <header class="site-header fade-content">
+        <a class="brand" href="/" aria-label="月光宝盒首页">
+          <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <path
+              d="M24 23.8A12 12 0 0 1 10.2 5.4 11.5 11.5 0 1 0 26.6 21"
+              stroke="currentColor"
+              stroke-width="1.3"
+            />
+            <path
+              d="m23 5 .9 3.1L27 9l-3.1.9L23 13l-.9-3.1L19 9l3.1-.9Z"
+              fill="currentColor"
+            />
+          </svg>
+          <span>月光宝盒<small>MOONLIGHT MEMOIRS</small></span>
+        </a>
+        <span class="night-note"><i></i>月色正好，欢迎来访</span>
+      </header>
+
+      <section class="intro fade-content" aria-labelledby="page-title">
+        <p class="eyebrow"><span></span> A LITTLE CODE. A LITTLE MAGIC.</p>
+        <h1 id="page-title"><span>程序猿的</span><strong>月光宝盒</strong></h1>
+        <div class="title-rule" aria-hidden="true"><span></span>✦</div>
+        <p class="description">
+          <span>开发者&nbsp; 写作者&nbsp; 时空旅人，</span
+          ><br />写代码也写故事。
+        </p>
+        <a class="journey-link" href="__MOON_BLOG_URL__" data-entrance>
+          <span class="arrow-circle" aria-hidden="true">↗</span>
+          <span
+            >循着月光，走进我的世界<small>LET THE JOURNEY BEGIN</small></span
+          >
+        </a>
+      </section>
+
+      <section class="artifact" aria-label="月光宝盒">
+        <div id="scene" aria-hidden="true"></div>
+        <button
+          id="box-button"
+          type="button"
+          aria-label="开启月光宝盒，前往博客"
+          disabled
+        ></button>
+        <p class="box-caption fade-content">
+          <span class="caption-line"></span
+          ><span id="box-prompt">正在唤醒月光…</span
+          ><span class="caption-line"></span
+          ><small>一念之间，便是另一个世界</small>
+        </p>
+      </section>
+
+      <footer class="site-footer fade-content">
+        <p>把热爱写进代码，把故事交给月光。</p>
+        <span><i>✦</i> 此间有故事，亦有远方</span>
+      </footer>
+      <p id="status" class="sr-only" role="status" aria-live="polite">
+        正在加载月光宝盒
+      </p>
+      <div id="whiteout" aria-hidden="true"></div>
+      <!-- 禁用脚本与入口模块失败共用原生入口，不能依赖主模块注册事件。 -->
+      <div class="noscript-entry">
+        月光静好。<a href="__MOON_BLOG_URL__">进入博客 →</a>
+      </div>
+    </main>
+    <script>
+      // 此守卫不导入任何模块，入口及其静态依赖失败时也能结束隐藏状态。
+      (() => {
+        const app = document.querySelector("#app");
+        let phase = "loading";
+        const timeout = window.setTimeout(() => fail("页面初始化超时"), 10000);
+        function stopWatching() {
+          clearTimeout(timeout);
+          window.removeEventListener("error", onError, true);
+        }
+        function fail(reason) {
+          if (phase !== "loading") return;
+          phase = "failed";
+          stopWatching();
+          app.classList.add("fallback", "boot-failed");
+          app.dataset.state = "idle";
+          document.querySelector("#status").textContent =
+            "已启用静态场景，可以通过宝盒或文字链接进入博客";
+          // 主模块若已部分运行，通知它释放资源并锁定降级，迟到的初始化不得切回 3D。
+          window.dispatchEvent(new Event("moon-boot-failed"));
+          console.warn("月光页面启动失败，已恢复静态入口：", reason);
+        }
+        function onError(event) {
+          // 构建工具可能重写入口标签及 id，因此按模块脚本类型识别资源失败。
+          if (
+            (event.target instanceof HTMLScriptElement &&
+              event.target.type === "module") ||
+            event instanceof ErrorEvent
+          )
+            fail(event.message || "入口模块加载失败");
+        }
+        window.__moonBoot = {
+          get failed() {
+            return phase === "failed";
+          },
+          ready() {
+            if (phase === "failed") return false;
+            phase = "ready";
+            stopWatching();
+            return true;
+          },
+        };
+        window.addEventListener("error", onError, true);
+      })();
+    </script>
+    <script id="entry-module" type="module" src="/src/main.ts"></script>
+  </body>
+</html>

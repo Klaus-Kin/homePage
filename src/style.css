@@ -1,0 +1,748 @@
+/* 本地系统字体优先：中文标题以楷体呈现，正文保留清晰的无衬线阅读体验。 */
+:root {
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  color: #e6e8ed;
+  background: #080f20;
+  font-synthesis: none;
+  --gold: #d4b47e;
+  --view-height: 100dvh;
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  font: inherit;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+button:focus-visible,
+a:focus-visible {
+  outline: 1px solid #edd5a5;
+  outline-offset: 9px;
+}
+button:disabled {
+  cursor: wait;
+}
+::selection {
+  background: #b398694d;
+}
+#app {
+  /* 截图原尺寸与宝盒投影共同维护；所有降级元素共享同一个 cover 平面。 */
+  --static-image: url("/assets/scene-desktop.webp");
+  --static-aspect: calc(1920 / 1080);
+  --static-box-x: calc(1216.390625 / 1920);
+  --static-box-y: calc(718.484375 / 1080);
+  --static-box-w: calc(417.4375 / 1920);
+  --static-box-h: calc(186.296875 / 1080);
+  --static-width: max(100vw, calc(var(--view-height) * var(--static-aspect)));
+  --static-height: calc(var(--static-width) / var(--static-aspect));
+  --static-left: calc((100vw - var(--static-width)) / 2);
+  --static-top: calc((var(--view-height) - var(--static-height)) / 2);
+  --static-caption-width: min(350px, calc(100vw - 24px));
+  --static-caption-bottom: 60px;
+  --static-caption-gap: 12px;
+  position: relative;
+  width: 100%;
+  height: var(--view-height);
+  min-height: 320px;
+  overflow: hidden;
+  isolation: isolate;
+  background: #080f20;
+}
+#whiteout {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.site-header {
+  position: absolute;
+  top: max(36px, env(safe-area-inset-top));
+  left: 5.2%;
+  right: 5.2%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 5;
+}
+.brand {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  min-height: 44px;
+}
+.brand svg {
+  width: 34px;
+  height: 34px;
+  color: var(--gold);
+}
+.brand > span {
+  font-family: "STKaiti", "KaiTi", serif;
+  font-size: 19px;
+  letter-spacing: 5px;
+}
+.brand small {
+  display: block;
+  font:
+    8px/1.6 Georgia,
+    serif;
+  letter-spacing: 2.5px;
+  margin-top: 4px;
+  color: #8f9aa9;
+}
+.night-note {
+  font-size: 10px;
+  letter-spacing: 2.5px;
+  color: #8996a8;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.night-note i {
+  width: 4px;
+  height: 4px;
+  background: #d3bd8d;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #d3bd8d;
+}
+.intro {
+  position: absolute;
+  left: 10%;
+  top: 29%;
+  z-index: 4;
+}
+.eyebrow {
+  font-size: 9px;
+  letter-spacing: 3.8px;
+  color: #a8afbb;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 29px;
+}
+.eyebrow > span {
+  width: 27px;
+  height: 1px;
+  background: #9c8c72;
+}
+h1 {
+  margin: 0;
+  font-family: "STKaiti", "KaiTi", "Kaiti SC", "Noto Serif CJK SC", serif;
+  font-weight: 400;
+  font-size: clamp(55px, 5.2vw, 100px);
+  line-height: 1.18;
+  letter-spacing: 0.085em;
+  text-shadow: 0 3px 25px #070e24;
+}
+h1 > span,
+h1 > strong {
+  display: block;
+}
+h1 > strong {
+  font-weight: 400;
+  color: #e4cca0;
+  margin-top: 7px;
+}
+.title-rule {
+  color: #bea477;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 93%;
+  font-size: 13px;
+  margin-top: 18px;
+}
+.title-rule > span {
+  height: 1px;
+  width: 100%;
+  background: linear-gradient(90deg, #9f8a66a6, #9f8a6615);
+}
+.description {
+  font-size: clamp(13px, 1.05vw, 17px);
+  line-height: 2.15;
+  letter-spacing: 2.2px;
+  color: #aeb8c9;
+  margin: 20px 0 27px;
+}
+.journey-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 48px;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #dac399;
+}
+.arrow-circle {
+  width: 39px;
+  height: 39px;
+  border: 1px solid #ba9f6e6b;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: Arial, sans-serif;
+  font-size: 20px;
+  transition:
+    background 0.25s,
+    transform 0.25s;
+}
+.journey-link small {
+  display: block;
+  font:
+    7px/1.8 Arial,
+    sans-serif;
+  letter-spacing: 2px;
+  color: #818b9b;
+  margin-top: 6px;
+}
+.journey-link:hover .arrow-circle {
+  background: #ddba7120;
+  transform: translate(2px, -2px);
+}
+
+#scene {
+  position: absolute;
+  inset: 0;
+}
+#scene canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#box-button {
+  position: absolute;
+  left: 25%;
+  top: 28%;
+  width: 52%;
+  height: 38%;
+  min-width: 44px;
+  min-height: 44px;
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+#box-button:focus-visible {
+  outline: 1px solid #e9d2a0;
+  box-shadow: 0 0 32px #dcb77725;
+}
+.box-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 3%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+  color: #d2c09c;
+  font-size: 11px;
+  letter-spacing: 2px;
+  pointer-events: none;
+  margin: 0;
+}
+.caption-line {
+  height: 1px;
+  width: 27px;
+  background: #c1a67454;
+}
+.box-caption small {
+  flex-basis: 100%;
+  text-align: center;
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: #8390a4;
+  margin-top: -2px;
+}
+
+.fallback #scene {
+  display: none;
+}
+.fallback .box-caption small {
+  color: #bac3d0;
+}
+.site-footer {
+  position: absolute;
+  bottom: max(29px, env(safe-area-inset-bottom));
+  left: 5.2%;
+  right: 5.2%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 4;
+  color: #818b9c;
+  font-size: 9px;
+  letter-spacing: 2px;
+}
+.site-footer p {
+  margin: 0;
+}
+.site-footer > span {
+  font-family: "STKaiti", "KaiTi", serif;
+  font-size: 12px;
+  letter-spacing: 2.5px;
+}
+.site-footer i {
+  font-style: normal;
+  color: #c4aa7d;
+  margin-right: 12px;
+  font-size: 10px;
+}
+.fade-content {
+  transition:
+    opacity 0.55s,
+    filter 0.55s;
+}
+#app[data-state="transition"] .fade-content,
+#app[data-state="redirect"] .fade-content {
+  opacity: 0;
+  filter: blur(3px);
+  pointer-events: none;
+}
+#whiteout {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+}
+#app[data-state="transition"] #whiteout,
+#app[data-state="redirect"] #whiteout {
+  pointer-events: auto;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.noscript-entry {
+  display: none;
+  position: absolute;
+  left: 10%;
+  bottom: 15%;
+  z-index: 10;
+  padding: 15px 20px;
+  background: #111c30;
+  border: 1px solid #9e865d;
+  color: #e4cca0;
+}
+
+/* 平板保留左右关系，压缩字号与留白，避免标题、圆月和宝盒互相覆盖。 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .intro {
+    left: 8%;
+    top: 30%;
+  }
+  h1 {
+    font-size: 67px;
+  }
+  .eyebrow {
+    font-size: 8px;
+    letter-spacing: 2.4px;
+  }
+
+  .description {
+    font-size: 13px;
+  }
+  .site-header {
+    top: 30px;
+  }
+  .journey-link {
+    font-size: 10px;
+  }
+  .box-caption {
+    font-size: 10px;
+    letter-spacing: 1px;
+  }
+}
+/* 手机使用独立竖屏构图，文字在上、宝盒在下，静态背景采用较小的本地资源。 */
+@media (max-width: 767px) {
+  .site-header {
+    top: max(25px, env(safe-area-inset-top));
+    left: 7%;
+    right: 7%;
+  }
+  .brand {
+    gap: 9px;
+  }
+  .brand svg {
+    width: 28px;
+    height: 28px;
+  }
+  .brand > span {
+    font-size: 16px;
+    letter-spacing: 4px;
+  }
+  .brand small {
+    font-size: 6px;
+    letter-spacing: 1.7px;
+  }
+  .night-note {
+    font-size: 8px;
+    letter-spacing: 1px;
+  }
+  .night-note i {
+    display: none;
+  }
+  .intro {
+    left: 9%;
+    top: 21%;
+    right: 7%;
+  }
+  .eyebrow {
+    font-size: 7px;
+    letter-spacing: 2.2px;
+    gap: 10px;
+    margin-bottom: 23px;
+  }
+  .eyebrow > span {
+    width: 19px;
+  }
+  h1 {
+    font-size: clamp(45px, 13vw, 64px);
+    line-height: 1.12;
+    letter-spacing: 0.1em;
+  }
+  h1 > strong {
+    margin-top: 9px;
+  }
+  .title-rule {
+    width: 57%;
+    margin-top: 12px;
+    font-size: 10px;
+  }
+  .description {
+    font-size: 11px;
+    line-height: 2;
+    letter-spacing: 1.6px;
+    margin: 13px 0 15px;
+  }
+  .journey-link {
+    font-size: 9px;
+    letter-spacing: 1px;
+    gap: 11px;
+  }
+  .arrow-circle {
+    width: 32px;
+    height: 32px;
+    font-size: 17px;
+  }
+  .journey-link small {
+    font-size: 6px;
+    letter-spacing: 1.3px;
+    margin-top: 4px;
+  }
+
+  .box-caption {
+    bottom: 2%;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    gap: 10px;
+  }
+  .box-caption small {
+    font-size: 8px;
+    letter-spacing: 2px;
+  }
+  .caption-line {
+    width: 18px;
+  }
+  .site-footer {
+    left: 7%;
+    right: 7%;
+    bottom: max(22px, env(safe-area-inset-bottom));
+    font-size: 8px;
+    letter-spacing: 0.8px;
+  }
+  .site-footer > span {
+    font-size: 10px;
+    letter-spacing: 1px;
+  }
+  .site-footer i {
+    margin-right: 5px;
+    font-size: 8px;
+  }
+}
+/* 矮屏切换左右布局，包含手机横屏；使用可视视口变量应对浏览器地址栏伸缩。 */
+@media (max-height: 700px) and (min-width: 768px) {
+  .intro {
+    top: 24%;
+  }
+  h1 {
+    font-size: 61px;
+  }
+  .eyebrow {
+    margin-bottom: 16px;
+  }
+  .description {
+    margin: 12px 0 15px;
+  }
+}
+@media (max-height: 720px) and (max-width: 767px) and (orientation: portrait) {
+  .intro {
+    top: 19%;
+  }
+  h1 {
+    font-size: 45px;
+  }
+  .eyebrow {
+    margin-bottom: 15px;
+  }
+  .description {
+    margin: 10px 0;
+  }
+
+  .journey-link small {
+    display: none;
+  }
+}
+@media (max-height: 499px) {
+  .site-header {
+    top: max(13px, env(safe-area-inset-top));
+    left: max(5%, env(safe-area-inset-left));
+    right: max(5%, env(safe-area-inset-right));
+  }
+  .brand svg {
+    width: 25px;
+    height: 25px;
+  }
+  .brand > span {
+    font-size: 15px;
+  }
+  .brand small {
+    font-size: 6px;
+  }
+  .intro {
+    top: 24%;
+    left: max(8%, env(safe-area-inset-left));
+    right: auto;
+  }
+  .eyebrow {
+    font-size: 6px;
+    letter-spacing: 1.8px;
+    margin-bottom: 10px;
+  }
+  h1 {
+    font-size: clamp(28px, 7vh, 38px);
+    line-height: 1.08;
+  }
+  h1 > strong {
+    margin-top: 4px;
+  }
+  .title-rule {
+    margin-top: 7px;
+    font-size: 8px;
+    width: 90%;
+  }
+  .description {
+    font-size: 9px;
+    letter-spacing: 1px;
+    line-height: 1.7;
+    margin: 8px 0;
+  }
+  .journey-link {
+    font-size: 8px;
+    gap: 9px;
+    min-height: 36px;
+  }
+  .arrow-circle {
+    width: 27px;
+    height: 27px;
+    font-size: 15px;
+  }
+  .journey-link small {
+    display: none;
+  }
+
+  .box-caption {
+    font-size: 8px;
+    letter-spacing: 1px;
+    bottom: 0;
+    gap: 8px;
+  }
+  .box-caption small {
+    font-size: 7px;
+  }
+  .site-footer {
+    bottom: max(12px, env(safe-area-inset-bottom));
+    font-size: 7px;
+    left: 5%;
+    right: 5%;
+  }
+  .site-footer > span {
+    font-size: 9px;
+  }
+
+  .night-note {
+    font-size: 8px;
+  }
+}
+/* 系统减少动态偏好即时生效；后台标签页同样暂停 CSS 环境动画。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *:before,
+  *:after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+.paused *,
+.paused *:before,
+.paused *:after {
+  animation-play-state: paused !important;
+}
+
+/* 全屏不透明画布统一渲染所有风景；HTML 只承载文案、焦点和访问入口。 */
+.artifact {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+#scene {
+  pointer-events: none;
+}
+/* 首帧尺寸与纹理准备好之前隐藏整页内容，文案与风景在同一帧展示。
+   visibility 保留尺寸供相机和点击区计算，并阻止加载中的入口接受焦点。 */
+#app[data-state="loading"] {
+  visibility: hidden;
+}
+/* 视觉内容等待首帧时，仍向辅助技术提供加载状态。 */
+#app[data-state="loading"] #status {
+  visibility: visible;
+}
+#box-button {
+  pointer-events: auto;
+}
+.box-caption {
+  right: auto;
+  bottom: auto;
+  text-shadow: 0 2px 12px #050a13;
+}
+.scene-fallback {
+  display: none;
+  position: absolute;
+  /* 背景按源图比例铺在此平面，按钮与提示使用同一缩放量及居中裁切偏移。 */
+  left: var(--static-left);
+  top: var(--static-top);
+  width: var(--static-width);
+  height: var(--static-height);
+  background: #080f20 var(--static-image) center/100% 100% no-repeat;
+  pointer-events: none;
+}
+.fallback .scene-fallback {
+  display: block;
+}
+#static-box {
+  display: none;
+  position: absolute;
+  left: calc(var(--static-width) * var(--static-box-x));
+  top: calc(var(--static-height) * var(--static-box-y));
+  width: max(44px, calc(var(--static-width) * var(--static-box-w)));
+  height: max(44px, calc(var(--static-height) * var(--static-box-h)));
+  pointer-events: auto;
+}
+/* 入口完全失败时只使用原生链接，不展示尚未绑定事件的按钮与加载提示。 */
+.boot-failed #static-box,
+.boot-failed .noscript-entry {
+  display: block;
+}
+.boot-failed #box-button,
+.boot-failed .box-caption {
+  display: none;
+}
+.fallback #box-button {
+  left: calc(var(--static-left) + var(--static-width) * var(--static-box-x));
+  top: calc(var(--static-top) + var(--static-height) * var(--static-box-y));
+  width: max(44px, calc(var(--static-width) * var(--static-box-w)));
+  height: max(44px, calc(var(--static-height) * var(--static-box-h)));
+}
+.fallback .box-caption {
+  /* 提示围绕宝盒中心定位，并限制在可视区域，旋转屏幕时随纯 CSS 布局更新。 */
+  left: clamp(
+    12px,
+    calc(
+      var(--static-left) + var(--static-width) *
+        (var(--static-box-x) + var(--static-box-w) / 2) -
+        var(--static-caption-width) / 2
+    ),
+    calc(100vw - var(--static-caption-width) - 12px)
+  );
+  top: min(
+    calc(var(--view-height) - var(--static-caption-bottom)),
+    calc(
+      var(--static-top) + var(--static-height) *
+        (var(--static-box-y) + var(--static-box-h)) + var(--static-caption-gap)
+    )
+  );
+  width: var(--static-caption-width);
+}
+@media (min-width: 768px) and (max-width: 1023px) and (min-height: 500px) {
+  .intro {
+    top: 23%;
+  }
+}
+/* 竖版平板截图只用于竖屏；横向平板采用横版背景，减少宝盒被上下裁切。 */
+@media (min-width: 768px) and (min-height: 500px) and (max-aspect-ratio: 1/1) {
+  /* 大尺寸竖屏沿用竖版截图与文字布局，正常场景和降级场景都保留完整宝盒。 */
+  .intro {
+    left: 8%;
+    top: 23%;
+  }
+  #app {
+    --static-image: url("/assets/scene-tablet.webp");
+    --static-aspect: calc(768 / 1024);
+    --static-box-x: calc(358.90625 / 768);
+    --static-box-y: calc(692.734375 / 1024);
+    --static-box-w: calc(293.78125 / 768);
+    --static-box-h: calc(141.75 / 1024);
+  }
+}
+@media (max-width: 767px) and (min-height: 500px) {
+  .intro {
+    top: 22%;
+  }
+  #app {
+    --static-image: url("/assets/scene-mobile.webp");
+    --static-aspect: calc(390 / 844);
+    --static-box-x: calc(58.015625 / 390);
+    --static-box-y: calc(562.09375 / 844);
+    --static-box-w: calc(278.5 / 390);
+    --static-box-h: calc(134.40625 / 844);
+  }
+}
+@media (max-height: 499px) {
+  #app {
+    --static-image: url("/assets/scene-short.webp");
+    --static-aspect: calc(844 / 390);
+    --static-box-x: calc(530.1875 / 844);
+    --static-box-y: calc(238.390625 / 390);
+    --static-box-w: calc(170.84375 / 844);
+    --static-box-h: calc(80.28125 / 390);
+    --static-caption-width: min(270px, calc(100vw - 24px));
+    --static-caption-bottom: 65px;
+    --static-caption-gap: 5px;
+  }
+  .journey-link {
+    min-height: 44px;
+  }
+}
