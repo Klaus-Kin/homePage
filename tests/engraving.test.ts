@@ -66,7 +66,12 @@ test("carving is reproducible with small uneven cuts and variable widths", () =>
   const strokes = carvedStrokes("回");
   assert.deepEqual(strokes, carvedStrokes("回"));
   assert.notEqual(strokes[0].path, glyphs["回"][0]);
-  assert.ok(strokes.every((s) => s.width >= 2.8 && s.width <= 3.8));
+  // 加粗后的主刀槽仍有笔画间宽差，避免细线描字，也不能粗到填死字内留白。
+  const inscription = [..."回到未來時光倒流"].flatMap(carvedStrokes);
+  assert.ok(inscription.every((s) => s.width >= 5.4 && s.width <= 7.4));
+  assert.ok(Math.max(...inscription.map((s) => s.width)) - Math.min(...inscription.map((s) => s.width)) > 1);
+  assert.ok(inscription.every((s) => s.facets.length > 0), "宽槽内应保留分次进刀留下的刻面");
+  assert.deepEqual(inscription, [..."回到未來時光倒流"].flatMap(carvedStrokes));
   const placed = engravingPlacements("回到未來", 0, 0, 154, 190);
   assert.deepEqual(placed, engravingPlacements("回到未來", 0, 0, 154, 190));
 });

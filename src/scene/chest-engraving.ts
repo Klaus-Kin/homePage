@@ -45,13 +45,22 @@ export function carvedStrokes(character: string) {
   return source.map((stroke, strokeIndex) => {
     const tokens = stroke.match(/[MLZ]|-?\d+(?:\.\d+)?/g)!;
     let path = "", x = 0, y = 0, firstX = 0, firstY = 0, segment = 0;
+    // 同一刀槽分几次进刀，短刻面沿笔画内部错落分布；固定种子保证贴图重建不闪变。
+    const facets: string[] = [];
     const seed = character.codePointAt(0)! + strokeIndex * 97;
     const lineTo = (nextX: number, nextY: number) => {
       const dx = nextX - x, dy = nextY - y, length = Math.hypot(dx, dy);
       const divisions = Math.max(1, Math.ceil(length / 13));
+      if (length > 10) {
+        const offset = cutVariation(seed + segment * 31) * 1.5;
+        const start = 0.18 + (cutVariation(seed + segment * 19) + 1) * 0.12;
+        const end = Math.min(0.9, start + 0.24 + length / 500);
+        facets.push(`M${x + dx * start - dy / length * offset} ${y + dy * start + dx / length * offset}`
+          + `L${x + dx * end - dy / length * (offset + 0.45)} ${y + dy * end + dx / length * (offset + 0.45)}`);
+      }
       for (let part = 1; part < divisions; part++) {
         const t = part / divisions;
-        const deviation = cutVariation(seed + segment * 17 + part) * 0.65;
+        const deviation = cutVariation(seed + segment * 17 + part) * 0.9;
         path += `L${(x + dx * t - dy / length * deviation).toFixed(2)} ${
           (y + dy * t + dx / length * deviation).toFixed(2)}`;
       }
@@ -66,7 +75,8 @@ export function carvedStrokes(character: string) {
         x = firstX = nextX; y = firstY = nextY; path += `M${x} ${y}`;
       } else lineTo(nextX, nextY);
     }
-    return { path, width: 3.3 + cutVariation(seed + 5) * 0.5 };
+    // 主槽宽度接近原来的两倍，笔画之间保留约两成刀压差，避免变成均匀描边字体。
+    return { path, width: 6.4 + cutVariation(seed + 5), facets };
   });
 }
 
@@ -90,8 +100,9 @@ export function engrave(color: CanvasRenderingContext2D, height: CanvasRendering
       context.rotate(placement.rotation);
       context.scale(size / 100, size / 100);
       context.translate(-50, -50);
-      context.lineJoin = "round";
-      context.lineCap = "round";
+      // 平头和斜接更接近刀具切口；圆角描边会把加粗后的字变成软管。
+      context.lineJoin = "bevel";
+      context.lineCap = "butt";
       for (const stroke of strokes) {
         const path = new Path2D(stroke.path);
         if (channel === "emission") {
@@ -114,6 +125,10 @@ export function engrave(color: CanvasRenderingContext2D, height: CanvasRendering
           context.strokeStyle = channel === "height" ? layer.height : layer.color;
           context.lineWidth = layer.width; context.stroke(path); context.restore();
         }
+        // 宽槽内部保留窄而深的复刀痕，颜色与高度共用路径；月光通过凹凸法线照出深浅。
+        context.strokeStyle = channel === "height" ? "#303030" : "#705735";
+        context.lineWidth = 0.7;
+        for (const facet of stroke.facets) context.stroke(new Path2D(facet));
       }
       context.restore();
     }

@@ -9,6 +9,7 @@ import { chestPlacement } from "./scene/chest-placement";
 import { chestMotionBounds, chestPose } from "./scene/chest-motion";
 import { createTerrain } from "./scene/terrain";
 import { createSky } from "./scene/sky";
+import { createMoonLight, syncMoonLight, preserveLandscapeLight } from "./scene/moonlight";
 
 export interface MoonScene {
   setHover(value: boolean): void;
@@ -107,12 +108,13 @@ export async function createScene(
     terrain: Awaited<ReturnType<typeof createTerrain>>,
     sky: Awaited<ReturnType<typeof createSky>>;
   let size: ReturnType<typeof fitCamera>;
+  let syncLandscapeLight: ReturnType<typeof preserveLandscapeLight>;
   const moonBounds = new THREE.Box3(
     new THREE.Vector3(-1, -1, -1),
     new THREE.Vector3(1, 1, 1),
   );
   // 柔和冷色补光显出灰黑木纹，暖白微光始终来自盒口。
-  const warmLight = new THREE.PointLight(0xcbd6dd, 8, 7, 2);
+  const warmLight = new THREE.PointLight(0xcbd6dd, 2, 7, 2);
   // 近景前移后补光维持原有相对距离，避免木纹和金色铰链因离开补光范围而失去层次。
   warmLight.position.set(chestPlacement.x - 1.35, 2.3, chestPlacement.z - 0.25);
   const lightPoint = new THREE.Vector3();
@@ -121,19 +123,16 @@ export async function createScene(
     chest.lightAnchor.getWorldPosition(lightPoint).project(camera);
     return { x: (lightPoint.x + 1) * size.width / 2, y: (1 - lightPoint.y) * size.height / 2 };
   }
-  const moonLight = new THREE.DirectionalLight(0xb3ceff, 2.0);
-  moonLight.position.set(8, 14, -6);
-  moonLight.castShadow = true;
-  Object.assign(moonLight.shadow.camera, {
-    left: -12,
-    right: 12,
-    top: 12,
-    bottom: -12,
-    near: 0.5,
-    far: 40,
-  });
-  moonLight.shadow.normalBias = 0.018;
-  moonLight.shadow.bias = -0.0001;
+  const moonLight = createMoonLight();
+  // 主光对准实际宝盒中心；月球随响应式构图移动时，受光面与背月投影使用同一个方向。
+  const moonTarget = new THREE.Vector3(chestPlacement.x, 0.3, chestPlacement.z);
+  function syncLighting() {
+    if (syncMoonLight(moonLight, sky.moon, moonTarget)) {
+      renderer.shadowMap.needsUpdate = true;
+      recordResources = true;
+    }
+    syncLandscapeLight(camera);
+  }
 
   function syncTargets() {
     // 点击初始帧沿用近景，随着开盖平滑退让；触屏没有额外鼠标视差。
@@ -199,7 +198,8 @@ export async function createScene(
       renderer.shadowMap.needsUpdate = true;
       syncTargets();
     }
-    warmLight.intensity = 8 + (hovered ? 0.5 : 0) + frame.glow * 3;
+    // 补光只保留暗面木纹，方向性明暗由月光主导；激活后的暖光仍由盒内光源负责。
+    warmLight.intensity = 2 + (hovered ? 0.2 : 0) + frame.glow;
     renderer.toneMappingExposure = 1.05 + frame.glow * 0.35;
     // 只读验收数据对应真实转轴与阴影行为，光圈从同一盒内锚点读取中心。
     host.dataset.lidAngle = String(-chest.openingPivot.rotation.z * 180 / Math.PI);
@@ -211,6 +211,7 @@ export async function createScene(
     host.dataset.beamsVisible = String(!reduced && frame.glow > 0);
     terrain.update(time, reduced);
     sky.update(time, reduced);
+    syncLighting();
     renderer.render(scene, camera);
     host.dataset.frames = String(++frameCount);
     // 资源统计仅在构图或画质变化时记录，方便性能验收且不产生逐帧序列化开销。
@@ -221,6 +222,12 @@ export async function createScene(
         textures: renderer.info.memory.textures,
         geometries: renderer.info.memory.geometries,
         shadowSize: moonLight.shadow.mapSize.x,
+      });
+      // 验收读取真实月球、灯位与目标，验证缩放屏幕后光向和阴影确实改变。
+      host.dataset.moonLighting = JSON.stringify({
+        moon: sky.moon.getWorldPosition(new THREE.Vector3()).toArray(),
+        light: moonLight.position.toArray(), target: moonLight.target.position.toArray(),
+        direction: moonLight.position.clone().sub(moonLight.target.position).normalize().toArray(),
       });
       recordResources = false;
     }
@@ -277,6 +284,7 @@ export async function createScene(
     await init.checkpoint(true);
     performance.mark("moon-generation-start");
     terrain = await createTerrain(init);
+    syncLandscapeLight = preserveLandscapeLight(terrain.group);
     scene.add(terrain.group);
     sky = await createSky(lunarMap, init);
     scene.add(sky.group);
@@ -286,6 +294,7 @@ export async function createScene(
     scene.add(
       new THREE.HemisphereLight(0x9ebde8, 0x292719, 1.1),
       moonLight,
+      moonLight.target,
       warmLight,
     );
     init.check();
