@@ -1,7 +1,7 @@
-// 验证真实转轴、光圈起点与四种构图；虚拟时钟控制生产 RAF，不注入场景修改接口。
+// 验证真实转轴、光圈起点与六种尺寸；虚拟时钟控制生产 RAF，不注入场景修改接口。
 async (page) => {
   const origin = new URL(page.url()).origin, results = [];
-  for (const [name, width, height] of [["desktop",1920,1080],["mobile",390,844],["tablet",768,1024],["short",844,390]]) {
+  for (const [name, width, height] of [["ultrawide",3440,1440],["wide",2560,1080],["desktop",1920,1080],["mobile",390,844],["tablet",768,1024],["short",844,390]]) {
     const context = await page.context().browser().newContext({ viewport: { width, height } });
     try {
       const target = await context.newPage(), errors = [];
@@ -26,6 +26,9 @@ async (page) => {
             source: JSON.parse(scene.dataset.lightSource),
             center: { x: parseFloat(overlay.style.getPropertyValue("--light-x")), y: parseFloat(overlay.style.getPropertyValue("--light-y")) },
             spread: +(overlay.dataset.spread || 0), white: overlay.dataset.white === "true",
+            // 字段名保持兼容既有门禁；完成态实际应是用户要求的淡黄不透明光幕。
+            veilColor: getComputedStyle(overlay).backgroundColor,
+            veilOpacity: getComputedStyle(overlay).opacity,
             visible: bounds.left >= 0 && bounds.top >= 0 && bounds.right <= innerWidth && bounds.bottom <= innerHeight,
             shadowMoving: scene.dataset.shadowMoving === "true",
           };
@@ -34,7 +37,34 @@ async (page) => {
         if (data.rotation[0] !== 0 || data.rotation[1] !== 0 ||
             Math.abs(data.height[0] + 0.03) > 1e-8 || data.height[1] < 0.64 - 1e-8)
           throw new Error(`${name}/${stage}: 上盖未沿水平轴垂直上翻 ${JSON.stringify(data)}`);
-        await target.screenshot({ path: `output/playwright/chest-${name}-${stage}.png` });
+        const capture = await target.screenshot({ path: `output/playwright/chest-${name}-${stage}.png` });
+        if (stage === "open" || stage === "white") {
+          // 读取实际截图像素，防止仅改变材质色值后，叠加高亮仍把盒口渲染成纯白。
+          const pixels = await target.evaluate(async ({ uri, area, stage, width }) => {
+            const image = new Image(); image.src = uri; await image.decode();
+            const canvas = document.createElement("canvas");
+            canvas.width = image.width; canvas.height = image.height;
+            const ctx = canvas.getContext("2d"); ctx.drawImage(image, 0, 0);
+            const scale = image.width / width;
+            const bounds = stage === "white" ? [0, 0, image.width, image.height] : [
+              Math.max(0, Math.floor(area.left * scale)), Math.max(0, Math.floor(area.top * scale)),
+              Math.ceil((area.right - area.left) * scale), Math.ceil((area.bottom - area.top) * scale),
+            ];
+            const rgba = ctx.getImageData(...bounds).data;
+            let warm = 0, white = 0, veilMismatch = 0;
+            for (let i = 0; i < rgba.length; i += 4) {
+              if (rgba[i] > 150 && rgba[i + 1] > 100 && rgba[i] - rgba[i + 2] > 20) warm++;
+              if (rgba[i] > 245 && rgba[i + 1] > 245 && rgba[i + 2] > 245) white++;
+              if (rgba[i] !== 255 || rgba[i + 1] !== 241 || rgba[i + 2] !== 199 || rgba[i + 3] !== 255) veilMismatch++;
+            }
+            return { warm, white, veilMismatch };
+          }, { uri: `data:image/png;base64,${capture.toString("base64")}`, area: data.bounds, stage, width });
+          if (stage === "open" && (pixels.warm < 10 || pixels.white > Math.max(5, pixels.warm * 0.01)))
+            throw new Error(`${name}: 盒口亮部丢失淡金色 ${JSON.stringify(pixels)}`);
+          if (stage === "white" && pixels.veilMismatch)
+            throw new Error(`${name}: 完整光幕有非淡黄像素 ${JSON.stringify(pixels)}`);
+          data.lightPixels = pixels;
+        }
         return data;
       }
       const idle = await sample("idle");
@@ -59,16 +89,18 @@ async (page) => {
         throw new Error(`光圈未从盒口向外扩散 ${JSON.stringify(spread)}`);
       await target.clock.runFor(1040);
       const white = await sample("white");
-      if (!white.white || navigations) throw new Error("白屏前导航或白屏未完成");
+      if (!white.white || navigations) throw new Error("光幕完整遮盖前导航或完成态未呈现");
+      if (white.veilColor !== "rgb(255, 241, 199)" || white.veilOpacity !== "1")
+        throw new Error(`淡黄光幕颜色或遮盖强度错误 ${JSON.stringify(white)}`);
       await target.clock.runFor(250);
-      if (navigations) throw new Error("纯白停留不足四百毫秒");
+      if (navigations) throw new Error("完整光幕停留不足四百毫秒");
       await target.clock.runFor(200);
       await target.waitForURL("https://example.com/blog");
       if (navigations !== 1 || errors.length) throw new Error(JSON.stringify({ navigations, errors }));
       results.push({ name, idle, opening, open, spread, white, navigations, errors });
     } finally { await context.close(); }
   }
-  // 减少动态仍以盒口亮白，但盖子不动、光束关闭；中途旋转也须重新投影光源。
+  // 减少动态仍从盒口扩散淡黄光，但盖子不动、光束关闭；中途旋转也须重新投影光源。
   const context = await page.context().browser().newContext({
     viewport: { width: 390, height: 844 }, reducedMotion: "reduce",
   });

@@ -54,10 +54,10 @@ button:disabled {
   /* 截图原尺寸与宝盒投影共同维护；所有降级元素共享同一个 cover 平面。 */
   --static-image: url("/assets/scene-desktop.webp");
   --static-aspect: calc(1920 / 1080);
-  --static-box-x: calc(1333.062500 / 1920);
-  --static-box-y: calc(852.828125 / 1080);
-  --static-box-w: calc(568.375000 / 1920);
-  --static-box-h: calc(207.796875 / 1080);
+  --static-box-x: calc(1398.593750 / 1920);
+  --static-box-y: calc(876.546875 / 1080);
+  --static-box-w: calc(506.484375 / 1920);
+  --static-box-h: calc(186.531250 / 1080);
   --static-width: max(100vw, calc(var(--view-height) * var(--static-aspect)));
   --static-height: calc(var(--static-width) / var(--static-aspect));
   /* 更大的近景在窄屏 cover 裁切时向左保留宝盒；平面边缘始终覆盖视口。 */
@@ -233,19 +233,20 @@ h1 > strong {
   position: fixed;
   inset: 0;
   z-index: 100;
-  /* 渐变中心取自盒内光源投影，实心半径逐步吞没周围与远角。 */
+  /* 淡黄色实心光从盒内投影扩散，羽化边缘带少量暖金色，避免整屏纯白的刺眼感。 */
   background: radial-gradient(
     circle at var(--light-x, 50%) var(--light-y, 75%),
-    #fff 0px,
-    #fff var(--light-radius, 0px),
-    #fff0 var(--light-edge, 0px)
+    #fff3cf 0px,
+    #fff1c7 var(--light-radius, 0px),
+    #e9b85080 calc(var(--light-radius, 0px) * 0.45 + var(--light-edge, 0px) * 0.55),
+    #e9b85000 var(--light-edge, 0px)
   );
   opacity: 0;
   pointer-events: none;
 }
 #whiteout[data-white="true"] {
-  /* 完成态明确使用纯白，消除插值误差、羽化残留和横竖屏边角漏光。 */
-  background: #fff;
+  /* 完成态用完全不透明的淡黄光幕，保留原有导航停留门禁，并覆盖横竖屏全部边角。 */
+  background: #fff1c7;
 }
 #app[data-state="transition"] #whiteout,
 #app[data-state="redirect"] #whiteout {
@@ -511,10 +512,10 @@ h1 > strong {
   #app {
     --static-image: url("/assets/scene-tablet.webp");
     --static-aspect: calc(768 / 1024);
-    --static-box-x: calc(420.812500 / 768);
-    --static-box-y: calc(876.078125 / 1024);
-    --static-box-w: calc(332.203125 / 768);
-    --static-box-h: calc(132.984375 / 1024);
+    --static-box-x: calc(445.828125 / 768);
+    --static-box-y: calc(885.625000 / 1024);
+    --static-box-w: calc(307.812500 / 768);
+    --static-box-h: calc(124.140625 / 1024);
   }
 }
 @media (max-width: 767px) and (min-height: 500px) {
@@ -528,20 +529,20 @@ h1 > strong {
   #app {
     --static-image: url("/assets/scene-mobile.webp");
     --static-aspect: calc(390 / 844);
-    --static-box-x: calc(38.187500 / 390);
-    --static-box-y: calc(693.640625 / 844);
-    --static-box-w: calc(336.937500 / 390);
-    --static-box-h: calc(134.234375 / 844);
+    --static-box-x: calc(69.750000 / 390);
+    --static-box-y: calc(705.484375 / 844);
+    --static-box-w: calc(305.875000 / 390);
+    --static-box-h: calc(123.453125 / 844);
   }
 }
 @media (max-height: 499px) {
   #app {
     --static-image: url("/assets/scene-short.webp");
     --static-aspect: calc(844 / 390);
-    --static-box-x: calc(590.375000 / 844);
-    --static-box-y: calc(281.578125 / 390);
-    --static-box-w: calc(236.437500 / 844);
-    --static-box-h: calc(92.328125 / 390);
+    --static-box-x: calc(618.421875 / 844);
+    --static-box-y: calc(291.296875 / 390);
+    --static-box-w: calc(210.453125 / 844);
+    --static-box-h: calc(83.578125 / 390);
   }
   .journey-link {
     min-height: 44px;

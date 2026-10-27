@@ -6,7 +6,7 @@ export interface Timings {
   reducedFade: number;
 }
 
-/** 纯时间函数方便验证白幕时序；跳转只允许发生在纯白停留阶段之后。 */
+/** 纯时间函数方便验证光幕时序；跳转只允许发生在完整不透明光幕的停留阶段之后。 */
 export function transitionFrame(
   elapsed: number,
   reduced: boolean,
@@ -48,7 +48,7 @@ export function lightSpread(
   };
 }
 
-/** 导航门禁依据实际呈现时间；切回尚未纯白的时间段会撤销先前的停留。 */
+/** 导航门禁依据实际呈现时间；切回光幕尚未完全覆盖的时间段会撤销先前的停留。 */
 export class WhiteoutGate {
   private since: number | null = null;
   present(elapsed: number, white: boolean, hold: number) {

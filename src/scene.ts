@@ -113,7 +113,7 @@ export async function createScene(
     new THREE.Vector3(-1, -1, -1),
     new THREE.Vector3(1, 1, 1),
   );
-  // 柔和冷色补光显出灰黑木纹，暖白微光始终来自盒口。
+  // 柔和冷色补光显出灰黑木纹，淡黄微光始终来自盒口。
   const warmLight = new THREE.PointLight(0xcbd6dd, 2, 7, 2);
   // 近景前移后补光维持原有相对距离，避免木纹和金色铰链因离开补光范围而失去层次。
   warmLight.position.set(chestPlacement.x - 1.35, 2.3, chestPlacement.z - 0.25);

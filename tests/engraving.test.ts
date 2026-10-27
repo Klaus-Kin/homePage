@@ -2,11 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { engrave, engravingPlacements, glyphs, carvedStrokes, engravingSweep } from "../src/scene/chest-engraving.ts";
 
-// 三处刻字的全部繁体字都必须有手绘路径，禁止悄悄回退到平台字体。
-test("all three inscriptions have complete hand drawn glyphs", () => {
+// 三处题字必须完整使用小篆闭合轮廓，曲线不可被旧直线刻字算法截断或退回系统字体。
+test("all three inscriptions have complete curved seal script outlines", () => {
   for (const letter of "回到未來摩訶般若波羅蜜時光倒流") {
     assert.ok(glyphs[letter]?.length, `缺少字形：${letter}`);
     assert.ok(glyphs[letter].every((stroke) => stroke.startsWith("M")));
+    assert.ok(glyphs[letter].every((stroke) => /C/.test(stroke) && /z/i.test(stroke)));
   }
 });
 
@@ -22,6 +23,8 @@ test("gold color, recessed height and soft emission share every glyph transform"
       scale(...args: number[]) { transforms.push(["scale", ...args]); },
       stroke(path: any) { strokes.push({ path: path.path, color: ctx.strokeStyle,
         blur: ctx.shadowBlur, width: ctx.lineWidth }); },
+      fill(path: any) { strokes.push({ path: path.path, color: ctx.fillStyle,
+        blur: ctx.shadowBlur, width: 0 }); },
     };
     return ctx;
   };
@@ -38,7 +41,7 @@ test("gold color, recessed height and soft emission share every glyph transform"
         !(t[0] === "translate" && Math.abs(t[1]) <= 1 && Math.abs(t[2]) <= 1)));
       for (const stroke of emission.strokes) {
         assert.ok(stroke.blur > 0 && stroke.blur <= 1.5);
-        assert.ok(color.strokes.some((s: any) => s.path === stroke.path && s.width > stroke.width + 2));
+        assert.ok(color.strokes.some((s: any) => s.path === stroke.path && s.width > stroke.width + 1));
         assert.ok(height.strokes.some((s: any) => s.path === stroke.path && s.color === "#191919"));
       }
       assert.ok(color.strokes.some((s: any) => s.color === "#29251c"));
@@ -61,16 +64,15 @@ test("glyph transforms reverse positions without mirroring the strokes", () => {
   assert.ok(new Set(normal.map((p) => p.y)).size > 1, "手刻基线应有轻微偏差");
 });
 
-// 刀痕固定种子、局部有细微偏折；不能每次重建随机跳变或改变字形主结构。
-test("carving is reproducible with small uneven cuts and variable widths", () => {
+// 字库曲线原样保留；材质刀缘只添加很小的固定宽差，避免描边吞掉篆字内的留白。
+test("carving preserves seal curves and keeps only subtle reproducible edge variation", () => {
   const strokes = carvedStrokes("回");
   assert.deepEqual(strokes, carvedStrokes("回"));
-  assert.notEqual(strokes[0].path, glyphs["回"][0]);
-  // 加粗后的主刀槽仍有笔画间宽差，避免细线描字，也不能粗到填死字内留白。
+  assert.equal(strokes[0].path, glyphs["回"][0]);
+  // 字库提供的是实体笔画轮廓，不能再以旧的粗线宽覆盖整条外边界。
   const inscription = [..."回到未來時光倒流"].flatMap(carvedStrokes);
-  assert.ok(inscription.every((s) => s.width >= 5.4 && s.width <= 7.4));
-  assert.ok(Math.max(...inscription.map((s) => s.width)) - Math.min(...inscription.map((s) => s.width)) > 1);
-  assert.ok(inscription.every((s) => s.facets.length > 0), "宽槽内应保留分次进刀留下的刻面");
+  assert.ok(inscription.every((s) => s.width >= 0.68 && s.width <= 0.92));
+  assert.ok(inscription.every((s) => s.path.includes("C")), "小篆曲线不能退化成折线");
   assert.deepEqual(inscription, [..."回到未來時光倒流"].flatMap(carvedStrokes));
   const placed = engravingPlacements("回到未來", 0, 0, 154, 190);
   assert.deepEqual(placed, engravingPlacements("回到未來", 0, 0, 154, 190));

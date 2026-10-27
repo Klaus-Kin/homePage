@@ -81,7 +81,7 @@ window.addEventListener("moon-boot-failed", () =>
   showFallback(new Error("入口守卫已锁定静态场景")),
 );
 
-/** 累计实际可见的动画时间；切回后台标签页时不会跳过白幕展示和停留。 */
+/** 累计实际可见的动画时间；切回后台标签页时不会跳过完整淡黄光幕的展示和停留。 */
 function animateTransition(now: number) {
   if (document.hidden) {
     transitionLast = 0;
@@ -117,8 +117,8 @@ function animateTransition(now: number) {
   whiteout.dataset.spread = String(frame.spread);
   // 扩散层自身保持不透明，局部渐变决定光照范围；不用整屏透明度代替空间扩散。
   whiteout.style.opacity = frame.spread > 0 ? "1" : "0";
-  // 以首次实际渲染纯白的时刻计算停留，避免运行中切换动态偏好提前导航。
-  // 过渡中由减少动态切回普通模式时，重新计算下一次连续纯白的停留时间。
+  // 以首次完整呈现不透明光幕的时刻计算停留，避免运行中切换动态偏好提前导航。
+  // 过渡中由减少动态切回普通模式时，重新计算下一次连续光幕的停留时间。
   if (whiteGate.present(transitionElapsed, frame.white, pageConfig.transition.hold)) {
     state.redirect();
     app.dataset.state = state.phase;
@@ -224,7 +224,7 @@ document.addEventListener("visibilitychange", () => {
   } else if (state.phase === "transition" && !transitionRaf)
     transitionRaf = requestAnimationFrame(animateTransition);
 });
-// bfcache 返回时重新建立待机状态，避免用户看到上一次跳转遗留的纯白页面。
+// bfcache 返回时重新建立待机状态，避免用户看到上一次跳转遗留的淡黄光幕。
 window.addEventListener("pageshow", (event) => {
   if (event.persisted) window.location.reload();
 });

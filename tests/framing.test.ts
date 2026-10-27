@@ -11,7 +11,7 @@ test("foreground chest stays visible through continuously planned opening framin
   const matrix = new THREE.Matrix4().compose(new THREE.Vector3(chestPlacement.x, 0, chestPlacement.z),
     new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI),
     new THREE.Vector3().setScalar(chestPlacement.scale));
-  for (const [width, height] of [[1920,1080], [1366,1024], [1024,1366], [768,1024],
+  for (const [width, height] of [[3440,1440], [2560,1080], [1920,1080], [1366,1024], [1024,1366], [768,1024],
     [360,800], [390,844], [393,852], [430,932], [480,1040], [844,390]]) {
     const preset = sceneConfig.layout[selectSceneLayout(width, height)];
     const camera = new THREE.PerspectiveCamera(preset.fov, width / height, 0.1, 350);
@@ -42,5 +42,27 @@ test("foreground chest stays visible through continuously planned opening framin
         "镜头只能沿连续缓动路径移动");
       previous.copy(camera.position);
     }
+  }
+});
+
+// 与上一版真实纵深对照：后移应在宽屏中缩小约一成，并增加盒底与屏幕底边的距离。
+test("receding chest gains widescreen breathing room without changing its physical scale", () => {
+  for (const [width, height] of [[3440, 1440], [2560, 1080], [1920, 1080]]) {
+    const preset = sceneConfig.layout.desktop;
+    const camera = new THREE.PerspectiveCamera(preset.fov, width / height, 0.1, 350);
+    camera.position.set(preset.cameraX, preset.height, preset.distance);
+    camera.lookAt(preset.cameraX, preset.targetY, 0); camera.updateMatrixWorld();
+    const pose = chestPose(0).bounds;
+    const bounds = new THREE.Box3(new THREE.Vector3(pose.minX, pose.minY, pose.minZ),
+      new THREE.Vector3(pose.maxX, pose.maxY, pose.maxZ));
+    const projectAt = (z: number) => projectBounds(bounds, new THREE.Matrix4().compose(
+      new THREE.Vector3(chestPlacement.x, 0, z),
+      new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI),
+      new THREE.Vector3().setScalar(chestPlacement.scale)), camera, width, height);
+    const previous = projectAt(7.8), current = projectAt(chestPlacement.z);
+    const ratio = (current.right - current.left) / (previous.right - previous.left);
+    assert.ok(ratio > 0.82 && ratio < 0.94, `${width}: 后移幅度应适中 ${ratio}`);
+    assert.ok(current.bottom < previous.bottom - height * 0.025);
+    assert.equal(chestPlacement.scale, 0.64);
   }
 });

@@ -123,10 +123,10 @@ async (page) => {
 
   // 下列点取自源截图中的宝盒中心，独立于页面按钮样式，防止测到错误按钮自身仍判通过。
   const shots = {
-    desktop: { width: 1920, height: 1080, x: 1617.250000, y: 956.726563, bottom: 1060.625000, right: 1901.437500 },
-    tablet: { width: 768, height: 1024, x: 586.914063, y: 942.570313, bottom: 1009.062500, right: 753.015625 },
-    mobile: { width: 390, height: 844, x: 206.656250, y: 760.757813, bottom: 827.875000, right: 375.125000 },
-    short: { width: 844, height: 390, x: 708.593750, y: 327.742188, bottom: 373.906250, right: 826.812500 },
+    desktop: { width: 1920, height: 1080, x: 1651.835938, y: 969.812500, bottom: 1063.078125, right: 1905.078125 },
+    tablet: { width: 768, height: 1024, x: 599.734375, y: 947.695313, bottom: 1009.765625, right: 753.640625 },
+    mobile: { width: 390, height: 844, x: 222.687500, y: 767.210938, bottom: 828.937500, right: 375.625000 },
+    short: { width: 844, height: 390, x: 723.648438, y: 333.085938, bottom: 374.875000, right: 828.875000 },
   };
   // 由源图坐标独立计算水平和垂直裁切；同时限制平面边缘，避免为留白而露出底部空带。
   function fallbackPoint(shot, width, height) {

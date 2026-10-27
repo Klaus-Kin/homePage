@@ -38,6 +38,8 @@ async (page) => {
         if (state === "redirect")
           window.recordVisualState({
             opacity: getComputedStyle(overlay).opacity,
+            // 各输入方式、降级和减少动态都应经过相同的淡黄完成态。
+            veilColor: getComputedStyle(overlay).backgroundColor,
             white: overlay.dataset.white,
             state,
             whiteAt: window.__whiteAt,
@@ -59,6 +61,7 @@ async (page) => {
     if (
       requests !== 1 ||
       atNavigation.opacity !== "1" ||
+      atNavigation.veilColor !== "rgb(255, 241, 199)" ||
       atNavigation.white !== "true" ||
       atNavigation.state !== "redirect" ||
       atNavigation.now - atNavigation.whiteAt < 380 ||
