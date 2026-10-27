@@ -164,6 +164,9 @@ h1 > strong {
   flex-shrink: 0;
   display: block;
   object-fit: contain;
+}
+/* 冠饰与整块文字共用过渡，只作用于直接子元素，避免英文小字再次叠加位移。 */
+.journey-link > * {
   transition:
     filter 0.25s,
     transform 0.25s;
@@ -177,8 +180,8 @@ h1 > strong {
   color: #818b9b;
   margin-top: 6px;
 }
-.journey-link:hover .phoenix-crown,
-.journey-link:focus-visible .phoenix-crown {
+.journey-link:hover > *,
+.journey-link:focus-visible > * {
   filter: brightness(1.15);
   transform: translateY(-2px);
 }
