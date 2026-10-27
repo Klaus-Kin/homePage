@@ -1,3 +1,5 @@
+import { chestPlacement } from "./chest-placement.ts";
+
 /** 水平凸包保留每块岩石实际变换后的轮廓，避免统一圆形禁区把石边草全清空。 */
 type Point = { x: number; z: number };
 
@@ -41,9 +43,10 @@ export function grassReach(scale: number, lean: number) {
 
 // 保守覆盖水平转轴的整条扫掠路径：最远端半径计入上半盒厚度，再换算到世界坐标。
 const sweepRadius = Math.hypot(3.86, 0.61);
+const { x: chestX, z: chestZ, scale: chestScale } = chestPlacement;
 export const chestFootprint: readonly Point[] = [
-  { x: 1 - 0.64 * (1.93 + sweepRadius) - 0.025, z: -0.17 },
-  { x: 1 + 0.64 * 1.93 + 0.025, z: -0.17 },
-  { x: 1 + 0.64 * 1.93 + 0.025, z: 0.17 },
-  { x: 1 - 0.64 * (1.93 + sweepRadius) - 0.025, z: 0.17 },
+  { x: chestX - chestScale * (1.93 + sweepRadius) - 0.025, z: chestZ - 0.17 },
+  { x: chestX + chestScale * 1.93 + 0.025, z: chestZ - 0.17 },
+  { x: chestX + chestScale * 1.93 + 0.025, z: chestZ + 0.17 },
+  { x: chestX - chestScale * (1.93 + sweepRadius) - 0.025, z: chestZ + 0.17 },
 ];

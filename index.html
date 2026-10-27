@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#080f20" />
     <meta
       name="description"
-      content="程序猿的月光宝盒。开发者、写作者、时空旅人，写代码也写故事。循着月光，走进我的数字世界。"
+      content="程序猿的月光宝盒。此间有故事，亦有远方。把热爱写进代码，把故事交给月光。"
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- 样式独立于模块脚本加载，开发模式禁用 JavaScript 时也保留完整静态页面。 -->
@@ -24,11 +24,11 @@
       #moon-loader .hoop-halo { grid-area: 1 / 1; width: 142px; height: 142px; margin: -15px; background: radial-gradient(ellipse, #c99d3515 15%, #c99d3509 46%, transparent 70%); }
       #moon-loader .hoop-rotor { grid-area: 1 / 1; width: 112px; height: 112px; animation: hoop-spin 1.8s linear infinite; will-change: transform; }
       #moon-loader svg { display: block; width: 112px; height: 112px; }
-      #moon-loader .loading-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+      /* 欢迎语与金箍分别占据网格行，始终可见，减少动态时保持相同布局。 */
+      #moon-loader .loading-label { margin-top: 24px; font: 14px/1.5 serif; letter-spacing: .18em; }
       @keyframes hoop-spin { to { transform: rotate(360deg); } }
       @media (prefers-reduced-motion: reduce) {
         #moon-loader .hoop-rotor { animation: none; will-change: auto; }
-        #moon-loader .loading-label { position: static; width: auto; height: auto; clip-path: none; margin-top: 20px; font: 14px/1.5 serif; letter-spacing: .18em; }
       }
     </style>
     <noscript
@@ -46,7 +46,6 @@
         #app .noscript-entry {
           display: block;
         }
-        #app .box-caption,
         #app #box-button,
         #app #status {
           display: none;
@@ -65,7 +64,7 @@
         <path d="M57 121C39 113 29 98 29 79C29 51 51 29 80 29C109 29 131 51 131 79C131 98 121 113 103 121" stroke="#f8e9bd" stroke-opacity=".5" stroke-width="1.3"/>
       </svg>
       </span>
-      <span class="loading-label">正在唤醒月光…</span>
+      <span class="loading-label">月色正好，欢迎来访</span>
     </div>
     <main id="app" data-state="loading">
       <!-- 静态图由同一新场景导出，只在 WebGL 失败或禁用脚本时显示。 -->
@@ -77,31 +76,12 @@
           aria-label="开启月光宝盒，前往博客"
         ></a>
       </div>
-      <header class="site-header fade-content">
-        <a class="brand" href="/" aria-label="月光宝盒首页">
-          <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
-            <path
-              d="M24 23.8A12 12 0 0 1 10.2 5.4 11.5 11.5 0 1 0 26.6 21"
-              stroke="currentColor"
-              stroke-width="1.3"
-            />
-            <path
-              d="m23 5 .9 3.1L27 9l-3.1.9L23 13l-.9-3.1L19 9l3.1-.9Z"
-              fill="currentColor"
-            />
-          </svg>
-          <span>月光宝盒<small>MOONLIGHT MEMOIRS</small></span>
-        </a>
-        <span class="night-note"><i></i>月色正好，欢迎来访</span>
-      </header>
-
       <section class="intro fade-content" aria-labelledby="page-title">
         <p class="eyebrow"><span></span> A LITTLE CODE. A LITTLE MAGIC.</p>
         <h1 id="page-title"><span>程序猿的</span><strong>月光宝盒</strong></h1>
         <div class="title-rule" aria-hidden="true"><span></span>✦</div>
         <p class="description">
-          <span>开发者&nbsp; 写作者&nbsp; 时空旅人，</span
-          ><br />写代码也写故事。
+          开发者 · 写作者 · 时空旅人<br />写代码也写故事<br />此间有故事，亦有远方<br />把热爱写进代码，把故事交给月光
         </p>
         <a class="journey-link" href="__MOON_BLOG_URL__" data-entrance>
           <span class="arrow-circle" aria-hidden="true">↗</span>
@@ -119,18 +99,8 @@
           aria-label="开启月光宝盒，前往博客"
           disabled
         ></button>
-        <p class="box-caption fade-content">
-          <span class="caption-line"></span
-          ><span id="box-prompt">正在唤醒月光…</span
-          ><span class="caption-line"></span
-          ><small>一念之间，便是另一个世界</small>
-        </p>
       </section>
 
-      <footer class="site-footer fade-content">
-        <p>把热爱写进代码，把故事交给月光。</p>
-        <span><i>✦</i> 此间有故事，亦有远方</span>
-      </footer>
       <p id="status" class="sr-only" role="status" aria-live="polite">
         正在加载月光宝盒
       </p>

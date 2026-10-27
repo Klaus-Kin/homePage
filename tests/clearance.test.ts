@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
 import { obstacleFootprint, overlapsFootprint, grassReach, chestFootprint } from "../src/scene/terrain-clearance.ts";
+import { chestPlacement } from "../src/scene/chest-placement.ts";
 
 // 非等比缩放和三个方向的转动必须全部进入避让计算，不能用根部圆圈近似岩石。
 test("rotated scaled rock footprint contains every transformed vertex", () => {
@@ -34,7 +35,7 @@ test("grass clearance covers blade height, lean, curvature and both wind extreme
 });
 
 test("chest clearance includes the fully unfolded lid and its raised sweep", () => {
-  assert.ok(overlapsFootprint(-2.7, 0, 0.1, chestFootprint));
-  assert.ok(overlapsFootprint(2.2, 0, 0.1, chestFootprint));
-  assert.equal(overlapsFootprint(0, 1, 0.2, chestFootprint), false);
+  assert.ok(overlapsFootprint(chestPlacement.x - 3.7, chestPlacement.z, 0.1, chestFootprint));
+  assert.ok(overlapsFootprint(chestPlacement.x + 1.2, chestPlacement.z, 0.1, chestFootprint));
+  assert.equal(overlapsFootprint(0, chestPlacement.z + 1, 0.2, chestFootprint), false);
 });

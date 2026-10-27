@@ -85,6 +85,10 @@ async (page) => {
         moonOverlap: overlaps(moon, box),
         buttonSize: box.width >= 44 && box.height >= 44,
         state: document.querySelector("#app").dataset.state,
+        // 文案在每种构图中都必须一致，移除的说明不能因响应式分支重新出现。
+        copyUpdated: document.querySelector(".description").textContent.replace(/\s/g, "") ===
+          "开发者·写作者·时空旅人写代码也写故事此间有故事，亦有远方把热爱写进代码，把故事交给月光",
+        notesRemoved: !document.querySelector(".box-caption, .site-footer, #box-prompt, .brand, .night-note, .site-header"),
       };
     });
     if (
@@ -96,7 +100,7 @@ async (page) => {
       !layout.moonVisible ||
       !layout.fullScreen ||
       layout.moonOverlap ||
-      !layout.buttonSize
+      !layout.buttonSize || !layout.copyUpdated || !layout.notesRemoved
     )
       throw new Error(
         `Layout failed ${width}x${height}: ${JSON.stringify(layout)}`,

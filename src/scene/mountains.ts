@@ -12,7 +12,8 @@ export async function createMountains(init: Initialization) {
     window.innerWidth < 768 ||
     window.innerHeight < 500 ||
     matchMedia("(pointer: coarse)").matches;
-  const rock = await surfaceTexture("rock", init);
+  // 远山恢复原来的岩层纹理，近景石头继续使用独立的柔和风化纹理。
+  const rock = await surfaceTexture("mountain", init);
   rock.repeat.set(45, 9);
 
   async function geometryFor(layer: number, mobile: boolean) {

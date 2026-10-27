@@ -31,6 +31,10 @@ test("golden hoop and critical styles exist before the module entry", () => {
   assert.doesNotMatch(html, /drop-shadow/);
   assert.match(html, /prefers-reduced-motion: reduce[\s\S]*animation: none/);
   assert.match(html, /<noscript[\s\S]*#moon-loader[\s\S]*display: none/);
+  // 无脚本与慢入口共用同一份静态内容，欢迎语只允许出现在加载层，主页品牌必须移除。
+  assert.match(html, /<span class="loading-label">月色正好，欢迎来访<\/span>/);
+  assert.equal(html.split("月色正好，欢迎来访").length - 1, 1);
+  assert.doesNotMatch(html, /class="(?:site-header|brand|night-note)\b/);
 });
 
 test("ready removes the loader and cancels fallback ownership", () => {

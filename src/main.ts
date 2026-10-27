@@ -18,7 +18,6 @@ declare global {
 const app = document.querySelector<HTMLElement>("#app")!;
 const button = document.querySelector<HTMLButtonElement>("#box-button")!;
 const entrance = document.querySelector<HTMLAnchorElement>("[data-entrance]")!;
-const prompt = document.querySelector<HTMLElement>("#box-prompt")!;
 const status = document.querySelector<HTMLElement>("#status")!;
 const whiteout = document.querySelector<HTMLElement>("#whiteout")!;
 const sceneHost = document.querySelector<HTMLElement>("#scene")!;
@@ -44,9 +43,10 @@ document.querySelector("#page-title > strong")!.textContent =
   pageConfig.titleLines[1];
 const description = document.querySelector(".description")!;
 description.replaceChildren(
-  document.createTextNode(pageConfig.description[0]),
-  document.createElement("br"),
-  document.createTextNode(pageConfig.description[1]),
+  // 逐行创建文本节点，身份介绍与新文案共用配置；行数变化不会遗漏或解释为 HTML。
+  ...pageConfig.description.flatMap((line, index) => index === 0
+    ? [document.createTextNode(line)]
+    : [document.createElement("br"), document.createTextNode(line)]),
 );
 entrance.href = pageConfig.blogUrl;
 document
@@ -55,12 +55,6 @@ document
     link.href = pageConfig.blogUrl;
   });
 
-function updateHint() {
-  if (state.phase === "transition" || state.phase === "redirect") return;
-  prompt.textContent = coarsePointer.matches
-    ? pageConfig.touchHint
-    : pageConfig.pointerHint;
-}
 function syncViewport() {
   // visualViewport 优先处理移动浏览器地址栏，固定遮罩仍覆盖整个布局视口与安全区。
   const height = window.visualViewport?.height ?? window.innerHeight;
@@ -75,11 +69,9 @@ function showFallback(error: unknown) {
   scene = undefined;
   app.classList.add("fallback");
   button.removeAttribute("style");
-  document.querySelector(".box-caption")?.removeAttribute("style");
   state.ready();
   app.dataset.state = state.phase;
   button.disabled = state.phase !== "idle";
-  updateHint();
   status.textContent = "已启用静态场景，仍可点击宝盒或文字入口进入博客";
   // 正常的场景降级同样代表首屏就绪，应撤销 HTML 守卫的超时监听。
   window.__moonBoot?.ready();
@@ -218,7 +210,6 @@ window.addEventListener(
 motionPreference.addEventListener("change", () =>
   scene?.setReducedMotion(motionPreference.matches),
 );
-coarsePointer.addEventListener("change", updateHint);
 window.addEventListener("resize", syncViewport, { passive: true });
 window.visualViewport?.addEventListener("resize", syncViewport, {
   passive: true,
@@ -259,7 +250,6 @@ async function initialize() {
     state.ready();
     app.dataset.state = state.phase;
     button.disabled = false;
-    updateHint();
     status.textContent = "月光宝盒已就绪，可以点击或使用键盘开启";
   } catch (error) {
     if (!leaving) showFallback(error);

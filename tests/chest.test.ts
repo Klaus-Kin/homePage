@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chestPose } from "../src/scene/chest-motion.ts";
 import { groundHeight } from "../src/scene/terrain-math.ts";
+import { chestPlacement } from "../src/scene/chest-placement.ts";
 
 // 回归最新确认的上翻结构：左短端水平铰链，旋转平面垂直于地面，纵深保持固定。
 test("chest halves start closed and lift vertically to 180 degrees around the left end", () => {
@@ -45,7 +46,8 @@ test("fixed half and fully unfolded lid are supported by the ground", () => {
   for (const progress of [0, 1]) {
     const { bounds } = chestPose(progress);
     for (const x of [bounds.minX, bounds.maxX]) for (const z of [-0.22, 0.22]) {
-      const worldX = 1 - 0.64 * x, worldZ = -0.64 * z;
+      const worldX = chestPlacement.x - chestPlacement.scale * x,
+        worldZ = chestPlacement.z - chestPlacement.scale * z;
       assert.equal(groundHeight(worldX, worldZ), 0, `盒底脱离地面: ${worldX},${worldZ}`);
     }
   }

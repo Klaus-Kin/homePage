@@ -40,24 +40,21 @@ button:disabled {
   /* 截图原尺寸与宝盒投影共同维护；所有降级元素共享同一个 cover 平面。 */
   --static-image: url("/assets/scene-desktop.webp");
   --static-aspect: calc(1920 / 1080);
-  --static-box-x: calc(1371.500000 / 1920);
-  --static-box-y: calc(766.656250 / 1080);
-  --static-box-w: calc(274.218750 / 1920);
-  --static-box-h: calc(105.343750 / 1080);
+  --static-box-x: calc(1333.453125 / 1920);
+  --static-box-y: calc(836.078125 / 1080);
+  --static-box-w: calc(332.578125 / 1920);
+  --static-box-h: calc(126.921875 / 1080);
   --static-width: max(100vw, calc(var(--view-height) * var(--static-aspect)));
   --static-height: calc(var(--static-width) / var(--static-aspect));
   --static-left: calc((100vw - var(--static-width)) / 2);
-  /* 方形屏幕向上调整裁切，为盒底提示留出空间；图片和热点始终共用同一个偏移。 */
+  /* 方形屏幕必要时向上裁切，保证宝盒与热点在底部留白内完整可见。 */
   --static-top: min(
     calc((var(--view-height) - var(--static-height)) / 2),
     calc(
-      var(--view-height) - var(--static-caption-bottom) - var(--static-caption-gap) -
+      var(--view-height) - 24px -
         var(--static-height) * (var(--static-box-y) + var(--static-box-h))
     )
   );
-  --static-caption-width: min(350px, calc(100vw - 24px));
-  --static-caption-bottom: 60px;
-  --static-caption-gap: 12px;
   position: relative;
   width: 100%;
   height: var(--view-height);
@@ -72,56 +69,6 @@ button:disabled {
   pointer-events: none;
 }
 
-.site-header {
-  position: absolute;
-  top: max(36px, env(safe-area-inset-top));
-  left: 5.2%;
-  right: 5.2%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  z-index: 5;
-}
-.brand {
-  display: flex;
-  gap: 13px;
-  align-items: center;
-  min-height: 44px;
-}
-.brand svg {
-  width: 34px;
-  height: 34px;
-  color: var(--gold);
-}
-.brand > span {
-  font-family: "STKaiti", "KaiTi", serif;
-  font-size: 19px;
-  letter-spacing: 5px;
-}
-.brand small {
-  display: block;
-  font:
-    8px/1.6 Georgia,
-    serif;
-  letter-spacing: 2.5px;
-  margin-top: 4px;
-  color: #8f9aa9;
-}
-.night-note {
-  font-size: 10px;
-  letter-spacing: 2.5px;
-  color: #8996a8;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-.night-note i {
-  width: 4px;
-  height: 4px;
-  background: #d3bd8d;
-  border-radius: 50%;
-  box-shadow: 0 0 8px #d3bd8d;
-}
 .intro {
   position: absolute;
   left: 10%;
@@ -245,68 +192,9 @@ h1 > strong {
   outline: 1px solid #e9d2a0;
   box-shadow: 0 0 32px #dcb77725;
 }
-.box-caption {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 3%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 15px;
-  color: #d2c09c;
-  font-size: 11px;
-  letter-spacing: 2px;
-  pointer-events: none;
-  margin: 0;
-}
-.caption-line {
-  height: 1px;
-  width: 27px;
-  background: #c1a67454;
-}
-.box-caption small {
-  flex-basis: 100%;
-  text-align: center;
-  font-size: 9px;
-  letter-spacing: 3px;
-  color: #8390a4;
-  margin-top: -2px;
-}
 
 .fallback #scene {
   display: none;
-}
-.fallback .box-caption small {
-  color: #bac3d0;
-}
-.site-footer {
-  position: absolute;
-  bottom: max(29px, env(safe-area-inset-bottom));
-  left: 5.2%;
-  right: 5.2%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  z-index: 4;
-  color: #818b9c;
-  font-size: 9px;
-  letter-spacing: 2px;
-}
-.site-footer p {
-  margin: 0;
-}
-.site-footer > span {
-  font-family: "STKaiti", "KaiTi", serif;
-  font-size: 12px;
-  letter-spacing: 2.5px;
-}
-.site-footer i {
-  font-style: normal;
-  color: #c4aa7d;
-  margin-right: 12px;
-  font-size: 10px;
 }
 .fade-content {
   transition:
@@ -381,46 +269,12 @@ h1 > strong {
   .description {
     font-size: 13px;
   }
-  .site-header {
-    top: 30px;
-  }
   .journey-link {
     font-size: 10px;
-  }
-  .box-caption {
-    font-size: 10px;
-    letter-spacing: 1px;
   }
 }
 /* 手机使用独立竖屏构图，文字在上、宝盒在下，静态背景采用较小的本地资源。 */
 @media (max-width: 767px) {
-  .site-header {
-    top: max(25px, env(safe-area-inset-top));
-    left: 7%;
-    right: 7%;
-  }
-  .brand {
-    gap: 9px;
-  }
-  .brand svg {
-    width: 28px;
-    height: 28px;
-  }
-  .brand > span {
-    font-size: 16px;
-    letter-spacing: 4px;
-  }
-  .brand small {
-    font-size: 6px;
-    letter-spacing: 1.7px;
-  }
-  .night-note {
-    font-size: 8px;
-    letter-spacing: 1px;
-  }
-  .night-note i {
-    display: none;
-  }
   .intro {
     left: 9%;
     top: 21%;
@@ -470,34 +324,6 @@ h1 > strong {
     margin-top: 4px;
   }
 
-  .box-caption {
-    bottom: 2%;
-    font-size: 9px;
-    letter-spacing: 1.5px;
-    gap: 10px;
-  }
-  .box-caption small {
-    font-size: 8px;
-    letter-spacing: 2px;
-  }
-  .caption-line {
-    width: 18px;
-  }
-  .site-footer {
-    left: 7%;
-    right: 7%;
-    bottom: max(22px, env(safe-area-inset-bottom));
-    font-size: 8px;
-    letter-spacing: 0.8px;
-  }
-  .site-footer > span {
-    font-size: 10px;
-    letter-spacing: 1px;
-  }
-  .site-footer i {
-    margin-right: 5px;
-    font-size: 8px;
-  }
 }
 /* 矮屏切换左右布局，包含手机横屏；使用可视视口变量应对浏览器地址栏伸缩。 */
 @media (max-height: 700px) and (min-width: 768px) {
@@ -533,21 +359,6 @@ h1 > strong {
   }
 }
 @media (max-height: 499px) {
-  .site-header {
-    top: max(13px, env(safe-area-inset-top));
-    left: max(5%, env(safe-area-inset-left));
-    right: max(5%, env(safe-area-inset-right));
-  }
-  .brand svg {
-    width: 25px;
-    height: 25px;
-  }
-  .brand > span {
-    font-size: 15px;
-  }
-  .brand small {
-    font-size: 6px;
-  }
   .intro {
     top: 24%;
     left: max(8%, env(safe-area-inset-left));
@@ -590,28 +401,6 @@ h1 > strong {
     display: none;
   }
 
-  .box-caption {
-    font-size: 8px;
-    letter-spacing: 1px;
-    bottom: 0;
-    gap: 8px;
-  }
-  .box-caption small {
-    font-size: 7px;
-  }
-  .site-footer {
-    bottom: max(12px, env(safe-area-inset-bottom));
-    font-size: 7px;
-    left: 5%;
-    right: 5%;
-  }
-  .site-footer > span {
-    font-size: 9px;
-  }
-
-  .night-note {
-    font-size: 8px;
-  }
 }
 /* 系统减少动态偏好即时生效；后台标签页同样暂停 CSS 环境动画。 */
 @media (prefers-reduced-motion: reduce) {
@@ -650,15 +439,10 @@ h1 > strong {
 #box-button {
   pointer-events: auto;
 }
-.box-caption {
-  right: auto;
-  bottom: auto;
-  text-shadow: 0 2px 12px #050a13;
-}
 .scene-fallback {
   display: none;
   position: absolute;
-  /* 背景按源图比例铺在此平面，按钮与提示使用同一缩放量及居中裁切偏移。 */
+  /* 背景按源图比例铺在此平面，按钮使用同一缩放量及居中裁切偏移。 */
   left: var(--static-left);
   top: var(--static-top);
   width: var(--static-width);
@@ -683,8 +467,7 @@ h1 > strong {
 .boot-failed .noscript-entry {
   display: block;
 }
-.boot-failed #box-button,
-.boot-failed .box-caption {
+.boot-failed #box-button {
   display: none;
 }
 .fallback #box-button {
@@ -692,26 +475,6 @@ h1 > strong {
   top: calc(var(--static-top) + var(--static-height) * var(--static-box-y));
   width: max(44px, calc(var(--static-width) * var(--static-box-w)));
   height: max(44px, calc(var(--static-height) * var(--static-box-h)));
-}
-.fallback .box-caption {
-  /* 提示围绕宝盒中心定位，并限制在可视区域，旋转屏幕时随纯 CSS 布局更新。 */
-  left: clamp(
-    12px,
-    calc(
-      var(--static-left) + var(--static-width) *
-        (var(--static-box-x) + var(--static-box-w) / 2) -
-        var(--static-caption-width) / 2
-    ),
-    calc(100vw - var(--static-caption-width) - 12px)
-  );
-  top: min(
-    calc(var(--view-height) - var(--static-caption-bottom)),
-    calc(
-      var(--static-top) + var(--static-height) *
-        (var(--static-box-y) + var(--static-box-h)) + var(--static-caption-gap)
-    )
-  );
-  width: var(--static-caption-width);
 }
 @media (min-width: 768px) and (max-width: 1023px) and (min-height: 500px) {
   .intro {
@@ -728,12 +491,10 @@ h1 > strong {
   #app {
     --static-image: url("/assets/scene-tablet.webp");
     --static-aspect: calc(768 / 1024);
-    --static-box-x: calc(480.515625 / 768);
-    --static-box-y: calc(729.093750 / 1024);
-    --static-box-w: calc(198.484375 / 768);
-    --static-box-h: calc(82.000000 / 1024);
-    /* 方形平板裁切时额外避开页脚，让两行提示与底部文字各有空间。 */
-    --static-caption-bottom: 100px;
+    --static-box-x: calc(487.062500 / 768);
+    --static-box-y: calc(780.218750 / 1024);
+    --static-box-w: calc(230.718750 / 768);
+    --static-box-h: calc(94.046875 / 1024);
   }
 }
 @media (max-width: 767px) and (min-height: 500px) {
@@ -747,23 +508,20 @@ h1 > strong {
   #app {
     --static-image: url("/assets/scene-mobile.webp");
     --static-aspect: calc(390 / 844);
-    --static-box-x: calc(174.953125 / 390);
-    --static-box-y: calc(596.015625 / 844);
-    --static-box-w: calc(183.234375 / 390);
-    --static-box-h: calc(77.390625 / 844);
+    --static-box-x: calc(184.375000 / 390);
+    --static-box-y: calc(627.609375 / 844);
+    --static-box-w: calc(200.906250 / 390);
+    --static-box-h: calc(84.156250 / 844);
   }
 }
 @media (max-height: 499px) {
   #app {
     --static-image: url("/assets/scene-short.webp");
     --static-aspect: calc(844 / 390);
-    --static-box-x: calc(587.140625 / 844);
-    --static-box-y: calc(255.609375 / 390);
-    --static-box-w: calc(115.765625 / 844);
-    --static-box-h: calc(51.656250 / 390);
-    --static-caption-width: min(270px, calc(100vw - 24px));
-    --static-caption-bottom: 65px;
-    --static-caption-gap: 5px;
+    --static-box-x: calc(595.765625 / 844);
+    --static-box-y: calc(279.296875 / 390);
+    --static-box-w: calc(139.453125 / 844);
+    --static-box-h: calc(59.937500 / 390);
   }
   .journey-link {
     min-height: 44px;

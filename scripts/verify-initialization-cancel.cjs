@@ -12,7 +12,7 @@ async (page) => {
           await route.fulfill({ response, body: `${await response.text()}\nwindow.__reviewInitialization = Initialization;` });
         });
         await target.route("**/__cancel-review", (route) => route.fulfill({ contentType: "text/html",
-          body: '<div id="scene" style="width:800px;height:600px"></div><button></button><div class="box-caption"></div>' }));
+          body: '<div id="scene" style="width:800px;height:600px"></div><button></button>' }));
         await target.goto(`${origin}/__cancel-review`);
         const result = await target.evaluate(async ({ event, phase }) => {
           const { createScene } = await import("/src/scene.ts");

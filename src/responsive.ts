@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { sceneConfig, selectSceneLayout } from "./config";
+import { sceneConfig, selectSceneLayout } from "./config.ts";
 
 /** 横屏手机仍使用轻量画质，但构图切换为左右布局。 */
 export function fitCamera(
@@ -70,4 +70,32 @@ export function projectBounds(
         bottom = Math.max(bottom, py);
       }
   return { left, right, top, bottom };
+}
+
+/** 视口适配时按完整运动范围确定固定取景，不在开盖过程中逐帧修正相机。
+ * 先沿视线退到能容纳模型的最近距离，再水平平移；盒体与铰链始终固定在地面上。
+ * 调用方在视口变化时从构图预设恢复相机，避免重复调用累积退远或平移。
+ */
+export function keepBoundsInView(bounds: THREE.Box3, matrix: THREE.Matrix4,
+  camera: THREE.PerspectiveCamera, width: number, height: number) {
+  const margin = 12, available = Math.max(1, width - margin * 2);
+  const center = bounds.getCenter(new THREE.Vector3()).applyMatrix4(matrix);
+  const forward = camera.getWorldDirection(new THREE.Vector3());
+  const point = new THREE.Vector3();
+  for (let pass = 0; pass < 4; pass++) {
+    camera.updateMatrixWorld();
+    const projected = projectBounds(bounds, matrix, camera, width, height);
+    const depth = -point.copy(center).applyMatrix4(camera.matrixWorldInverse).z;
+    const span = projected.right - projected.left;
+    if (span > available) {
+      // 留一点深度余量抵消盒体前后角的透视差，下一轮再精确核对两端。
+      camera.position.addScaledVector(forward, -depth * (span / available - 1) * 1.03);
+      continue;
+    }
+    const overflow = projected.left < margin ? projected.left - margin
+      : projected.right > width - margin ? projected.right - width + margin : 0;
+    if (Math.abs(overflow) < 0.1) break;
+    camera.position.x += overflow * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * depth / height;
+  }
+  camera.updateMatrixWorld();
 }

@@ -20,11 +20,61 @@ export const glyphs: Record<string, string[]> = {
 
 /** 字序与每字角度独立控制；围绕字心旋转不会镜像笔画或改变槽深。 */
 type GlyphTransform = { reverse?: boolean; rotation?: number };
+/** 字码与笔画序号生成固定偏差；贴图重建和三个通道绝不能各自抽随机数。 */
+function cutVariation(seed: number) {
+  const value = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+  return (value - Math.floor(value)) * 2 - 1;
+}
+
 export function engravingPlacements(text: string, x: number, y: number, size: number,
   spacing: number, transform: GlyphTransform = {}) {
-  return [...text].map((character, index, letters) => ({ character,
-    x: x + (transform.reverse ? letters.length - 1 - index : index) * spacing + size / 2,
-    y: y + size / 2, rotation: transform.rotation ?? 0 }));
+  return [...text].map((character, index, letters) => {
+    const seed = character.codePointAt(0)! + index * 13;
+    return { character,
+      x: x + (transform.reverse ? letters.length - 1 - index : index) * spacing + size / 2
+        + cutVariation(seed) * size * 0.012,
+      y: y + size / 2 + cutVariation(seed + 2) * size * 0.026,
+      rotation: (transform.rotation ?? 0) + cutVariation(seed + 4) * 0.03 };
+  });
+}
+
+/** 沿原始刀路插入轻微偏折，保留端点与交叉结构，避免把可读字形抖成锯齿。 */
+export function carvedStrokes(character: string) {
+  const source = glyphs[character];
+  if (!source) throw new Error(`木盒刻字缺少手绘字形：${character}`);
+  return source.map((stroke, strokeIndex) => {
+    const tokens = stroke.match(/[MLZ]|-?\d+(?:\.\d+)?/g)!;
+    let path = "", x = 0, y = 0, firstX = 0, firstY = 0, segment = 0;
+    const seed = character.codePointAt(0)! + strokeIndex * 97;
+    const lineTo = (nextX: number, nextY: number) => {
+      const dx = nextX - x, dy = nextY - y, length = Math.hypot(dx, dy);
+      const divisions = Math.max(1, Math.ceil(length / 13));
+      for (let part = 1; part < divisions; part++) {
+        const t = part / divisions;
+        const deviation = cutVariation(seed + segment * 17 + part) * 0.65;
+        path += `L${(x + dx * t - dy / length * deviation).toFixed(2)} ${
+          (y + dy * t + dx / length * deviation).toFixed(2)}`;
+      }
+      path += `L${nextX} ${nextY}`;
+      x = nextX; y = nextY; segment++;
+    };
+    for (let i = 0; i < tokens.length;) {
+      const command = tokens[i++];
+      if (command === "Z") { lineTo(firstX, firstY); path += "Z"; continue; }
+      const nextX = Number(tokens[i++]), nextY = Number(tokens[i++]);
+      if (command === "M") {
+        x = firstX = nextX; y = firstY = nextY; path += `M${x} ${y}`;
+      } else lineTo(nextX, nextY);
+    }
+    return { path, width: 3.3 + cutVariation(seed + 5) * 0.5 };
+  });
+}
+
+/** 七秒左右才掠过一次，实际穿过字区不足一秒；-1 让光带完全离开纹理。 */
+export function engravingSweep(time: number, reduced: boolean) {
+  if (reduced) return -1;
+  const phase = ((time % 7.2) + 7.2) % 7.2 - 1.6;
+  return phase < 0 || phase > 1.25 ? -1 : -0.18 + phase / 1.25 * 1.36;
 }
 
 /** 同一组手绘笔画共享字心变换；暖金槽底、较亮槽缘与凹槽高度逐笔对齐。 */
@@ -33,7 +83,7 @@ export function engrave(color: CanvasRenderingContext2D, height: CanvasRendering
   text: string, x: number, y: number, size: number, spacing: number, transform: GlyphTransform = {}) {
   engravingPlacements(text, x, y, size, spacing, transform).forEach((placement) => {
     const { character } = placement;
-    if (!glyphs[character]) throw new Error(`木盒刻字缺少手绘字形：${character}`);
+    const strokes = carvedStrokes(character);
     for (const [context, channel] of [[color, "color"], [height, "height"], [emission, "emission"]] as const) {
       context.save();
       context.translate(placement.x, placement.y);
@@ -42,26 +92,28 @@ export function engrave(color: CanvasRenderingContext2D, height: CanvasRendering
       context.translate(-50, -50);
       context.lineJoin = "round";
       context.lineCap = "round";
-      for (const stroke of glyphs[character]) {
-        const path = new Path2D(stroke);
+      for (const stroke of strokes) {
+        const path = new Path2D(stroke.path);
         if (channel === "emission") {
           // 窄范围柔化仅沿字槽分布，黑色背景使木面不会整体自发光。
           context.shadowColor = "#ffffff";
-          context.shadowBlur = 1.4;
+          context.shadowBlur = 1.1;
           context.strokeStyle = "#ffffff";
-          context.lineWidth = 2.9;
+          context.lineWidth = stroke.width * 0.55;
           context.stroke(path);
           continue;
         }
-        context.save();
-        context.translate(1.8, 2.2);
-        context.strokeStyle = channel === "height" ? "#a5a5a5" : "#e5bd68";
-        context.lineWidth = 2.6;
-        context.stroke(path);
-        context.restore();
-        context.strokeStyle = channel === "height" ? "#191919" : "#b99143";
-        context.lineWidth = 2.9;
-        context.stroke(path);
+        // 先刻宽暗槽，再在槽底留窄金痕；木色下缘与深色上壁形成明确的阴刻方向。
+        for (const layer of [
+          { x: 0.65, y: 0.9, width: stroke.width + 2.7, color: "#a19678", height: "#aaaaaa" },
+          { x: 0, y: 0, width: stroke.width + 2.3, color: "#29251c", height: "#555555" },
+          { x: -0.4, y: -0.5, width: stroke.width + 0.7, color: "#49391f", height: "#191919" },
+          { x: 0, y: 0, width: stroke.width * 0.64, color: "#b49a60", height: "#191919" },
+        ]) {
+          context.save(); context.translate(layer.x, layer.y);
+          context.strokeStyle = channel === "height" ? layer.height : layer.color;
+          context.lineWidth = layer.width; context.stroke(path); context.restore();
+        }
       }
       context.restore();
     }

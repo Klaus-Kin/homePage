@@ -1,3 +1,5 @@
+import { chestPlacement } from "./chest-placement.ts";
+
 /** 可复现随机数使响应式重建保持同一片风景，也便于截图回归。 */
 export function seededRandom(seed: number) {
   return () => {
@@ -37,8 +39,8 @@ export function fbm(x: number, y: number) {
 export function groundHeight(x: number, z: number) {
   // 平缓区覆盖上盖翻到左侧后的落点，避免完全展开时末端悬在山谷上方。
   const distance = Math.min(
-    Math.hypot(x / 2.5, z / 1.5),
-    Math.hypot((x - 0.2) / 3.5, (z + 1.2) / 4),
+    Math.hypot(x / 2.5, (z - chestPlacement.z) / 1.5),
+    Math.hypot((x - 0.2) / 3.5, (z - chestPlacement.z + 1.2) / 4),
   );
   const blend = Math.min(1, Math.max(0, distance - 1));
   const smooth = blend * blend * (3 - 2 * blend);

@@ -14,3 +14,10 @@ export function chestPose(progress: number) {
   }
   return { angle, hinge, bounds };
 }
+
+/** 上盖右端在垂直平面内走半圆，半径包含木板厚度；首帧预留完整运动范围，开盖时不再追着边缘移动镜头。 */
+export function chestMotionBounds() {
+  const { hinge, bounds } = chestPose(0);
+  const radius = Math.hypot(hinge.x - bounds.minX, 0.61);
+  return { ...bounds, maxX: hinge.x + radius, maxY: hinge.y + radius };
+}

@@ -3,7 +3,8 @@ import { Initialization } from "./initialization";
 import { ownTree } from "./resources";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { seededRandom } from "./terrain-math";
-import { engrave } from "./chest-engraving";
+import { engrave, engravingSweep } from "./chest-engraving";
+import { chestPlacement } from "./chest-placement";
 import { chestPose } from "./chest-motion";
 import { glowTexture } from "./textures";
 
@@ -69,10 +70,10 @@ async function makeWood(face: "plain" | "spell" | "name" | "return", init: Initi
     emissiveMap = face === "plain" ? null : init.track(new THREE.CanvasTexture(emission));
   map.colorSpace = THREE.SRGBColorSpace;
   map.anisotropy = bumpMap.anisotropy = 4;
-  // 遮罩使用线性黑白数据；0.25 的常亮发光仅作用于金色字槽。
+  // 遮罩使用线性黑白数据；0.25 的基础微光仅作用于金色字槽，短暂扫光在着色器中叠加。
   if (emissiveMap) emissiveMap.anisotropy = 4;
   const material = init.track(new THREE.MeshStandardMaterial({ map, bumpMap,
-    bumpScale: 0.018, roughness: 0.94, emissiveMap,
+    bumpScale: face === "plain" ? 0.018 : 0.032, roughness: 0.94, emissiveMap,
     emissive: face === "plain" ? 0x000000 : 0xe9b95d, emissiveIntensity: 0.25 }));
   // 材质名标明刻字所在面，便于离线检查 UV 与转轴组合后的真实朝向。
   material.name = `wood-${face}`;
@@ -83,6 +84,19 @@ async function makeWood(face: "plain" | "spell" | "name" | "return", init: Initi
 export async function createChest(init = new Initialization()) {
   const wood = await makeWood("plain", init), spellWood = await makeWood("spell", init),
     nameWood = await makeWood("name", init), returnWood = await makeWood("return", init);
+  // 光带直接调制字槽的发光遮罩，木面与暗槽壁不受影响；只更新同一个 uniform，不新增灯光或贴图。
+  const sweep = { value: -1 };
+  for (const material of [spellWood, nameWood, returnWood]) {
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.uEngravingSweep = sweep;
+      shader.fragmentShader = "uniform float uEngravingSweep;\n" + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace("#include <emissivemap_fragment>",
+        `#include <emissivemap_fragment>
+        float glintDistance = abs(vEmissiveMapUv.x + (vEmissiveMapUv.y - 0.5) * 0.12 - uEngravingSweep);
+        float glint = 1.0 - smoothstep(0.015, 0.085, glintDistance);
+        totalEmissiveRadiance *= 1.0 + glint * 2.8;`);
+    };
+  }
   // 最后一张刻字贴图与实体几何分开提交，避免两段短工作叠成同一个长任务。
   await init.checkpoint(true);
   init.phase = "chest-geometry";
@@ -93,8 +107,8 @@ export async function createChest(init = new Initialization()) {
   // 为上翻后落到左侧的双倍长度预留空间；底盒在整个动画中保持落地且不平移。
   // 长边左右摆放，局部右端铰链转到画面左侧；上半盒真正抬离地面。
   box.rotation.y = Math.PI;
-  box.position.x = 1;
-  box.scale.setScalar(0.64);
+  box.position.set(chestPlacement.x, 0, chestPlacement.z);
+  box.scale.setScalar(chestPlacement.scale);
   for (const texture of [spellWood.map!, spellWood.bumpMap!, spellWood.emissiveMap!,
     nameWood.map!, nameWood.bumpMap!, nameWood.emissiveMap!,
     returnWood.map!, returnWood.bumpMap!, returnWood.emissiveMap!]) {
@@ -140,10 +154,14 @@ export async function createChest(init = new Initialization()) {
   const fixedHalf = await half(-1, nameWood, box);
   const movingHalf = await half(1, returnWood, openingPivot);
   // 水平销轴贯穿短端厚度，实体铰链与上翻轴重合。
-  const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.44, 12),
-    new THREE.MeshStandardMaterial({ color: 0x57564c, roughness: 0.85, metalness: 0.25 }));
+  // 暖金色保留少量漫反射，在无环境贴图的冷月光下也能辨色；中等粗糙度形成柔和金属高光。
+  const hingeMaterial = new THREE.MeshStandardMaterial({ color: 0xd7a44a,
+    roughness: 0.36, metalness: 0.65 });
+  hingeMaterial.name = "hinge-gold";
+  const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.44, 24), hingeMaterial);
+  hinge.name = "hinge-pin";
   hinge.rotation.x = Math.PI / 2;
-  hinge.position.set(1.93, 0.61, 0); hinge.castShadow = true; box.add(hinge);
+  hinge.position.set(1.93, 0.61, 0); hinge.castShadow = hinge.receiveShadow = true; box.add(hinge);
   const lightAnchor = new THREE.Object3D();
   lightAnchor.position.set(0, 0.61, 0); box.add(lightAnchor);
   // 三个低强度光源把内腔照匀，避免单点在盒壁上形成刺眼圆斑。
@@ -189,7 +207,9 @@ export async function createChest(init = new Initialization()) {
   }
   box.add(beams);
   const bounds = new THREE.Box3();
-  function update(lidProgress: number, glowProgress: number, reduced: boolean) {
+  function update(lidProgress: number, glowProgress: number, reduced: boolean, time = 0) {
+    // 使用场景已有的可暂停时钟；减少动态时光带立即离场，不启动额外计时器。
+    sweep.value = engravingSweep(time, reduced);
     const pose = chestPose(lidProgress), moved = openingPivot.rotation.z !== -pose.angle;
     openingPivot.rotation.z = -pose.angle;
     const b = pose.bounds;

@@ -2,10 +2,8 @@
 export const pageConfig = {
   title: "程序猿的月光宝盒",
   titleLines: ["程序猿的", "月光宝盒"],
-  description: ["开发者 写作者 时空旅人，", "写代码也写故事。"],
+  description: ["开发者 · 写作者 · 时空旅人", "写代码也写故事", "此间有故事，亦有远方", "把热爱写进代码，把故事交给月光"],
   blogUrl: "https://example.com/blog",
-  pointerHint: "点击宝盒，开启月光之旅",
-  touchHint: "轻触宝盒，开启月光之旅",
   transition: { charge: 800, fade: 2000, hold: 400, reducedFade: 600 },
 } as const;
 
@@ -13,7 +11,8 @@ export const pageConfig = {
 export const sceneConfig = {
   layout: {
     desktop: {
-      cameraX: -4.7,
+      // 横向视点略向右移，让更近的宝盒向画面中间靠拢，并保留完整右端。
+      cameraX: -3.7,
       distance: 14.5,
       height: 4.0,
       targetY: 3.3,
@@ -37,7 +36,7 @@ export const sceneConfig = {
       moon: [0.79, 0.145, 0.055],
     },
     short: {
-      cameraX: -5.2,
+      cameraX: -4.6,
       distance: 14,
       height: 3.6,
       targetY: 2.8,

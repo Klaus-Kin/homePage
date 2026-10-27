@@ -3,7 +3,7 @@ import type { Initialization } from "./initialization";
 import { fbm, seededRandom } from "./terrain-math";
 
 /** 纯色表面贴图只描述材质，不烘焙草叶、月光或阴影。 */
-export async function surfaceTexture(kind: "ground" | "rock", init: Initialization) {
+export async function surfaceTexture(kind: "ground" | "rock" | "mountain", init: Initialization) {
   init.phase = `texture-${kind}`;
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 256;
@@ -13,9 +13,12 @@ export async function surfaceTexture(kind: "ground" | "rock", init: Initializati
   for (let y = 0; y < 256; y++) {
     const pause = init.checkpoint(); if (pause) await pause;
     for (let x = 0; x < 256; x++) {
-      const n = fbm(x / 22, y / 22) * 0.8 + random() * 0.2;
+      // 岩面以缓慢色斑和极少量砂粒表现风化，避免高频随机颗粒被凹凸贴图放大成尖刺。
+      const grain = random();
+      const n = kind === "rock" ? fbm(x / 42, y / 42) * 0.22 + grain * 0.018 + 0.42
+        : fbm(x / 22, y / 22) * 0.8 + grain * 0.2;
       const i = (y * 256 + x) * 4;
-      const base = kind === "rock" ? [102, 112, 123] : [58, 66, 31];
+      const base = kind === "ground" ? [58, 66, 31] : [102, 112, 123];
       for (let c = 0; c < 3; c++) image.data[i + c] = base[c] * (0.4 + n);
       image.data[i + 3] = 255;
     }

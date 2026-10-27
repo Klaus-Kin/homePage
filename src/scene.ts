@@ -1,10 +1,11 @@
 import * as THREE from "three";
 import { Initialization } from "./scene/initialization";
 import { ownTree } from "./scene/resources";
-import { fitCamera, projectBounds } from "./responsive";
+import { fitCamera, projectBounds, keepBoundsInView } from "./responsive";
 import { sceneConfig, pageConfig } from "./config";
 import { transitionFrame } from "./transition";
 import { createChest } from "./scene/chest";
+import { chestMotionBounds } from "./scene/chest-motion";
 import { createTerrain } from "./scene/terrain";
 import { createSky } from "./scene/sky";
 
@@ -69,7 +70,12 @@ export async function createScene(
   const pointer = new THREE.Vector2(),
     currentPointer = new THREE.Vector2();
   const baseCamera = new THREE.Vector3();
-  const caption = document.querySelector<HTMLElement>(".box-caption")!;
+  // 仅在视口变化时根据完整开盖范围适配；播放期间使用同一镜头，固定铰链不会随边缘修正而跳动。
+  const motion = chestMotionBounds();
+  const motionBounds = new THREE.Box3(
+    new THREE.Vector3(motion.minX, motion.minY, motion.minZ),
+    new THREE.Vector3(motion.maxX, motion.maxY, motion.maxZ),
+  ).expandByScalar(0.03);
 
   // 释放实例缓冲、共享纹理、阴影贴图和 WebGL 上下文；异常初始化也走同一路径。
   function dispose() {
@@ -127,8 +133,14 @@ export async function createScene(
   moonLight.shadow.bias = -0.0001;
 
   function syncTargets() {
-    camera.updateMatrixWorld();
+    // 复用视口适配后的固定镜头；鼠标视差只作用于桌面，触屏开盖不改变取景。
+    camera.position.copy(baseCamera);
+    if (!reduced) {
+      camera.position.x += currentPointer.x * 0.1;
+      camera.position.y += currentPointer.y * 0.06;
+    }
     chest.box.updateMatrixWorld();
+    camera.updateMatrixWorld();
     sky.moon.updateMatrixWorld();
     const b = projectBounds(
       chest.bounds,
@@ -156,25 +168,12 @@ export async function createScene(
     });
     const left = Math.max(0, b.left - 10),
       top = Math.max(0, b.top - 10);
-    // 横屏手机给提示保留间距，投影周围的点击留白不能压到提示文字上。
-    const captionTop = Math.min(
-      size.height - (size.name === "short" ? 65 : 105),
-      b.bottom + (size.name === "short" ? 15 : 32),
-    );
+    // 页面不再显示盒底提示，点击区只需覆盖模型与必要的触控留白。
     Object.assign(hitTarget.style, {
       left: `${left}px`,
       top: `${top}px`,
       width: `${Math.max(44, Math.min(size.width, b.right + 10) - left)}px`,
-      height: `${Math.max(44, Math.min(size.height, b.bottom + 10, captionTop - 5) - top)}px`,
-    });
-    const captionWidth = Math.min(
-      size.width - 24,
-      size.name === "short" ? 270 : 350,
-    );
-    Object.assign(caption.style, {
-      left: `${Math.min(size.width - captionWidth - 12, Math.max(12, (b.left + b.right - captionWidth) / 2))}px`,
-      top: `${captionTop}px`,
-      width: `${captionWidth}px`,
+      height: `${Math.max(44, Math.min(size.height, b.bottom + 10) - top)}px`,
     });
     // 只暴露投影和帧计数供验收，不向页面暴露场景修改接口。
     host.dataset.moonBounds = JSON.stringify(
@@ -192,7 +191,7 @@ export async function createScene(
     const duration = reduced ? pageConfig.transition.reducedFade
       : pageConfig.transition.charge + pageConfig.transition.fade;
     const frame = transitionFrame(transition * duration, reduced, pageConfig.transition);
-    if (chest.update(frame.lid, frame.glow, reduced)) {
+    if (chest.update(frame.lid, frame.glow, reduced, time)) {
       renderer.shadowMap.needsUpdate = true;
       syncTargets();
     }
@@ -228,9 +227,6 @@ export async function createScene(
     lastTime = timestamp;
     if (currentPointer.distanceToSquared(pointer) > 0.000001) {
       currentPointer.lerp(pointer, 0.04);
-      camera.position.copy(baseCamera);
-      camera.position.x += currentPointer.x * 0.1;
-      camera.position.y += currentPointer.y * 0.06;
       syncTargets();
     }
     render();
@@ -238,6 +234,8 @@ export async function createScene(
   function resize() {
     if (disposed) return;
     size = fitCamera(camera, renderer, host);
+    chest.box.updateMatrixWorld();
+    keepBoundsInView(motionBounds, chest.box.matrixWorld, camera, size.width, size.height);
     baseCamera.copy(camera.position);
     currentPointer.set(0, 0);
     pointer.set(0, 0);

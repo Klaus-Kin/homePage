@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 import type { Initialization } from "./initialization";
 import { ownTree } from "./resources";
 import { createPlane, computeNormals } from "./geometry";
@@ -24,7 +25,7 @@ export async function createTerrain(init: Initialization) {
   const stone = init.track(new THREE.MeshStandardMaterial({
     map: rockMap,
     bumpMap: rockMap,
-    bumpScale: 0.17,
+    bumpScale: 0.035,
     roughness: 0.96,
   }));
   init.phase = "ground";
@@ -47,12 +48,18 @@ export async function createTerrain(init: Initialization) {
   init.phase = "vegetation";
 
   // 岩石采用实例化多面体，各实例非等比缩放并埋入地表，减少重复轮廓。
-  const rockGeometry = new THREE.IcosahedronGeometry(1, 1);
-  const rp = rockGeometry.attributes.position;
-  for (let i = 0; i < rp.count; i++) {
-    const k = 0.82 + fbm(rp.getX(i) * 4 + 6, rp.getZ(i) * 4 + 8) * 0.35;
-    rp.setXYZ(i, rp.getX(i) * k, rp.getY(i) * k, rp.getZ(i) * k);
+  // 低频风化起伏代替细碎尖角，焊接顶点后重算法线，使受光沿圆缓石面连续过渡。
+  const rockSource = new THREE.IcosahedronGeometry(1, 2);
+  const sourcePositions = rockSource.attributes.position;
+  for (let i = 0; i < sourcePositions.count; i++) {
+    const x = sourcePositions.getX(i), y = sourcePositions.getY(i), z = sourcePositions.getZ(i);
+    const k = 0.9 + fbm(x * 1.4 + 6, z * 1.4 + y * 0.6 + 8) * 0.18;
+    sourcePositions.setXYZ(i, x * k, y * k, z * k);
   }
+  rockSource.deleteAttribute("normal");
+  const rockGeometry = mergeVertices(rockSource);
+  rockSource.dispose();
+  const rp = rockGeometry.attributes.position;
   rockGeometry.computeVertexNormals();
   const rocks = new THREE.InstancedMesh(rockGeometry, stone, quality.rocks);
   group.add(rocks);
@@ -64,9 +71,11 @@ export async function createTerrain(init: Initialization) {
     let x = (random() - 0.5) * 33,
       z = random() * 20 - 8;
     if (Math.abs(x) < 2.2 && Math.abs(z) < 1.5) x += 3;
-    const size = 0.12 + Math.pow(random(), 3) * 1.25;
-    dummy.position.set(x, groundHeight(x, z) - 0.08, z);
-    dummy.scale.set(size * 1.5, size * 0.7, size);
+    // 镜头附近只保留低矮小石，保留原有数量但降低它们在画面中的体量。
+    const nearScale = z > 3 ? 0.56 : 0.8;
+    const size = (0.12 + Math.pow(random(), 3) * 0.95) * nearScale;
+    dummy.position.set(x, groundHeight(x, z) - size * 0.18, z);
+    dummy.scale.set(size * 1.35, size * 0.62, size);
     dummy.rotation.set(random() * 0.4, random() * 6, random() * 0.4);
     dummy.updateMatrix();
     // 使用变形后顶点和实例完整矩阵；先避开盒体及上盖落点，再用于草叶避让。

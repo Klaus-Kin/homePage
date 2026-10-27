@@ -139,8 +139,8 @@ async (page) => {
       reducedMotion: "reduce",
     },
     async (target) => {
-      const hint = await target.locator("#box-prompt").textContent();
-      if (!hint.startsWith("轻触")) throw new Error("Touch hint incorrect");
+      // 移除可见提示后，触屏仍通过原生按钮语义与实际宝盒热点进入。
+      if (await target.locator("#box-prompt, .box-caption").count()) throw new Error("盒底说明未移除");
       const box = await target.locator("#box-button").boundingBox();
       const x = box.x + box.width / 2,
         y = box.y + box.height / 2;
