@@ -11,7 +11,7 @@ import type { MoonScene } from "./scene";
 // 启动守卫由 HTML 的无依赖脚本提供，类型声明不会引入新的运行时加载依赖。
 declare global {
   interface Window {
-    __moonBoot?: { readonly failed: boolean; ready(): boolean };
+    __moonBoot?: { readonly failed: boolean; ready(immediate?: boolean): Promise<boolean> };
   }
 }
 
@@ -74,7 +74,8 @@ function showFallback(error: unknown) {
   button.disabled = state.phase !== "idle";
   status.textContent = "已启用静态场景，仍可点击宝盒或文字入口进入博客";
   // 正常的场景降级同样代表首屏就绪，应撤销 HTML 守卫的超时监听。
-  window.__moonBoot?.ready();
+  // 降级入口优先恢复可用性，不等待正常场景的拉幕动画。
+  void window.__moonBoot?.ready(true);
 }
 window.addEventListener("moon-boot-failed", () =>
   showFallback(new Error("入口守卫已锁定静态场景")),
@@ -246,7 +247,9 @@ async function initialize() {
       scene = undefined;
       return;
     }
-    window.__moonBoot?.ready();
+    // 首帧已绘制后才开始拉开加载幕布；动画完成前维持 loading 和禁用按钮。
+    await window.__moonBoot?.ready();
+    if (fallback || leaving) return;
     state.ready();
     app.dataset.state = state.phase;
     button.disabled = false;

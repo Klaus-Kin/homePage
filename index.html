@@ -19,7 +19,17 @@
       /* 首屏关键样式不依赖 CSS 或模块下载，隐藏内容仍保留尺寸供相机计算。 */
       html, body { margin: 0; background: #080f20; }
       #app[data-state="loading"] { visibility: hidden; }
-      #moon-loader { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; justify-items: center; background: #080f20; color: #cbb77f; }
+      /* 主场景先在幕布后显示；inert 由启动守卫维护，拉开完成前不接受鼠标和键盘输入。 */
+      #app[data-revealing="true"] { visibility: visible; }
+      #moon-loader { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; justify-items: center; overflow: hidden; isolation: isolate; color: #cbb77f; }
+      /* 中线保留两像素重叠，避免不同缩放比例下透出未就绪的主画面。 */
+      #moon-loader .loader-curtain { position: absolute; inset-block: 0; width: calc(50% + 1px); z-index: -1; background: #080f20; }
+      #moon-loader .loader-curtain-left { left: 0; }
+      #moon-loader .loader-curtain-right { right: 0; }
+      #moon-loader.revealing .loader-curtain-left { animation: curtain-open-left 1000ms cubic-bezier(.76, 0, .24, 1) both; }
+      #moon-loader.revealing .loader-curtain-right { animation: curtain-open-right 1000ms cubic-bezier(.76, 0, .24, 1) both; }
+      /* 金箍和欢迎语先淡出，随后从中线显露主场景；旋转仍使用既有合成层。 */
+      #moon-loader.revealing .hoop-halo, #moon-loader.revealing .hoop-rotor, #moon-loader.revealing .loading-label { opacity: 0; transition: opacity 140ms ease-out; }
       /* 静态柔光与旋转层分开绘制，避免 SVG 滤镜阻断合成线程旋转。 */
       #moon-loader .hoop-halo { grid-area: 1 / 1; width: 142px; height: 142px; margin: -15px; background: radial-gradient(ellipse, #c99d3515 15%, #c99d3509 46%, transparent 70%); }
       #moon-loader .hoop-rotor { grid-area: 1 / 1; width: 112px; height: 112px; animation: hoop-spin 1.8s linear infinite; will-change: transform; }
@@ -27,8 +37,15 @@
       /* 欢迎语与金箍分别占据网格行，始终可见，减少动态时保持相同布局。 */
       #moon-loader .loading-label { margin-top: 24px; font: 14px/1.5 serif; letter-spacing: .18em; }
       @keyframes hoop-spin { to { transform: rotate(360deg); } }
+      @keyframes curtain-open-left { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+      @keyframes curtain-open-right { from { transform: translateX(0); } to { transform: translateX(100%); } }
+      @keyframes loader-fade-out { from { opacity: 1; } to { opacity: 0; } }
       @media (prefers-reduced-motion: reduce) {
         #moon-loader .hoop-rotor { animation: none; will-change: auto; }
+        /* 减少动态时不移动整屏幕布，只保留短淡出并沿用同一就绪门禁。 */
+        #moon-loader.revealing .loader-curtain { animation: none; }
+        /* 覆盖全站减少动态规则的 animation: none，仅允许无位移的短淡出。 */
+        #moon-loader.revealing { animation: loader-fade-out 120ms ease-out both !important; }
       }
     </style>
     <noscript
@@ -56,6 +73,8 @@
   <body>
     <!-- 金箍直接内联，Three.js 尚未下载时也有独立、可访问的加载反馈。 -->
     <div id="moon-loader" role="status" aria-live="polite" aria-label="正在加载月光宝盒">
+      <span class="loader-curtain loader-curtain-left" aria-hidden="true"></span>
+      <span class="loader-curtain loader-curtain-right" aria-hidden="true"></span>
       <span class="hoop-halo" aria-hidden="true"></span>
       <span class="hoop-rotor" aria-hidden="true">
       <svg viewBox="0 0 160 160" fill="none" aria-hidden="true">
@@ -115,6 +134,7 @@
       (() => {
         const app = document.querySelector("#app");
         let phase = "loading";
+        let revealComplete, finishReveal = () => {};
         const timeout = window.setTimeout(() => fail("页面初始化超时"), 10000);
         function stopWatching() {
           clearTimeout(timeout);
@@ -146,12 +166,49 @@
           get failed() {
             return phase === "failed";
           },
-          ready() {
-            if (phase === "failed") return false;
-            phase = "ready";
+          ready(immediate = false) {
+            if (phase === "failed") return Promise.resolve(false);
+            // 重复就绪通知共享同一段转场；运行时降级可以立即解除已有的幕布门禁。
+            if (phase !== "loading") {
+              if (immediate) finishReveal();
+              return revealComplete;
+            }
+            phase = "revealing";
             stopWatching();
-            document.querySelector("#moon-loader")?.remove();
-            return true;
+            const loader = document.querySelector("#moon-loader");
+            const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+            let revealTimeout = 0;
+            revealComplete = new Promise((resolve) => {
+              finishReveal = () => {
+                if (phase !== "revealing") return;
+                phase = "ready";
+                clearTimeout(revealTimeout);
+                loader?.removeEventListener("animationend", onRevealEnd);
+                motion.removeEventListener("change", finishReveal);
+                window.removeEventListener("pagehide", finishReveal);
+                loader?.remove();
+                app.inert = false;
+                delete app.dataset.revealing;
+                resolve(true);
+              };
+            });
+            function onRevealEnd(event) {
+              // 金箍与欢迎语的事件不会提前结束转场，只接受右幕布或减少动态淡出的结束。
+              if (event.animationName === "curtain-open-right" ||
+                  (event.target === loader && event.animationName === "loader-fade-out")) finishReveal();
+            }
+            app.inert = true;
+            app.dataset.revealing = "true";
+            if (!loader || immediate) finishReveal();
+            else {
+              loader.addEventListener("animationend", onRevealEnd);
+              motion.addEventListener("change", finishReveal);
+              window.addEventListener("pagehide", finishReveal, { once: true });
+              // 动画被浏览器取消时也有出口；后台节流不会留下永久阻挡主页的透明层。
+              revealTimeout = window.setTimeout(finishReveal, motion.matches ? 220 : 1100);
+              loader.classList.add("revealing");
+            }
+            return revealComplete;
           },
         };
         window.addEventListener("error", onError, true);
