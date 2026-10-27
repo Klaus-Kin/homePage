@@ -1,4 +1,4 @@
-import { chestPlacement } from "./chest-placement.ts";
+import { chestPlacement, type ChestPlacement } from "./chest-placement.ts";
 
 /** 可复现随机数使响应式重建保持同一片风景，也便于截图回归。 */
 export function seededRandom(seed: number) {
@@ -47,12 +47,12 @@ export function groundTextureValue(x: number, y: number) {
 }
 
 /** 宝盒附近平缓，远离后自然起伏并向山谷下降；近坡一直延伸到相机后方。 */
-export function groundHeight(x: number, z: number) {
+export function groundHeight(x: number, z: number, placement: ChestPlacement = chestPlacement) {
   // 平缓区覆盖上盖翻到左侧后的落点，避免完全展开时末端悬在山谷上方。
   const distance = Math.min(
-    Math.hypot(x / 2.5, (z - chestPlacement.z) / 1.5),
+    Math.hypot((x - (placement.x - chestPlacement.x)) / 2.5, (z - placement.z) / 1.5),
     // 平缓支撑区跟随完整展开的中心与前移后的纵深，左右两条半盒都能落地。
-    Math.hypot((x - chestPlacement.x + 1.25) / 2.8, (z - chestPlacement.z) / 1.5),
+    Math.hypot((x - placement.x + 1.25) / 2.8, (z - placement.z) / 1.5),
   );
   const blend = Math.min(1, Math.max(0, distance - 1));
   const smooth = blend * blend * (3 - 2 * blend);

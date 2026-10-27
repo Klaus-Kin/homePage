@@ -1,4 +1,4 @@
-import { chestPlacement } from "./chest-placement.ts";
+import { chestPlacement, type ChestPlacement } from "./chest-placement.ts";
 
 /** 水平凸包保留每块岩石实际变换后的轮廓，避免统一圆形禁区把石边草全清空。 */
 type Point = { x: number; z: number };
@@ -60,7 +60,10 @@ const chestBodyFootprint: readonly Point[] = [
 ];
 
 /** 岩石、草叶和整株花使用相同的留白规则，并计入各自的外伸半径。 */
-export function overlapsChestScenery(x: number, z: number, radius: number) {
+export function overlapsChestScenery(x: number, z: number, radius: number, placement: ChestPlacement = chestPlacement) {
+  // 两端实体比例相同，将查询点平移回已缓存的足迹，逐片草检查时不创建新多边形。
+  x += chestPlacement.x - placement.x;
+  z += chestPlacement.z - placement.z;
   return overlapsFootprint(x, z, radius + 0.9, chestBodyFootprint) ||
     overlapsFootprint(x, z, radius, chestFootprint);
 }

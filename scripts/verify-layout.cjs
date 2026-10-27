@@ -17,14 +17,23 @@ async (page) => {
     [430, 932],
     [480, 1040],
     [844, 390],
+    [640, 600],
+    [320, 480],
+    [1100, 1000],
   ];
   const results = [];
+  await page.bringToFront();
   await page.goto(origin);
   await page.waitForFunction(
     () => document.querySelector("#app").dataset.state === "idle",
   );
   for (const [width, height] of sizes) {
     await page.setViewportSize({ width, height });
+    // 多上下文检查后标签页可能被后台节流，等待真实 resize 提交，避免读取上一种尺寸。
+    await page.waitForFunction(() => {
+      const canvas = document.querySelector('canvas');
+      return canvas?.clientWidth === innerWidth && Math.abs(canvas.clientHeight - innerHeight) < 1;
+    });
     await page.waitForTimeout(150);
     const layout = await page.evaluate(() => {
       const rect = (selector) => {
@@ -66,6 +75,10 @@ async (page) => {
         textRects.push(...Array.from(range.getClientRects(), r => ({x:r.x,y:r.y,right:r.right,bottom:r.bottom})));
       }
       // 月亮是圆形投影，外接矩形的左下角为空白；文字不能接触月面本身。
+      // 标题已改为同源小篆 SVG，必须检查实际图形，不能只检查辅助技术的隐藏文本。
+      textRects.push(...Array.from(document.querySelectorAll('.seal-title'), el => {
+        const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom };
+      }));
       const overlapsMoon = r => {
         const cx=(moon.x+moon.right)/2, cy=(moon.y+moon.bottom)/2;
         const x=Math.max(r.x,Math.min(r.right,cx)), y=Math.max(r.y,Math.min(r.bottom,cy));

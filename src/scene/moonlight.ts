@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { chestPlacement } from "./chest-placement.ts";
+import { chestPlacement, type ChestPlacement } from "./chest-placement.ts";
 
 // 复用临时向量，月球、相机与开盖更新时不逐帧创建对象。
 const source = new THREE.Vector3(), position = new THREE.Vector3();
@@ -69,6 +69,8 @@ export function fitMoonShadow(light: THREE.DirectionalLight, bounds: THREE.Box3)
 /** 保留环境原有的漫反射构图，避免宝盒主光修正同时重画远山；接地阴影仍采样真实月光。 */
 export function preserveLandscapeLight(group: THREE.Object3D) {
   const direction = { value: new THREE.Vector3() };
+  // 阴影重点区域跟随响应式盒体位置；手机仍使用原坐标与原阴影强度。
+  const shadowArea = { value: new THREE.Vector4(chestPlacement.x - 0.6, chestPlacement.z + 1.2, 2.7, 1.6) };
   const originalDirection = new THREE.Vector3(8, 14, -6).normalize();
   const materials = new Set<THREE.MeshStandardMaterial>();
   group.traverse((object) => {
@@ -88,8 +90,7 @@ export function preserveLandscapeLight(group: THREE.Object3D) {
             "getDirectionalLightInfo( directionalLight, directLight );\n directLight.direction = uLandscapeLightDirection;");
         if (material.name === "meadow-ground") {
           // 同一张真实阴影贴图在宝盒附近保持深度，远处草影柔和减淡；不会另画假阴影贴片。
-          shader.uniforms.uChestShadowArea = { value: new THREE.Vector4(
-            chestPlacement.x - 0.6, chestPlacement.z + 1.2, 2.7, 1.6) };
+          shader.uniforms.uChestShadowArea = shadowArea;
           shader.vertexShader = "varying vec3 vMeadowWorld;\n" + shader.vertexShader;
           shader.vertexShader = shader.vertexShader.replace("#include <worldpos_vertex>",
             "#include <worldpos_vertex>\n vMeadowWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;");
@@ -109,7 +110,8 @@ export function preserveLandscapeLight(group: THREE.Object3D) {
     }
   });
   // 灯光计算发生在观察空间；视差和开盖镜头改变后同步方向，不把光固定在屏幕上。
-  return (camera: THREE.Camera) => {
+  return (camera: THREE.Camera, placement: ChestPlacement = chestPlacement) => {
     direction.value.copy(originalDirection).transformDirection(camera.matrixWorldInverse);
+    shadowArea.value.set(placement.x - 0.6, placement.z + 1.2, 2.7, 1.6);
   };
 }

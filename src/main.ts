@@ -37,10 +37,7 @@ let gesture: { x: number; y: number; time: number; id: number } | null = null;
 
 // 文案只从配置写入文本节点，避免配置内容经由 HTML 注入页面。
 document.title = pageConfig.title;
-document.querySelector("#page-title > span")!.textContent =
-  pageConfig.titleLines[0];
-document.querySelector("#page-title > strong")!.textContent =
-  pageConfig.titleLines[1];
+// 标题的小篆和可访问文字由构建时共用配置生成，保留静态 SVG，避免启动后换字。
 const description = document.querySelector(".description")!;
 description.replaceChildren(
   // 逐行创建文本节点，身份介绍与新文案共用配置；行数变化不会遗漏或解释为 HTML。

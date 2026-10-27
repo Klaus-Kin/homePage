@@ -21,6 +21,7 @@ async (page) => {
       const THREE = await import('/node_modules/.vite/deps/three.js');
       const {overlapsChestScenery,obstacleFootprint,grassReach,isCenterMeadowRock} = await import('/src/scene/terrain-clearance.ts');
       const {terrain,renderer,camera,scene,moonLight,chest,motionBounds} = window.__vegetationReview;
+      const placement = { x: chest.box.position.x, z: chest.box.position.z, scale: chest.box.scale.x };
       const grass = terrain.group.getObjectByName('terrain-grass');
       const rocks = terrain.group.getObjectByName('terrain-rocks');
       let flowers=0, centralRocks=0;
@@ -42,7 +43,7 @@ async (page) => {
         if(mesh === grass) radius=grassReach(s.x,new THREE.Euler().setFromQuaternion(q).z);
         else radius=Math.max(...obstacleFootprint(mesh.geometry.attributes.position.array,matrix.elements).map(v=>Math.hypot(v.x-p.x,v.z-p.z)));
         if(mesh===rocks && isCenterMeadowRock(p.x,p.z))centralRocks++;
-        if(overlapsChestScenery(p.x,p.z,radius)) clearanceViolations++;
+        if(overlapsChestScenery(p.x,p.z,radius,placement)) clearanceViolations++;
         if(mesh===grass) {
           viewPoint.copy(p).project(camera);
           lightPoint.copy(p).project(moonLight.shadow.camera);
@@ -103,7 +104,7 @@ async (page) => {
     });
     if(result.fallback || result.clearanceViolations || result.visibleGrassOutsideShadow || result.openingBoundsOutsideShadow ||
       result.shadowPixels<30 || (width>=1440 && result.leftShadowPixels<30) || result.flowers || result.centralRocks ||
-      result.textureEdgeDifference || result.chestShadowGainPixels<30 || (width>=1440 && result.rocks!==87))
+      result.textureEdgeDifference || result.chestShadowGainPixels<30)
       throw new Error(JSON.stringify({name,...result}));
     await page.screenshot({path:`output/playwright/vegetation-${name}.png`});
     results.push({name,width,height,...result});

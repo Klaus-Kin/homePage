@@ -3,16 +3,18 @@ import assert from "node:assert/strict";
 import * as THREE from "three";
 import { keepBoundsInView, projectBounds, openingCameraPosition } from "../src/responsive.ts";
 import { sceneConfig, selectSceneLayout } from "../src/config.ts";
-import { chestPlacement } from "../src/scene/chest-placement.ts";
+import { chestPlacement, selectChestPlacement } from "../src/scene/chest-placement.ts";
 import { chestPose, chestMotionBounds } from "../src/scene/chest-motion.ts";
 
 // 近景和展开端点预先适配；连续采样检查模型完整可见与镜头轨迹，不再等到出界才跳动修正。
 test("foreground chest stays visible through continuously planned opening framing", () => {
-  const matrix = new THREE.Matrix4().compose(new THREE.Vector3(chestPlacement.x, 0, chestPlacement.z),
-    new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI),
-    new THREE.Vector3().setScalar(chestPlacement.scale));
   for (const [width, height] of [[3440,1440], [2560,1080], [1920,1080], [1366,1024], [1024,1366], [768,1024],
     [360,800], [390,844], [393,852], [430,932], [480,1040], [844,390]]) {
+    // 与真实场景一致，手机横屏仍沿用已确认的位置，桌面检查新坐标。
+    const placement = selectChestPlacement(width < 768 || height < 500);
+    const matrix = new THREE.Matrix4().compose(new THREE.Vector3(placement.x, 0, placement.z),
+      new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI),
+      new THREE.Vector3().setScalar(placement.scale));
     const preset = sceneConfig.layout[selectSceneLayout(width, height)];
     const camera = new THREE.PerspectiveCamera(preset.fov, width / height, 0.1, 350);
     const base = new THREE.Vector3(preset.cameraX, preset.height, preset.distance);
@@ -55,13 +57,15 @@ test("receding chest gains widescreen breathing room without changing its physic
     const pose = chestPose(0).bounds;
     const bounds = new THREE.Box3(new THREE.Vector3(pose.minX, pose.minY, pose.minZ),
       new THREE.Vector3(pose.maxX, pose.maxY, pose.maxZ));
-    const projectAt = (z: number) => projectBounds(bounds, new THREE.Matrix4().compose(
-      new THREE.Vector3(chestPlacement.x, 0, z),
+    const projectAt = (x: number, z: number) => projectBounds(bounds, new THREE.Matrix4().compose(
+      new THREE.Vector3(x, 0, z),
       new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI),
       new THREE.Vector3().setScalar(chestPlacement.scale)), camera, width, height);
-    const previous = projectAt(7.8), current = projectAt(chestPlacement.z);
+    const desktop = selectChestPlacement(false);
+    const previous = projectAt(chestPlacement.x, chestPlacement.z), current = projectAt(desktop.x, desktop.z);
     const ratio = (current.right - current.left) / (previous.right - previous.left);
-    assert.ok(ratio > 0.82 && ratio < 0.94, `${width}: 后移幅度应适中 ${ratio}`);
+    assert.ok(ratio > 0.78 && ratio < 0.90, `${width}: 后移幅度应适中 ${ratio}`);
+    assert.ok((current.left + current.right) / 2 < (previous.left + previous.right) / 2 - width * .025);
     assert.ok(current.bottom < previous.bottom - height * 0.025);
     assert.equal(chestPlacement.scale, 0.64);
   }

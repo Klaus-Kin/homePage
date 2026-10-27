@@ -68,7 +68,7 @@ async (page) => {
       // 验证真实像素遮罩：木面保持黑色，字槽有白色核心与有限灰阶柔边。
       for (const { material } of Object.values(surfaces)) {
         if (material.emissiveIntensity !== 0.25 || !material.emissiveMap)
-          throw new Error(`${material.name}: 缺少字槽基础微光`);
+          throw new Error(`${material.name}: 缺少字槽扫光遮罩或强度系数`);
         for (const texture of [material.bumpMap, material.emissiveMap]) {
           if (texture.rotation !== material.map.rotation || !texture.center.equals(material.map.center))
             throw new Error(`${material.name}: 颜色、槽深与发光旋转不一致`);

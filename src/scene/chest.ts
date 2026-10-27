@@ -6,6 +6,7 @@ import { seededRandom } from "./terrain-math";
 import { engrave, engravingSweep, spellEngraving } from "./chest-engraving";
 import { chestPlacement } from "./chest-placement";
 import { chestPose } from "./chest-motion";
+import { chestLightFrame } from "./chest-light";
 import { glowTexture } from "./textures";
 
 /** 灰黑旧木的颜色与高度分别生成；纵向木纹、细裂、划伤和磨边都参与实际光照。 */
@@ -74,7 +75,7 @@ async function makeWood(face: "plain" | "spell" | "name" | "return", init: Initi
     emissiveMap = face === "plain" ? null : init.track(new THREE.CanvasTexture(emission));
   map.colorSpace = THREE.SRGBColorSpace;
   map.anisotropy = bumpMap.anisotropy = 4;
-  // 遮罩使用线性黑白数据；0.25 的基础微光仅作用于金色字槽，短暂扫光在着色器中叠加。
+  // 遮罩使用线性黑白数据；0.25 为扫光强度系数，静止阶段由着色器将字槽自发光归零。
   if (emissiveMap) emissiveMap.anisotropy = 4;
   const material = init.track(new THREE.MeshStandardMaterial({ map, bumpMap,
     bumpScale: face === "plain" ? 0.018 : 0.032, roughness: 0.94, emissiveMap,
@@ -98,7 +99,7 @@ export async function createChest(init = new Initialization()) {
         `#include <emissivemap_fragment>
         float glintDistance = abs(vEmissiveMapUv.x + (vEmissiveMapUv.y - 0.5) * 0.12 - uEngravingSweep);
         float glint = 1.0 - smoothstep(0.015, 0.085, glintDistance);
-        totalEmissiveRadiance *= 1.0 + glint * 2.8;`);
+        totalEmissiveRadiance *= glint * 3.8;`);
     };
   }
   // 最后一张刻字贴图与实体几何分开提交，避免两段短工作叠成同一个长任务。
@@ -106,7 +107,7 @@ export async function createChest(init = new Initialization()) {
   init.phase = "chest-geometry";
   const inner = new THREE.MeshStandardMaterial({ map: wood.map, bumpMap: wood.bumpMap,
     bumpScale: 0.012, color: 0xb0a18c, roughness: 0.98,
-    emissive: 0xffd786, emissiveIntensity: 0.018 });
+    emissive: 0xffd786, emissiveIntensity: 0 });
   const box = ownTree(init, new THREE.Group()), openingPivot = new THREE.Group();
   // 为上翻后落到左侧的双倍长度预留空间；底盒在整个动画中保持落地且不平移。
   // 长边左右摆放，局部右端铰链转到画面左侧；上半盒真正抬离地面。
@@ -170,24 +171,27 @@ export async function createChest(init = new Initialization()) {
   lightAnchor.position.set(0, 0.61, 0); box.add(lightAnchor);
   // 三个低强度光源把内腔照匀，避免单点在盒壁上形成刺眼圆斑。
   const cavityLights = [-1.1, 0, 1.1].map((x) => {
-    const light = new THREE.PointLight(0xffcd70, 0.35, 6, 2);
+    const light = new THREE.PointLight(0xffcd70, 0, 6, 2);
+    light.name = "cavity-light";
     light.position.x = x; lightAnchor.add(light); return light;
   });
   // 内腔、盒口和扩散层共用偏淡黄的光感，金色只用于边缘层次，避免过曝成纯白。
   // 盒口两层散射以普通透明混合保留淡黄色，防止多层加色把蓝通道也推满而变成纯白。
   const glowMaterial = new THREE.MeshBasicMaterial({ map: glowTexture(), color: 0xffe3a3,
-    transparent: true, opacity: 0.22, blending: THREE.NormalBlending,
+    transparent: true, opacity: 0, blending: THREE.NormalBlending,
     depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
   const glow = new THREE.Mesh(new THREE.PlaneGeometry(3.65, 0.27), glowMaterial);
+  glow.name = "cavity-glow";
   glow.position.set(0, 0.22, -0.065); fixedHalf.add(glow);
   const movingGlow = glow.clone();
   movingGlow.position.z = 0.065;
   movingHalf.add(movingGlow);
   const mouthGlow = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: glowMaterial.map, color: 0xffdfa0, transparent: true, opacity: 0.3,
+    map: glowMaterial.map, color: 0xffdfa0, transparent: true, opacity: 0,
     // 光晕模拟盒口散射，只柔化木板边缘；实体与光束仍正常参与深度测试。
     depthWrite: false, depthTest: false, blending: THREE.NormalBlending, toneMapped: false,
   }));
+  mouthGlow.name = "cavity-halo";
   mouthGlow.scale.set(3.4, 0.7, 1); lightAnchor.add(mouthGlow);
   // 羽化光片根部限制在盒口内，垂直向外散开；减少动态时完全关闭光束。
   const beamMaterial = new THREE.ShaderMaterial({
@@ -225,11 +229,15 @@ export async function createChest(init = new Initialization()) {
     // 小型销轴和磨圆边缘也纳入保守边界。
     bounds.expandByScalar(0.03);
     // 内腔离点光很近，降低激活增益，给暖黄反射留下色彩余量，而非靠提高曝光制造白斑。
-    cavityLights.forEach((light) => { light.intensity = 0.35 + glowProgress * 7; });
-    glowMaterial.opacity = 0.22 + glowProgress * 0.78;
-    mouthGlow.material.opacity = 0.3 + glowProgress * 0.65;
-    beamMaterial.uniforms.strength.value = glowProgress * 0.22;
-    beams.visible = !reduced && glowProgress > 0;
+    const lightFrame = chestLightFrame(lidProgress, glowProgress, reduced);
+    cavityLights.forEach((light) => { light.intensity = lightFrame.intensity; light.visible = light.intensity > 0; });
+    inner.emissiveIntensity = lightFrame.innerEmission;
+    glowMaterial.opacity = lightFrame.glowOpacity;
+    mouthGlow.material.opacity = lightFrame.mouthOpacity;
+    glow.visible = movingGlow.visible = glowMaterial.opacity > 0;
+    mouthGlow.visible = mouthGlow.material.opacity > 0;
+    beamMaterial.uniforms.strength.value = lightFrame.beamStrength;
+    beams.visible = !reduced && lightFrame.beamStrength > 0;
     box.updateMatrixWorld(true);
     return moved;
   }

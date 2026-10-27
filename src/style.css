@@ -1,4 +1,4 @@
-/* 本地系统字体优先：中文标题以楷体呈现，正文保留清晰的无衬线阅读体验。 */
+/* 标题使用构建时生成的同源小篆矢量字形，正文保留清晰的系统无衬线字体。 */
 :root {
   font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
   color: #e6e8ed;
@@ -54,10 +54,10 @@ button:disabled {
   /* 截图原尺寸与宝盒投影共同维护；所有降级元素共享同一个 cover 平面。 */
   --static-image: url("/assets/scene-desktop.webp");
   --static-aspect: calc(1920 / 1080);
-  --static-box-x: calc(1398.593750 / 1920);
-  --static-box-y: calc(876.546875 / 1080);
-  --static-box-w: calc(506.484375 / 1920);
-  --static-box-h: calc(186.531250 / 1080);
+  --static-box-x: calc(1212.812500 / 1920);
+  --static-box-y: calc(903.750000 / 1080);
+  --static-box-w: calc(423.328125 / 1920);
+  --static-box-h: calc(161.562500 / 1080);
   --static-width: max(100vw, calc(var(--view-height) * var(--static-aspect)));
   --static-height: calc(var(--static-width) / var(--static-aspect));
   /* 更大的近景在窄屏 cover 裁切时向左保留宝盒；平面边缘始终覆盖视口。 */
@@ -117,6 +117,14 @@ h1 {
   line-height: 1.18;
   letter-spacing: 0.085em;
   text-shadow: 0 3px 25px #070e24;
+}
+.seal-title {
+  /* 字形继承两行原有配色，以当前字号排版，不引入字体加载时的布局跳变。 */
+  display: block;
+  max-width: 100%;
+  height: 1em;
+  overflow: visible;
+  filter: drop-shadow(0 3px 12px #070e24);
 }
 h1 > span,
 h1 > strong {
@@ -512,10 +520,10 @@ h1 > strong {
   #app {
     --static-image: url("/assets/scene-tablet.webp");
     --static-aspect: calc(768 / 1024);
-    --static-box-x: calc(445.828125 / 768);
-    --static-box-y: calc(885.625000 / 1024);
-    --static-box-w: calc(307.812500 / 768);
-    --static-box-h: calc(124.140625 / 1024);
+    --static-box-x: calc(358.375000 / 768);
+    --static-box-y: calc(853.218750 / 1024);
+    --static-box-w: calc(273.640625 / 768);
+    --static-box-h: calc(111.843750 / 1024);
   }
 }
 @media (max-width: 767px) and (min-height: 500px) {

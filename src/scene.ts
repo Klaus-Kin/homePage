@@ -5,7 +5,7 @@ import { fitCamera, projectBounds, keepBoundsInView, openingCameraPosition } fro
 import { sceneConfig, pageConfig } from "./config";
 import { transitionFrame } from "./transition";
 import { createChest } from "./scene/chest";
-import { chestPlacement } from "./scene/chest-placement";
+import { chestPlacement, selectChestPlacement } from "./scene/chest-placement";
 import { chestMotionBounds, chestPose } from "./scene/chest-motion";
 import { createTerrain } from "./scene/terrain";
 import { createSky } from "./scene/sky";
@@ -113,7 +113,7 @@ export async function createScene(
     new THREE.Vector3(-1, -1, -1),
     new THREE.Vector3(1, 1, 1),
   );
-  // 柔和冷色补光显出灰黑木纹，淡黄微光始终来自盒口。
+  // 柔和冷色补光显出灰黑木纹；盒内淡黄光仅在激活后随开盖显现。
   const warmLight = new THREE.PointLight(0xcbd6dd, 2, 7, 2);
   // 近景前移后补光维持原有相对距离，避免木纹和金色铰链因离开补光范围而失去层次。
   warmLight.position.set(chestPlacement.x - 1.35, 2.3, chestPlacement.z - 0.25);
@@ -137,7 +137,7 @@ export async function createScene(
       renderer.shadowMap.needsUpdate = true;
       recordResources = true;
     }
-    syncLandscapeLight(camera);
+    syncLandscapeLight(camera, selectChestPlacement(size.mobile));
   }
 
   function syncTargets() {
@@ -159,6 +159,8 @@ export async function createScene(
     );
     // 验收读取完整模型投影，而非已裁到视口内的按钮，避免把模型裁切误判为可见。
     host.dataset.boxBounds = JSON.stringify(b);
+    // 验收记录真实世界坐标和实体比例，区分位置后移与模型缩小。
+    host.dataset.chestPlacement = JSON.stringify({ position: chest.box.position.toArray(), scale: chest.box.scale.toArray() });
     // 同时记录真实端点的投影、高度与纵深，确保右端真正上抬，而非朝镜头水平旋开。
     const projectChestPoint = (point: THREE.Vector3) => {
       point.project(camera);
@@ -252,7 +254,15 @@ export async function createScene(
   function resize() {
     if (disposed) return;
     size = fitCamera(camera, renderer, host);
+    // 只让 PC 模式移动盒体；手机位置、模型比例及取景预设继续沿用已确认的参数。
+    const placement = selectChestPlacement(size.mobile);
+    chest.box.position.set(placement.x, 0, placement.z);
+    warmLight.position.set(placement.x - 1.35, 2.3, placement.z - 0.25);
+    moonTarget.set(placement.x, 0.3, placement.z);
     chest.box.updateMatrixWorld();
+    sceneShadowBounds.copy(motionBounds).applyMatrix4(chest.box.matrixWorld)
+      .union(terrain.shadowBounds).expandByScalar(0.1);
+    shadowVolumeReady = false;
     const presetCamera = camera.position.clone();
     keepBoundsInView(motionBounds, chest.box.matrixWorld, camera, size.width, size.height);
     openCamera.copy(camera.position);

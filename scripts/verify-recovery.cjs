@@ -123,8 +123,8 @@ async (page) => {
 
   // 下列点取自源截图中的宝盒中心，独立于页面按钮样式，防止测到错误按钮自身仍判通过。
   const shots = {
-    desktop: { width: 1920, height: 1080, x: 1651.835938, y: 969.812500, bottom: 1063.078125, right: 1905.078125 },
-    tablet: { width: 768, height: 1024, x: 599.734375, y: 947.695313, bottom: 1009.765625, right: 753.640625 },
+    desktop: { width: 1920, height: 1080, x: 1424.476563, y: 984.531250, bottom: 1065.312500, right: 1636.140625 },
+    tablet: { width: 768, height: 1024, x: 495.195313, y: 909.140625, bottom: 965.062500, right: 632.015625 },
     mobile: { width: 390, height: 844, x: 222.687500, y: 767.210938, bottom: 828.937500, right: 375.625000 },
     short: { width: 844, height: 390, x: 723.648438, y: 333.085938, bottom: 374.875000, right: 828.875000 },
   };
