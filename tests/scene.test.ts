@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { meteorFrame } from "../src/scene/meteor.ts";
 import { groundHeight, mountainHeight } from "../src/scene/terrain-math.ts";
+import { chestPlacement } from "../src/scene/chest-placement.ts";
 
 // 连续三个时刻检查头尾与速度的点积，防止旋转和位移分别计算后出现倒飞。
 test("meteor head leads its tapering tail down and left", () => {
@@ -24,7 +25,9 @@ test("meteor head leads its tapering tail down and left", () => {
 // 木盒底面所在区域是连续坡面的平缓区域，不另加悬浮底座。
 test("the wooden chest base touches a level region of the continuous slope", () => {
   for (const x of [-1.93, 1.93])
-    for (const z of [-0.61, 0.61]) assert.equal(groundHeight(x, z), 0);
+    for (const z of [-0.22, 0.22]) assert.equal(groundHeight(
+      chestPlacement.x - x * chestPlacement.scale,
+      chestPlacement.z - z * chestPlacement.scale), 0);
   assert.ok(Number.isFinite(groundHeight(-25, 14)));
   assert.ok(Math.abs(groundHeight(3, 2) - groundHeight(3.001, 2)) < 0.01);
 });

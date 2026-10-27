@@ -40,7 +40,8 @@ export function groundHeight(x: number, z: number) {
   // 平缓区覆盖上盖翻到左侧后的落点，避免完全展开时末端悬在山谷上方。
   const distance = Math.min(
     Math.hypot(x / 2.5, (z - chestPlacement.z) / 1.5),
-    Math.hypot((x - 0.2) / 3.5, (z - chestPlacement.z + 1.2) / 4),
+    // 平缓支撑区跟随完整展开的中心与前移后的纵深，左右两条半盒都能落地。
+    Math.hypot((x - chestPlacement.x + 1.25) / 2.8, (z - chestPlacement.z) / 1.5),
   );
   const blend = Math.min(1, Math.max(0, distance - 1));
   const smooth = blend * blend * (3 - 2 * blend);

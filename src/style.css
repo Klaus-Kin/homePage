@@ -40,21 +40,26 @@ button:disabled {
   /* 截图原尺寸与宝盒投影共同维护；所有降级元素共享同一个 cover 平面。 */
   --static-image: url("/assets/scene-desktop.webp");
   --static-aspect: calc(1920 / 1080);
-  --static-box-x: calc(1333.453125 / 1920);
-  --static-box-y: calc(836.078125 / 1080);
-  --static-box-w: calc(332.578125 / 1920);
-  --static-box-h: calc(126.921875 / 1080);
+  --static-box-x: calc(1333.062500 / 1920);
+  --static-box-y: calc(852.828125 / 1080);
+  --static-box-w: calc(568.375000 / 1920);
+  --static-box-h: calc(207.796875 / 1080);
   --static-width: max(100vw, calc(var(--view-height) * var(--static-aspect)));
   --static-height: calc(var(--static-width) / var(--static-aspect));
-  --static-left: calc((100vw - var(--static-width)) / 2);
+  /* 更大的近景在窄屏 cover 裁切时向左保留宝盒；平面边缘始终覆盖视口。 */
+  --static-left: max(
+    calc(100vw - var(--static-width)),
+    min(calc((100vw - var(--static-width)) / 2),
+      calc(100vw - 24px - var(--static-width) * (var(--static-box-x) + var(--static-box-w))))
+  );
   /* 方形屏幕必要时向上裁切，保证宝盒与热点在底部留白内完整可见。 */
-  --static-top: min(
+  --static-top: max(calc(var(--view-height) - var(--static-height)), min(
     calc((var(--view-height) - var(--static-height)) / 2),
     calc(
       var(--view-height) - 24px -
         var(--static-height) * (var(--static-box-y) + var(--static-box-h))
     )
-  );
+  ));
   position: relative;
   width: 100%;
   height: var(--view-height);
@@ -72,7 +77,8 @@ button:disabled {
 .intro {
   position: absolute;
   left: 10%;
-  top: 29%;
+  /* 整组介绍共用同一外层定位，内部字号、行距与入口间距保持原样。 */
+  top: 25%;
   z-index: 4;
 }
 .eyebrow {
@@ -256,7 +262,7 @@ h1 > strong {
 @media (min-width: 768px) and (max-width: 1023px) {
   .intro {
     left: 8%;
-    top: 30%;
+    top: 20.5%;
   }
   h1 {
     font-size: 67px;
@@ -277,7 +283,7 @@ h1 > strong {
 @media (max-width: 767px) {
   .intro {
     left: 9%;
-    top: 21%;
+    top: 16.5%;
     right: 7%;
   }
   .eyebrow {
@@ -328,7 +334,7 @@ h1 > strong {
 /* 矮屏切换左右布局，包含手机横屏；使用可视视口变量应对浏览器地址栏伸缩。 */
 @media (max-height: 700px) and (min-width: 768px) {
   .intro {
-    top: 24%;
+    top: 20%;
   }
   h1 {
     font-size: 61px;
@@ -342,7 +348,7 @@ h1 > strong {
 }
 @media (max-height: 720px) and (max-width: 767px) and (orientation: portrait) {
   .intro {
-    top: 19%;
+    top: 15.5%;
   }
   h1 {
     font-size: 45px;
@@ -360,7 +366,7 @@ h1 > strong {
 }
 @media (max-height: 499px) {
   .intro {
-    top: 24%;
+    top: 19%;
     left: max(8%, env(safe-area-inset-left));
     right: auto;
   }
@@ -478,7 +484,7 @@ h1 > strong {
 }
 @media (min-width: 768px) and (max-width: 1023px) and (min-height: 500px) {
   .intro {
-    top: 23%;
+    top: 20.5%;
   }
 }
 /* 竖版平板截图只用于竖屏；横向平板采用横版背景，减少宝盒被上下裁切。 */
@@ -486,20 +492,20 @@ h1 > strong {
   /* 大尺寸竖屏沿用竖版截图与文字布局，正常场景和降级场景都保留完整宝盒。 */
   .intro {
     left: 8%;
-    top: 23%;
+    top: 20.5%;
   }
   #app {
     --static-image: url("/assets/scene-tablet.webp");
     --static-aspect: calc(768 / 1024);
-    --static-box-x: calc(487.062500 / 768);
-    --static-box-y: calc(780.218750 / 1024);
-    --static-box-w: calc(230.718750 / 768);
-    --static-box-h: calc(94.046875 / 1024);
+    --static-box-x: calc(420.812500 / 768);
+    --static-box-y: calc(876.078125 / 1024);
+    --static-box-w: calc(332.203125 / 768);
+    --static-box-h: calc(132.984375 / 1024);
   }
 }
 @media (max-width: 767px) and (min-height: 500px) {
   .intro {
-    top: 22%;
+    top: 16.5%;
   }
   .noscript-entry {
     /* 横放闭合的待机宝盒靠右下，备用文字入口放在文案下方，避免盖住原生热点。 */
@@ -508,20 +514,20 @@ h1 > strong {
   #app {
     --static-image: url("/assets/scene-mobile.webp");
     --static-aspect: calc(390 / 844);
-    --static-box-x: calc(184.375000 / 390);
-    --static-box-y: calc(627.609375 / 844);
-    --static-box-w: calc(200.906250 / 390);
-    --static-box-h: calc(84.156250 / 844);
+    --static-box-x: calc(38.187500 / 390);
+    --static-box-y: calc(693.640625 / 844);
+    --static-box-w: calc(336.937500 / 390);
+    --static-box-h: calc(134.234375 / 844);
   }
 }
 @media (max-height: 499px) {
   #app {
     --static-image: url("/assets/scene-short.webp");
     --static-aspect: calc(844 / 390);
-    --static-box-x: calc(595.765625 / 844);
-    --static-box-y: calc(279.296875 / 390);
-    --static-box-w: calc(139.453125 / 844);
-    --static-box-h: calc(59.937500 / 390);
+    --static-box-x: calc(590.375000 / 844);
+    --static-box-y: calc(281.578125 / 390);
+    --static-box-w: calc(236.437500 / 844);
+    --static-box-h: calc(92.328125 / 390);
   }
   .journey-link {
     min-height: 44px;

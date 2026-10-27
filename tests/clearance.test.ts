@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { obstacleFootprint, overlapsFootprint, grassReach, chestFootprint } from "../src/scene/terrain-clearance.ts";
+import { obstacleFootprint, overlapsFootprint, grassReach, chestFootprint, isForegroundRock } from "../src/scene/terrain-clearance.ts";
 import { chestPlacement } from "../src/scene/chest-placement.ts";
 
 // 非等比缩放和三个方向的转动必须全部进入避让计算，不能用根部圆圈近似岩石。
@@ -38,4 +38,12 @@ test("chest clearance includes the fully unfolded lid and its raised sweep", () 
   assert.ok(overlapsFootprint(chestPlacement.x - 3.7, chestPlacement.z, 0.1, chestFootprint));
   assert.ok(overlapsFootprint(chestPlacement.x + 1.2, chestPlacement.z, 0.1, chestFootprint));
   assert.equal(overlapsFootprint(0, chestPlacement.z + 1, 0.2, chestFootprint), false);
+});
+
+// 岩石中心退到盒后仍可能以宽边伸入前景；完整轮廓越过边界时也必须移出手机实例段。
+test("mobile foreground excludes rocks whose edges extend in front of the chest", () => {
+  const z = chestPlacement.z;
+  assert.equal(isForegroundRock([{x:-2,z:z-2},{x:2,z:z-1}]), false);
+  assert.equal(isForegroundRock([{x:-2,z:z-1},{x:2,z:z+.1}]), true);
+  assert.equal(isForegroundRock([{x:20,z:z+1}]), true);
 });

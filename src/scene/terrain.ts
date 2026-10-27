@@ -7,7 +7,7 @@ import { sceneConfig } from "../config";
 import { fbm, groundHeight, seededRandom } from "./terrain-math";
 import { surfaceTexture } from "./textures";
 import { createMountains } from "./mountains";
-import { obstacleFootprint, overlapsFootprint, grassReach, chestFootprint } from "./terrain-clearance";
+import { obstacleFootprint, overlapsFootprint, grassReach, chestFootprint, isForegroundRock } from "./terrain-clearance";
 
 /** 连续山坡、山谷和植被共享世界坐标；相机看到的是一整片地形。 */
 export async function createTerrain(init: Initialization) {
@@ -65,6 +65,8 @@ export async function createTerrain(init: Initialization) {
   group.add(rocks);
   const dummy = new THREE.Object3D();
   const rockFootprints: ReturnType<typeof obstacleFootprint>[] = [];
+  // 背景实例放在前段，手机画质直接截断前景段；旋转屏幕无需销毁或重新生成石头。
+  const backgroundRocks: THREE.Matrix4[] = [], foregroundRocks: THREE.Matrix4[] = [];
   let rockCount = 0;
   for (let attempt = 0; rockCount < quality.rocks && attempt < quality.rocks * 8; attempt++) {
     const pause = init.checkpoint(); if (pause) await pause;
@@ -82,9 +84,13 @@ export async function createTerrain(init: Initialization) {
     const footprint = obstacleFootprint(rp.array, dummy.matrix.elements);
     const radius = Math.max(...footprint.map((p) => Math.hypot(p.x - x, p.z - z)));
     if (overlapsFootprint(x, z, radius, chestFootprint)) continue;
-    rocks.setMatrixAt(rockCount++, dummy.matrix);
+    (isForegroundRock(footprint) ? foregroundRocks : backgroundRocks).push(dummy.matrix.clone());
+    rockCount++;
     rockFootprints.push(footprint);
   }
+  [...backgroundRocks, ...foregroundRocks].forEach((matrix, index) => rocks.setMatrixAt(index, matrix));
+  rocks.name = "terrain-rocks";
+  rocks.userData.backgroundCount = backgroundRocks.length;
   rocks.castShadow = rocks.receiveShadow = true;
   group.add(rocks);
 
@@ -200,11 +206,12 @@ export async function createTerrain(init: Initialization) {
     async setQuality(mobile: boolean) {
       // 山体等待期间可能再次旋转屏幕，旧请求不能覆盖最新的植被数量。
       const request = ++qualityRevision;
+      // 在第一个 await 前清除手机前景，避免第一帧先显示石头、山体切换后才消失。
+      const preset = sceneConfig.quality[mobile ? "mobile" : "desktop"];
+      rocks.count = Math.min(preset.rocks, mobile ? backgroundRocks.length : rockCount);
       await mountains.setQuality(mobile);
       if (request !== qualityRevision || init.controller.signal.aborted) return;
-      const preset = sceneConfig.quality[mobile ? "mobile" : "desktop"];
       grass.count = Math.min(preset.grass, grassCount);
-      rocks.count = Math.min(preset.rocks, rockCount);
       flowers.count = Math.min(preset.flowers, flowerCount);
     },
   };

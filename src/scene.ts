@@ -1,11 +1,12 @@
 import * as THREE from "three";
 import { Initialization } from "./scene/initialization";
 import { ownTree } from "./scene/resources";
-import { fitCamera, projectBounds, keepBoundsInView } from "./responsive";
+import { fitCamera, projectBounds, keepBoundsInView, openingCameraPosition } from "./responsive";
 import { sceneConfig, pageConfig } from "./config";
 import { transitionFrame } from "./transition";
 import { createChest } from "./scene/chest";
-import { chestMotionBounds } from "./scene/chest-motion";
+import { chestPlacement } from "./scene/chest-placement";
+import { chestMotionBounds, chestPose } from "./scene/chest-motion";
 import { createTerrain } from "./scene/terrain";
 import { createSky } from "./scene/sky";
 
@@ -69,8 +70,9 @@ export async function createScene(
     lastTime = 0;
   const pointer = new THREE.Vector2(),
     currentPointer = new THREE.Vector2();
-  const baseCamera = new THREE.Vector3();
-  // 仅在视口变化时根据完整开盖范围适配；播放期间使用同一镜头，固定铰链不会随边缘修正而跳动。
+  const baseCamera = new THREE.Vector3(), openCamera = new THREE.Vector3();
+  let lidProgress = 0;
+  // 预先计算待机近景与完整展开两个端点；播放中只插值，不触发边缘阈值修正。
   const motion = chestMotionBounds();
   const motionBounds = new THREE.Box3(
     new THREE.Vector3(motion.minX, motion.minY, motion.minZ),
@@ -111,7 +113,8 @@ export async function createScene(
   );
   // 柔和冷色补光显出灰黑木纹，暖白微光始终来自盒口。
   const warmLight = new THREE.PointLight(0xcbd6dd, 8, 7, 2);
-  warmLight.position.set(-0.5, 2.3, 2.5);
+  // 近景前移后补光维持原有相对距离，避免木纹和金色铰链因离开补光范围而失去层次。
+  warmLight.position.set(chestPlacement.x - 1.35, 2.3, chestPlacement.z - 0.25);
   const lightPoint = new THREE.Vector3();
   function getLightScreenPosition() {
     camera.updateMatrixWorld();
@@ -133,8 +136,8 @@ export async function createScene(
   moonLight.shadow.bias = -0.0001;
 
   function syncTargets() {
-    // 复用视口适配后的固定镜头；鼠标视差只作用于桌面，触屏开盖不改变取景。
-    camera.position.copy(baseCamera);
+    // 点击初始帧沿用近景，随着开盖平滑退让；触屏没有额外鼠标视差。
+    openingCameraPosition(baseCamera, openCamera, reduced ? 0 : lidProgress, camera.position);
     if (!reduced) {
       camera.position.x += currentPointer.x * 0.1;
       camera.position.y += currentPointer.y * 0.06;
@@ -191,6 +194,7 @@ export async function createScene(
     const duration = reduced ? pageConfig.transition.reducedFade
       : pageConfig.transition.charge + pageConfig.transition.fade;
     const frame = transitionFrame(transition * duration, reduced, pageConfig.transition);
+    lidProgress = frame.lid;
     if (chest.update(frame.lid, frame.glow, reduced, time)) {
       renderer.shadowMap.needsUpdate = true;
       syncTargets();
@@ -235,7 +239,17 @@ export async function createScene(
     if (disposed) return;
     size = fitCamera(camera, renderer, host);
     chest.box.updateMatrixWorld();
+    const presetCamera = camera.position.clone();
     keepBoundsInView(motionBounds, chest.box.matrixWorld, camera, size.width, size.height);
+    openCamera.copy(camera.position);
+    // 待机只适配闭合盒体，让前移真正产生近景，而非一开始就退到展开距离。
+    const closed = chestPose(0).bounds;
+    const closedBounds = new THREE.Box3(
+      new THREE.Vector3(closed.minX, closed.minY, closed.minZ),
+      new THREE.Vector3(closed.maxX, closed.maxY, closed.maxZ),
+    ).expandByScalar(0.03);
+    camera.position.copy(presetCamera);
+    keepBoundsInView(closedBounds, chest.box.matrixWorld, camera, size.width, size.height);
     baseCamera.copy(camera.position);
     currentPointer.set(0, 0);
     pointer.set(0, 0);

@@ -72,15 +72,17 @@ export function projectBounds(
   return { left, right, top, bottom };
 }
 
-/** 视口适配时按完整运动范围确定固定取景，不在开盖过程中逐帧修正相机。
+/** 视口适配时确定给定边界的取景端点，不在开盖过程中按出界阈值追踪修正相机。
  * 先沿视线退到能容纳模型的最近距离，再水平平移；盒体与铰链始终固定在地面上。
  * 调用方在视口变化时从构图预设恢复相机，避免重复调用累积退远或平移。
  */
 export function keepBoundsInView(bounds: THREE.Box3, matrix: THREE.Matrix4,
   camera: THREE.PerspectiveCamera, width: number, height: number) {
-  const margin = 12, available = Math.max(1, width - margin * 2);
+  // 近景上盖刚抬起时透视宽度会略增；端点多留一圈余量，连续镜头无需追边。
+  const margin = 24, available = Math.max(1, width - margin * 2);
   const center = bounds.getCenter(new THREE.Vector3()).applyMatrix4(matrix);
   const forward = camera.getWorldDirection(new THREE.Vector3());
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
   const point = new THREE.Vector3();
   for (let pass = 0; pass < 4; pass++) {
     camera.updateMatrixWorld();
@@ -94,8 +96,21 @@ export function keepBoundsInView(bounds: THREE.Box3, matrix: THREE.Matrix4,
     }
     const overflow = projected.left < margin ? projected.left - margin
       : projected.right > width - margin ? projected.right - width + margin : 0;
-    if (Math.abs(overflow) < 0.1) break;
-    camera.position.x += overflow * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * depth / height;
+    // 前移后的近景也需要底部留白；沿相机上方向平移，保留既定俯角与模型比例。
+    const vertical = projected.top < margin ? projected.top - margin
+      : projected.bottom > height - margin ? projected.bottom - height + margin : 0;
+    if (Math.abs(overflow) < 0.1 && Math.abs(vertical) < 0.1) break;
+    const worldPerPixel = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * depth / height;
+    camera.position.x += overflow * worldPerPixel;
+    camera.position.addScaledVector(up, -vertical * worldPerPixel);
   }
   camera.updateMatrixWorld();
+}
+
+/** 两个取景端点都在视口适配时确定；五次缓动使开盖前后速度与加速度均为零，避免点击时突跳。 */
+export function openingCameraPosition(start: THREE.Vector3, end: THREE.Vector3,
+  progress: number, result = new THREE.Vector3()) {
+  const p = Math.max(0, Math.min(1, progress));
+  const ease = p * p * p * (p * (p * 6 - 15) + 10);
+  return result.copy(start).lerp(end, ease);
 }

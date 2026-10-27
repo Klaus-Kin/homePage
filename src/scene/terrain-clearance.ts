@@ -50,3 +50,8 @@ export const chestFootprint: readonly Point[] = [
   { x: chestX + chestScale * 1.93 + 0.025, z: chestZ + 0.17 },
   { x: chestX - chestScale * (1.93 + sweepRadius) - 0.025, z: chestZ + 0.17 },
 ];
+
+/** 手机前景留空：连石头靠镜头的边缘都必须退到宝盒后方，不能只凭中心点判断。 */
+export function isForegroundRock(footprint: readonly Point[]) {
+  return footprint.some(point => point.z > chestPlacement.z - 0.2);
+}

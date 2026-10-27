@@ -123,11 +123,18 @@ async (page) => {
 
   // 下列点取自源截图中的宝盒中心，独立于页面按钮样式，防止测到错误按钮自身仍判通过。
   const shots = {
-    desktop: { width: 1920, height: 1080, x: 1499.742188, y: 899.539063, bottom: 963.000000 },
-    tablet: { width: 768, height: 1024, x: 602.421875, y: 827.242188, bottom: 874.265625 },
-    mobile: { width: 390, height: 844, x: 284.828125, y: 669.687500, bottom: 711.765625 },
-    short: { width: 844, height: 390, x: 665.492188, y: 309.265625, bottom: 339.234375 },
+    desktop: { width: 1920, height: 1080, x: 1617.250000, y: 956.726563, bottom: 1060.625000, right: 1901.437500 },
+    tablet: { width: 768, height: 1024, x: 586.914063, y: 942.570313, bottom: 1009.062500, right: 753.015625 },
+    mobile: { width: 390, height: 844, x: 206.656250, y: 760.757813, bottom: 827.875000, right: 375.125000 },
+    short: { width: 844, height: 390, x: 708.593750, y: 327.742188, bottom: 373.906250, right: 826.812500 },
   };
+  // 由源图坐标独立计算水平和垂直裁切；同时限制平面边缘，避免为留白而露出底部空带。
+  function fallbackPoint(shot, width, height) {
+    const scale=Math.max(width/shot.width,height/shot.height);
+    const left=Math.max(width-shot.width*scale,Math.min((width-shot.width*scale)/2,width-24-shot.right*scale));
+    const top=Math.max(height-shot.height*scale,Math.min((height-shot.height*scale)/2,height-24-shot.bottom*scale));
+    return {x:left+shot.x*scale,y:top+shot.y*scale};
+  }
   const sizes = [
     [1920, 1080],
     [1366, 768],
@@ -142,7 +149,9 @@ async (page) => {
     [1024, 768],
     [360, 800],
     [390, 844],
+    [393, 852],
     [430, 932],
+    [480, 1040],
     [844, 390],
     [1023, 768],
   ];
@@ -172,17 +181,7 @@ async (page) => {
                 ? "tablet"
                 : "desktop";
         const shot = shots[name];
-        const scale = Math.max(width / shot.width, height / shot.height);
-        // 以源截图中的盒底独立计算裁切，只保留视口底部留白；不读取按钮位置来选择点击点。
-        const bottomSpace = 24;
-        const imageTop = Math.min(
-          (height - shot.height * scale) / 2,
-          height - bottomSpace - shot.bottom * scale,
-        );
-        const point = {
-          x: (width - shot.width * scale) / 2 + shot.x * scale,
-          y: imageTop + shot.y * scale,
-        };
+        const point = fallbackPoint(shot,width,height);
         await target.waitForTimeout(100);
         const layout = await target.evaluate(
           ({ point, name, javaScriptEnabled }) => {
@@ -201,8 +200,8 @@ async (page) => {
               hit: hit?.id === expectedId,
               minSize: button.width >= 44 && button.height >= 44,
               imageMatches: image.includes(`scene-${name}.webp`),
-              planeCovers: plane.top <= 0 && plane.bottom >= innerHeight,
-              buttonVisible: button.top >= 0 && button.bottom <= innerHeight,
+              planeCovers: plane.top <= 0 && plane.bottom >= innerHeight && plane.left <= 0 && plane.right >= innerWidth,
+              buttonVisible: button.top >= 0 && button.bottom <= innerHeight && button.left >= 0 && button.right <= innerWidth,
               // 正常脚本与无脚本页面均彻底移除指定说明和右下装饰符号。
               notesRemoved: !document.querySelector(".box-caption, .site-footer, #box-prompt"),
             };
@@ -226,11 +225,10 @@ async (page) => {
             path: `output/playwright/recovery-tablet-${width === height ? "square" : "landscape"}-${javaScriptEnabled}.png`,
           });
       }
-      const shot = shots.desktop,
-        scale = 768 / shot.height;
+      const point = fallbackPoint(shots.desktop,1023,768);
       await target.mouse.click(
-        (1023 - shot.width * scale) / 2 + shot.x * scale,
-        shot.y * scale,
+        point.x,
+        point.y,
       );
       await target.waitForURL("https://example.com/blog");
       results.push({

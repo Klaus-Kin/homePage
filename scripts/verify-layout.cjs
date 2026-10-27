@@ -13,7 +13,9 @@ async (page) => {
     [1366, 1024],
     [360, 800],
     [390, 844],
+    [393, 852],
     [430, 932],
+    [480, 1040],
     [844, 390],
   ];
   const results = [];
@@ -55,6 +57,20 @@ async (page) => {
         canvas = rect("canvas");
       const overlaps = (a, b) =>
         a.x < b.right && a.right > b.x && a.y < b.bottom && a.bottom > b.y;
+      // 整组上移后，首行与月亮可以并排；检查真实文字片段，避免把容器的空白区当成遮挡。
+      const textRects = [];
+      const walker = document.createTreeWalker(document.querySelector('.intro'), NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        if (!walker.currentNode.textContent.trim()) continue;
+        const range = document.createRange(); range.selectNodeContents(walker.currentNode);
+        textRects.push(...Array.from(range.getClientRects(), r => ({x:r.x,y:r.y,right:r.right,bottom:r.bottom})));
+      }
+      // 月亮是圆形投影，外接矩形的左下角为空白；文字不能接触月面本身。
+      const overlapsMoon = r => {
+        const cx=(moon.x+moon.right)/2, cy=(moon.y+moon.bottom)/2;
+        const x=Math.max(r.x,Math.min(r.right,cx)), y=Math.max(r.y,Math.min(r.bottom,cy));
+        return ((x-cx)/(moon.width/2))**2 + ((y-cy)/(moon.height/2))**2 < 1;
+      };
       return {
         title,
         box,
@@ -73,7 +89,7 @@ async (page) => {
           box.y >= 0 &&
           box.bottom <= innerHeight,
         titleOverlap: overlaps(title, box),
-        titleMoonOverlap: overlaps(title, moon),
+        titleMoonOverlap: textRects.some(overlapsMoon),
         moonVisible:
           moon.x >= 0 &&
           moon.right <= innerWidth &&
