@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { renderStaticHtml } from "../src/static-html.ts";
 import { runInNewContext } from "node:vm";
 
-const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const html = renderStaticHtml(readFileSync(new URL("../index.html", import.meta.url), "utf8"), "/blog");
 
 // 不加载主模块，直接执行 HTML 守卫，覆盖最早可用的加载与失败出口。
 function boot(reduced = false) {
@@ -40,8 +41,10 @@ test("golden hoop and critical styles exist before the module entry", () => {
   assert.match(html, /prefers-reduced-motion: reduce[\s\S]*animation: none/);
   assert.match(html, /<noscript[\s\S]*#moon-loader[\s\S]*display: none/);
   // 无脚本与慢入口共用同一份静态内容，欢迎语只允许出现在加载层，主页品牌必须移除。
-  assert.match(html, /<span class="loading-label">月色正好，欢迎来访<\/span>/);
-  assert.equal(html.split("月色正好，欢迎来访").length - 1, 1);
+  // 加载语与正文使用同一字形库，辅助文本与标点组合后仍必须是原文。
+  const labelStart = html.indexOf('<span class="loading-label">');
+  assert.equal(html.slice(labelStart, html.indexOf('</div>', labelStart)).replace(/<[^>]+>/g, "").trim(), "月色正好，欢迎来访");
+  assert.equal((html.match(/class="loading-label"/g) ?? []).length, 1);
   assert.doesNotMatch(html, /class="(?:site-header|brand|night-note)\b/);
 });
 

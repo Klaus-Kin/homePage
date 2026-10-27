@@ -8,6 +8,7 @@ import { chestPlacement } from "./chest-placement";
 import { chestPose } from "./chest-motion";
 import { chestLightFrame } from "./chest-light";
 import { glowTexture } from "./textures";
+import { engravingGlint, engravingReflectionProfile, engravingReflectionFrame } from "./engraving-light";
 
 /** 灰黑旧木的颜色与高度分别生成；纵向木纹、细裂、划伤和磨边都参与实际光照。 */
 async function makeWood(face: "plain" | "spell" | "name" | "return", init: Initialization) {
@@ -89,7 +90,7 @@ async function makeWood(face: "plain" | "spell" | "name" | "return", init: Initi
 export async function createChest(init = new Initialization()) {
   const wood = await makeWood("plain", init), spellWood = await makeWood("spell", init),
     nameWood = await makeWood("name", init), returnWood = await makeWood("return", init);
-  // 光带直接调制字槽的发光遮罩，木面与暗槽壁不受影响；只更新同一个 uniform，不新增灯光或贴图。
+  // 光带与照地反光共用一个扫光位置；木面与暗槽壁仍不参与字槽自发光。
   const sweep = { value: -1 };
   for (const material of [spellWood, nameWood, returnWood]) {
     material.onBeforeCompile = (shader) => {
@@ -98,8 +99,8 @@ export async function createChest(init = new Initialization()) {
       shader.fragmentShader = shader.fragmentShader.replace("#include <emissivemap_fragment>",
         `#include <emissivemap_fragment>
         float glintDistance = abs(vEmissiveMapUv.x + (vEmissiveMapUv.y - 0.5) * 0.12 - uEngravingSweep);
-        float glint = 1.0 - smoothstep(0.015, 0.085, glintDistance);
-        totalEmissiveRadiance *= glint * 3.8;`);
+        float glint = 1.0 - smoothstep(${engravingGlint.inner}, ${engravingGlint.outer}, glintDistance);
+        totalEmissiveRadiance *= glint * ${engravingGlint.gain};`);
     };
   }
   // 最后一张刻字贴图与实体几何分开提交，避免两段短工作叠成同一个长任务。
@@ -114,6 +115,20 @@ export async function createChest(init = new Initialization()) {
   box.rotation.y = Math.PI;
   box.position.set(chestPlacement.x, 0, chestPlacement.z);
   box.scale.setScalar(chestPlacement.scale);
+  // 外侧刻字的金光实际照到草坡和月光阴影里；不启用盒内光，也不绘制假阴影贴片。
+  const engravingMask = nameWood.emissiveMap!.image as HTMLCanvasElement;
+  const reflectionProfile = engravingReflectionProfile(engravingMask.getContext("2d")!
+    .getImageData(0, 0, engravingMask.width, engravingMask.height).data, engravingMask.width, engravingMask.height);
+  const engravingLight = new THREE.SpotLight(0xe9b95d, 0, 2.2, .65, .95, 2);
+  engravingLight.name = "engraving-ground-light";
+  engravingLight.castShadow = true;
+  engravingLight.shadow.mapSize.setScalar(256);
+  engravingLight.shadow.camera.near = .02;
+  engravingLight.shadow.camera.far = 2.2;
+  engravingLight.shadow.bias = -.00005;
+  engravingLight.shadow.normalBias = .003;
+  engravingLight.shadow.radius = 2;
+  box.add(engravingLight, engravingLight.target);
   for (const texture of [spellWood.map!, spellWood.bumpMap!, spellWood.emissiveMap!,
     nameWood.map!, nameWood.bumpMap!, nameWood.emissiveMap!,
     returnWood.map!, returnWood.bumpMap!, returnWood.emissiveMap!]) {
@@ -222,6 +237,14 @@ export async function createChest(init = new Initialization()) {
   function update(lidProgress: number, glowProgress: number, reduced: boolean, time = 0) {
     // 使用场景已有的可暂停时钟；减少动态时光带立即离场，不启动额外计时器。
     sweep.value = engravingSweep(time, reduced);
+    const reflection = engravingReflectionFrame(sweep.value, reflectionProfile);
+    // 光源始终在外侧刻字前方，只向下扫过接地区域；亮度取自正在发光的字槽像素。
+    const reflectionChanged = Math.abs(engravingLight.intensity - reflection.intensity) > 1e-6 ||
+      (reflection.intensity > 0 && Math.abs(engravingLight.position.x - reflection.x) > 1e-6);
+    engravingLight.position.set(reflection.x, .34, -.25);
+    engravingLight.target.position.set(reflection.x, -.03, -.65);
+    engravingLight.intensity = reflection.intensity;
+    engravingLight.visible = reflection.intensity > 0;
     const pose = chestPose(lidProgress), moved = openingPivot.rotation.z !== -pose.angle;
     openingPivot.rotation.z = -pose.angle;
     const b = pose.bounds;
@@ -239,7 +262,8 @@ export async function createChest(init = new Initialization()) {
     beamMaterial.uniforms.strength.value = lightFrame.beamStrength;
     beams.visible = !reduced && lightFrame.beamStrength > 0;
     box.updateMatrixWorld(true);
-    return moved;
+    // 短促扫光期间也刷新真实遮挡投影；扫光结束与减少动态时均恢复原来的按需更新。
+    return moved || reflectionChanged;
   }
   update(0, 0, false);
   return { box, fixedHalf, movingHalf, openingPivot, lightAnchor, bounds, glowMaterial, update };

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { renderStaticHtml } from "../src/static-html.ts";
-import { renderSealTitleLine } from "../src/title.ts";
+import { renderSealTitleLine, renderSealCopy, renderSealGlyphDefinitions } from "../src/title.ts";
 import { pageConfig } from "../src/config.ts";
 import { glyphs } from "../src/scene/seal-glyphs.ts";
 import { titleGlyphs } from "../src/title-glyphs.ts";
@@ -13,7 +13,24 @@ test("static heading contains both seal lines and original accessible wording", 
   assert.equal((html.match(/class="seal-title"/g) ?? []).length, 2);
   for (const text of pageConfig.titleLines) assert.ok(html.includes(`<span class="sr-only">${text}</span>`));
   assert.ok(!html.includes("__MOON_TITLE_"));
-  assert.ok(html.includes(`<path d="${glyphs["光"][0]}"`));
+  assert.equal(html.split(`<path d="${glyphs["光"][0]}"`).length - 1, 1);
+});
+
+// 所有指定汉字复用同一个字形表；标点与空格保持普通文本，不换形、不改码点。
+test("all requested copy uses shared seal glyphs while punctuation stays unchanged", () => {
+  const lines = [...pageConfig.description, "循着月光，走进我的世界", "月色正好，欢迎来访"];
+  const bank = renderSealGlyphDefinitions([...pageConfig.titleLines, ...lines]);
+  for (const line of lines) {
+    const html = renderSealCopy(line);
+    for (const letter of line) if (/\p{Script=Han}/u.test(letter)) {
+      assert.ok(html.includes(`<span class="sr-only">${letter}</span>`), `缺少汉字 ${letter}`);
+      assert.ok(html.includes('<use href="#seal-'));
+    }
+    assert.equal(html.replace(/<[^>]+>/g, ""), line);
+  }
+  const ids = [...bank.matchAll(/id="([^"]+)"/g)].map(match => match[1]);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.ok(renderSealTitleLine("月光宝盒").includes('<use href="#seal-'));
 });
 
 // 配置扩展时仍能显示未收录字，并把特殊字符作为文本处理。

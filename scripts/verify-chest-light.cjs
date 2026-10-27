@@ -28,7 +28,7 @@ async (page) => {
           const title = [...document.querySelectorAll('.seal-title')];
           return { channels, position: chest.box.position.toArray(), scale: chest.box.scale.toArray(),
             angle: +document.querySelector('#scene').dataset.lidAngle,
-            title: title.map(el => ({ color: getComputedStyle(el).color, paths: el.querySelectorAll('path').length })) };
+            title: title.map(el => ({ color: getComputedStyle(el).color, paths: el.querySelectorAll('use').length })) };
         });
       }
       const idle = await sample(), phone = width < 768;

@@ -33,7 +33,11 @@
       /* 静态柔光与旋转层分开绘制，避免 SVG 滤镜阻断合成线程旋转。 */
       #moon-loader .hoop-halo { grid-area: 1 / 1; width: 142px; height: 142px; margin: -15px; background: radial-gradient(ellipse, #c99d3515 15%, #c99d3509 46%, transparent 70%); }
       #moon-loader .hoop-rotor { grid-area: 1 / 1; width: 112px; height: 112px; animation: hoop-spin 1.8s linear infinite; will-change: transform; }
-      #moon-loader svg { display: block; width: 112px; height: 112px; }
+      #moon-loader .hoop-rotor svg { display: block; width: 112px; height: 112px; }
+      /* 小篆字形只定义一次，加载语与主页共用；标点仍按原文本和字号显示。 */
+      .seal-character { display: inline-block; width: 1em; height: 1em; margin-inline-end: .12em; vertical-align: -.12em; }
+      .seal-character svg { display: block; width: 100%; height: 100%; }
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
       /* 欢迎语与金箍分别占据网格行，始终可见，减少动态时保持相同布局。 */
       #moon-loader .loading-label { margin-top: 24px; font: 14px/1.5 serif; letter-spacing: .18em; }
       @keyframes hoop-spin { to { transform: rotate(360deg); } }
@@ -71,6 +75,7 @@
     >
   </head>
   <body>
+    __MOON_SEAL_GLYPHS__
     <!-- 金箍直接内联，Three.js 尚未下载时也有独立、可访问的加载反馈。 -->
     <div id="moon-loader" role="status" aria-live="polite" aria-label="正在加载月光宝盒">
       <span class="loader-curtain loader-curtain-left" aria-hidden="true"></span>
@@ -83,7 +88,7 @@
         <path d="M57 121C39 113 29 98 29 79C29 51 51 29 80 29C109 29 131 51 131 79C131 98 121 113 103 121" stroke="#f8e9bd" stroke-opacity=".5" stroke-width="1.3"/>
       </svg>
       </span>
-      <span class="loading-label">月色正好，欢迎来访</span>
+      <span class="loading-label">__MOON_LOADING__</span>
     </div>
     <main id="app" data-state="loading">
       <!-- 静态图由同一新场景导出，只在 WebGL 失败或禁用脚本时显示。 -->
@@ -100,13 +105,13 @@
         <h1 id="page-title"><span>__MOON_TITLE_FIRST__</span><strong>__MOON_TITLE_SECOND__</strong></h1>
         <div class="title-rule" aria-hidden="true"><span></span>✦</div>
         <p class="description">
-          开发者 · 写作者 · 时空旅人<br />写代码也写故事<br />此间有故事，亦有远方<br />把热爱写进代码，把故事交给月光
+          __MOON_DESCRIPTION__
         </p>
         <a class="journey-link" href="__MOON_BLOG_URL__" data-entrance>
           <!-- 装饰冠沿用链接本身的可访问名称，空替代文本避免屏幕阅读器重复朗读。 -->
           <img class="phoenix-crown" src="/assets/phoenix-crown.svg" width="44" height="44" alt="" aria-hidden="true" draggable="false" />
           <span
-            >循着月光，走进我的世界<small>LET THE JOURNEY BEGIN</small></span
+            >__MOON_ENTRANCE__<small>LET THE JOURNEY BEGIN</small></span
           >
         </a>
       </section>

@@ -76,7 +76,7 @@ async (page) => {
       }
       // 月亮是圆形投影，外接矩形的左下角为空白；文字不能接触月面本身。
       // 标题已改为同源小篆 SVG，必须检查实际图形，不能只检查辅助技术的隐藏文本。
-      textRects.push(...Array.from(document.querySelectorAll('.seal-title'), el => {
+      textRects.push(...Array.from(document.querySelectorAll('.seal-title, .intro .seal-character svg'), el => {
         const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom };
       }));
       const overlapsMoon = r => {
