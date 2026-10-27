@@ -3,7 +3,7 @@ import { Initialization } from "./initialization";
 import { ownTree } from "./resources";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { seededRandom } from "./terrain-math";
-import { engrave, engravingSweep } from "./chest-engraving";
+import { engrave, engravingSweep, spellEngraving } from "./chest-engraving";
 import { chestPlacement } from "./chest-placement";
 import { chestPose } from "./chest-motion";
 import { glowTexture } from "./textures";
@@ -61,7 +61,11 @@ async function makeWood(face: "plain" | "spell" | "name" | "return", init: Initi
     ctx.fillRect(x, y, random() * 35, 1 + random() * 2);
   }
   // 三种纹理同步生成并旋转；展开侧面补偿真实转轴带来的倒置，字形本身不镜像。
-  if (face === "spell") engrave(ctx, bump, glow, "般若波羅蜜", 245, 46, 156, 180);
+  if (face === "spell") {
+    // 完整繁体咒文共用一个排版来源，颜色、槽深、发光和浏览器验收不会漏掉前两个字。
+    const { text, x, y, size, spacing } = spellEngraving;
+    engrave(ctx, bump, glow, text, x, y, size, spacing);
+  }
   if (face === "name") engrave(ctx, bump, glow, "回到未來", 398, 46, 154, 190);
   if (face === "return") engrave(ctx, bump, glow, "時光倒流", 398, 46, 154, 190,
     { reverse: true, rotation: Math.PI });

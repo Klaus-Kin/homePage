@@ -4,7 +4,7 @@ import { engrave, engravingPlacements, glyphs, carvedStrokes, engravingSweep } f
 
 // 三处刻字的全部繁体字都必须有手绘路径，禁止悄悄回退到平台字体。
 test("all three inscriptions have complete hand drawn glyphs", () => {
-  for (const letter of "回到未來般若波羅蜜時光倒流") {
+  for (const letter of "回到未來摩訶般若波羅蜜時光倒流") {
     assert.ok(glyphs[letter]?.length, `缺少字形：${letter}`);
     assert.ok(glyphs[letter].every((stroke) => stroke.startsWith("M")));
   }
@@ -26,7 +26,7 @@ test("gold color, recessed height and soft emission share every glyph transform"
     return ctx;
   };
   try {
-    for (const [text, transform] of [["回到未來", {}], ["般若波羅蜜", {}],
+    for (const [text, transform] of [["回到未來", {}], ["摩訶般若波羅蜜", {}],
       ["時光倒流", { reverse: true, rotation: Math.PI }]] as const) {
       const color = context(), height = context(), emission = context();
       engrave(color, height, emission, text, 100, 40, 154, 190, transform);

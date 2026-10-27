@@ -9,7 +9,7 @@ async (page) => {
     const result = await target.evaluate(async () => {
       const THREE = await import("/node_modules/.vite/deps/three.js");
       const { createChest } = await import("/src/scene/chest.ts");
-      const { engravingPlacements } = await import("/src/scene/chest-engraving.ts");
+      const { engravingPlacements, spellEngraving } = await import("/src/scene/chest-engraving.ts");
       const { sceneConfig } = await import("/src/config.ts");
       const chest = await createChest(), scene = new THREE.Scene();
       // 铰链使用受光的金属材质，不能以自发光伪装金色，也必须参与实体阴影。
@@ -48,7 +48,7 @@ async (page) => {
         view.position.set(preset.cameraX, preset.height, preset.distance); view.lookAt(preset.cameraX, preset.targetY, 0); view.updateMatrixWorld();
         for (const [face, text, progress, x, size, spacing, transform] of [
           ["name", "回到未來", 0, 398, 154, 190, {}],
-          ["spell", "般若波羅蜜", 0, 245, 156, 180, {}],
+          ["spell", spellEngraving.text, 0, spellEngraving.x, spellEngraving.size, spellEngraving.spacing, {}],
           ["return", "時光倒流", 1, 398, 154, 190, { reverse: true, rotation: Math.PI }],
         ]) {
           chest.update(progress, 0, true);

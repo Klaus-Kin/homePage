@@ -36,6 +36,20 @@ button:disabled {
 ::selection {
   background: #b398694d;
 }
+/* 桌面精细指针采用原生光标：3,3 对准缩小后棒头的前缘，不使用有跟随延迟的页面装饰层。 */
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  :root {
+    cursor: url("/assets/golden-staff-cursor.svg") 3 3, auto;
+  }
+  /* 链接和宝盒按钮共用同一棒头热点；保留原生回退与禁用按钮的等待状态。 */
+  a,
+  #box-button:not(:disabled) {
+    cursor: url("/assets/golden-staff-cursor.svg") 3 3, pointer;
+  }
+  #box-button:disabled {
+    cursor: wait;
+  }
+}
 #app {
   /* 截图原尺寸与宝盒投影共同维护；所有降级元素共享同一个 cover 平面。 */
   --static-image: url("/assets/scene-desktop.webp");
