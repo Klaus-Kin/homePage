@@ -48,6 +48,8 @@ async (page) => {
               }),
           );
           return {
+            loaderVisible: document.querySelector("#moon-loader")?.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }),
+            rotation: getComputedStyle(document.querySelector("#moon-loader .hoop-rotor")).transform,
             state: document.querySelector("#app").dataset.state,
             fallbackVisible:
               fallback.display !== "none" &&
@@ -56,6 +58,11 @@ async (page) => {
             visibleContent,
           };
         });
+        // 慢速模块与纹理等待期间，金箍必须持续旋转而非只闪现一帧。
+        await target.waitForTimeout(450);
+        const nextRotation = await target.locator("#moon-loader .hoop-rotor").evaluate((el) => getComputedStyle(el).transform);
+        if (!loading.loaderVisible || loading.rotation === nextRotation)
+          throw new Error("加载金箍未显示或没有旋转");
         await target.screenshot({
           path: `output/playwright/startup-${viewport.width}-${resource}-loading.png`,
         });
@@ -77,6 +84,7 @@ async (page) => {
           throw new Error("加载中的隐藏入口仍可聚焦");
         release();
         await target.waitForSelector('#app[data-state="idle"]');
+        if (await target.locator("#moon-loader").count()) throw new Error("首帧就绪后加载层未移除");
         for (const selector of [
           ".site-header",
           ".intro",

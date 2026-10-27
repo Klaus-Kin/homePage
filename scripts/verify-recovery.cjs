@@ -93,12 +93,13 @@ async (page) => {
         fallback: document.querySelector("#app").classList.contains("fallback"),
         state: document.querySelector("#app").dataset.state,
         canvases: document.querySelectorAll("canvas").length,
+        loaders: document.querySelectorAll("#moon-loader").length,
       }));
       if (
         !recovered.locked ||
         !recovered.fallback ||
         recovered.state !== "idle" ||
-        recovered.canvases
+        recovered.canvases || recovered.loaders
       )
         throw new Error(
           `${kind}: 迟到的初始化覆盖静态页面或未释放画布 ${JSON.stringify(recovered)}`,
@@ -158,6 +159,7 @@ async (page) => {
         await target.route(scenePattern, (route) => route.abort());
       await target.goto(origin);
       if (javaScriptEnabled) await target.waitForSelector("#app.fallback");
+      if (await target.locator("#moon-loader").isVisible()) throw new Error("降级或禁用脚本时加载层仍可见");
       const layouts = [];
       for (const [width, height] of sizes) {
         await target.setViewportSize({ width, height });

@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import { Initialization } from "./scene/initialization";
+import { ownTree } from "./scene/resources";
 import { fitCamera, projectBounds } from "./responsive";
 import { sceneConfig, pageConfig } from "./config";
 import { transitionFrame } from "./transition";
@@ -22,12 +24,22 @@ export async function createScene(
   hitTarget: HTMLElement,
   onFailure: (error: unknown) => void,
 ): Promise<MoonScene> {
+  // 超时守卫与离页共用取消信号，下载或生成中的迟到任务都不能恢复场景。
+  const init = new Initialization();
+  const cancelInitialization = () => init.dispose();
+  window.addEventListener("moon-boot-failed", cancelInitialization);
+  window.addEventListener("pagehide", cancelInitialization);
+  init.cleanup(() => {
+    window.removeEventListener("moon-boot-failed", cancelInitialization);
+    window.removeEventListener("pagehide", cancelInitialization);
+  });
+  try {
   // 月面解码完成后才创建和展示场景，避免白色占位球切换真实纹理造成第二次闪动。
   // 影像署名：NASA's Scientific Visualization Studio；LRO / LROC 月面颜色图。
   // 原始素材及使用信息：https://svs.gsfc.nasa.gov/4720/
-  const lunarMap = await new THREE.TextureLoader().loadAsync(
+  const lunarMap = await init.wait(new THREE.TextureLoader().loadAsync(
     "/assets/moon-lroc.jpg",
-  );
+  ));
   lunarMap.colorSpace = THREE.SRGBColorSpace;
   lunarMap.anisotropy = 4;
   const renderer = new THREE.WebGLRenderer({
@@ -43,6 +55,7 @@ export async function createScene(
   // 待机与扩散阶段按需更新阴影；盒盖运动时逐帧请求新的实体阴影。
   renderer.shadowMap.autoUpdate = false;
   const scene = new THREE.Scene();
+  ownTree(init, scene);
   scene.fog = new THREE.FogExp2(0x203552, 0.009);
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 350);
   let disposed = false,
@@ -65,37 +78,15 @@ export async function createScene(
     renderer.setAnimationLoop(null);
     document.removeEventListener("visibilitychange", updateLoop);
     renderer.domElement.removeEventListener("webglcontextlost", contextLost);
-    const geometries = new Set<THREE.BufferGeometry>(),
-      materials = new Set<THREE.Material>(),
-      textures = new Set<THREE.Texture>();
-    scene.traverse((object) => {
-      if (object instanceof THREE.InstancedMesh) object.dispose();
-      if (
-        object instanceof THREE.Mesh ||
-        object instanceof THREE.Points ||
-        object instanceof THREE.Sprite
-      ) {
-        if (!(object instanceof THREE.Sprite)) geometries.add(object.geometry);
-        for (const material of Array.isArray(object.material)
-          ? object.material
-          : [object.material]) {
-          materials.add(material);
-          for (const value of Object.values(material))
-            if (value instanceof THREE.Texture) textures.add(value);
-        }
-      }
-      if (object instanceof THREE.Light && "shadow" in object)
-        (object.shadow as THREE.LightShadow).dispose();
-    });
-    geometries.forEach((item) => item.dispose());
-    materials.forEach((item) => item.dispose());
-    textures.forEach((item) => item.dispose());
+    init.dispose();
     renderer.dispose();
     renderer.forceContextLoss();
     renderer.domElement.remove();
   }
+  init.cleanup(dispose);
   function contextLost(event: Event) {
     event.preventDefault();
+    dispose();
     onFailure(new Error("WebGL context lost"));
   }
   function updateLoop() {
@@ -104,9 +95,9 @@ export async function createScene(
     renderer.setAnimationLoop(!reduced && !document.hidden ? animate : null);
     render();
   }
-  let chest: ReturnType<typeof createChest>,
-    terrain: ReturnType<typeof createTerrain>,
-    sky: ReturnType<typeof createSky>;
+  let chest: Awaited<ReturnType<typeof createChest>>,
+    terrain: Awaited<ReturnType<typeof createTerrain>>,
+    sky: Awaited<ReturnType<typeof createSky>>;
   let size: ReturnType<typeof fitCamera>;
   const moonBounds = new THREE.Box3(
     new THREE.Vector3(-1, -1, -1),
@@ -196,8 +187,8 @@ export async function createScene(
       ),
     );
   }
-  function render() {
-    if (disposed || document.hidden || !sky) return;
+  function render(force = false) {
+    if (disposed || (document.hidden && !force) || !sky) return;
     const duration = reduced ? pageConfig.transition.reducedFade
       : pageConfig.transition.charge + pageConfig.transition.fade;
     const frame = transitionFrame(transition * duration, reduced, pageConfig.transition);
@@ -250,7 +241,10 @@ export async function createScene(
     baseCamera.copy(camera.position);
     currentPointer.set(0, 0);
     pointer.set(0, 0);
-    terrain.setQuality(size.mobile);
+    // 画质切换也分批生成；完成后才提交新几何，取消后的续体不再渲染。
+    void terrain.setQuality(size.mobile).then(() => {
+      if (!disposed) { renderer.shadowMap.needsUpdate = true; recordResources = true; render(); }
+    }).catch((error) => { if (!disposed) { dispose(); onFailure(error); } });
     sky.resize(camera, size.preset, size.mobile);
     const shadowSize =
       sceneConfig.quality[size.mobile ? "mobile" : "desktop"].shadowSize;
@@ -267,25 +261,38 @@ export async function createScene(
     render();
   }
   try {
-    terrain = createTerrain();
+    // WebGL 上下文创建是浏览器同步操作，先让出任务，再开始记录可分批生成阶段。
+    await init.checkpoint(true);
+    performance.mark("moon-generation-start");
+    terrain = await createTerrain(init);
     scene.add(terrain.group);
-    sky = createSky(lunarMap);
+    sky = await createSky(lunarMap, init);
     scene.add(sky.group);
-    chest = createChest();
+    chest = await createChest(init);
+    performance.mark("moon-generation-end");
     scene.add(chest.box);
     scene.add(
       new THREE.HemisphereLight(0x9ebde8, 0x292719, 1.1),
       moonLight,
       warmLight,
     );
+    init.check();
+    await init.checkpoint(true);
     host.appendChild(renderer.domElement);
     renderer.domElement.addEventListener("webglcontextlost", contextLost);
     document.addEventListener("visibilitychange", updateLoop);
     renderer.debug.onShaderError = () => {
       throw new Error("月光场景着色器编译失败");
     };
+    const firstSubmit = performance.now();
     resize();
+    if (!frameCount) render(true);
     updateLoop();
+    // 首次 GPU 提交单独记录，不计入可分批的 CPU 生成耗时。
+    host.dataset.initialization = JSON.stringify({ batches: init.batches,
+      phases: init.phases,
+      firstSubmitMs: performance.now() - firstSubmit });
+    await init.checkpoint(true);
   } catch (error) {
     dispose();
     throw error;
@@ -312,4 +319,5 @@ export async function createScene(
     resize,
     dispose,
   };
+  } catch (error) { init.dispose(); throw error; }
 }

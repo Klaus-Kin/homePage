@@ -1,13 +1,16 @@
 import * as THREE from "three";
+import type { Initialization } from "./initialization";
+import { ownTree } from "./resources";
 import { sceneConfig } from "../config";
 import { screenPoint } from "../responsive";
 import { cloudTexture, glowTexture } from "./textures";
 import { seededRandom } from "./terrain-math";
 import { meteorFrame } from "./meteor";
+import { cloudMotion } from "./cloud-motion";
 
 /** 星空、月球、云海和流星都在同一深度空间中，不依赖 HTML 背景层。 */
-export function createSky(lunarMap: THREE.Texture) {
-  const group = new THREE.Group(),
+export async function createSky(lunarMap: THREE.Texture, init: Initialization) {
+  const group = ownTree(init, new THREE.Group()),
     random = seededRandom(942);
   const dome = new THREE.Mesh(
     new THREE.SphereGeometry(240, 32, 20),
@@ -25,8 +28,8 @@ export function createSky(lunarMap: THREE.Texture) {
   );
   dome.renderOrder = -10;
   group.add(dome);
-  const glow = glowTexture(),
-    cloudMap = cloudTexture();
+  const glow = init.track(glowTexture()),
+    cloudMap = await cloudTexture(init);
   const starPositions = new Float32Array(sceneConfig.quality.desktop.stars * 3);
   const colors = new Float32Array(starPositions.length);
   for (let i = 0; i < starPositions.length / 3; i++) {
@@ -90,6 +93,7 @@ export function createSky(lunarMap: THREE.Texture) {
   group.add(halo);
   const clouds: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[] = [];
   const cloudBases: THREE.Vector3[] = [];
+  const cloudScales: THREE.Vector3[] = [];
   for (let i = 0; i < sceneConfig.quality.desktop.clouds; i++) {
     const cloud = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
@@ -105,6 +109,7 @@ export function createSky(lunarMap: THREE.Texture) {
     );
     clouds.push(cloud);
     cloudBases.push(new THREE.Vector3());
+    cloudScales.push(new THREE.Vector3());
     group.add(cloud);
   }
   // 流星使用有宽度的渐变三角带，局部 +X 为前端，旋转完全由速度得到。
@@ -209,6 +214,7 @@ export function createSky(lunarMap: THREE.Texture) {
         }
         cloud.quaternion.copy(camera.quaternion);
         cloudBases[i].copy(cloud.position);
+        cloudScales[i].copy(cloud.scale);
         // 手机保留两片月云和八片谷雾，减少数量时仍保留完整空间层次。
         const moonLayers = mobile ? 2 : 6;
         const valleyLayers =
@@ -226,10 +232,13 @@ export function createSky(lunarMap: THREE.Texture) {
     },
     update(time: number, reduced: boolean) {
       for (let i = 0; i < clouds.length; i++) {
+        // 只由场景既有可见时间驱动；山体保持静止，雾的漂移与呼吸揭示山间层次。
+        const motion = cloudMotion(time, i, reduced);
         clouds[i].position.copy(cloudBases[i]);
-        if (!reduced)
-          clouds[i].position.x +=
-            Math.sin(time * 0.027 + i * 0.6) * (i < 6 ? 0.65 : 1.2);
+        clouds[i].position.x += motion.x;
+        clouds[i].position.y += motion.y;
+        clouds[i].scale.copy(cloudScales[i]).multiplyScalar(motion.scale);
+        clouds[i].material.opacity = motion.opacity;
       }
       const phase = time % 11;
       meteor.visible = !reduced && phase > 1 && phase < 2.4;

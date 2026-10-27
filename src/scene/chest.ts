@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import { Initialization } from "./initialization";
+import { ownTree } from "./resources";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { seededRandom } from "./terrain-math";
 import { engrave } from "./chest-engraving";
@@ -6,17 +8,22 @@ import { chestPose } from "./chest-motion";
 import { glowTexture } from "./textures";
 
 /** 灰黑旧木的颜色与高度分别生成；纵向木纹、细裂、划伤和磨边都参与实际光照。 */
-function makeWood(face: "plain" | "spell" | "name") {
+async function makeWood(face: "plain" | "spell" | "name" | "return", init: Initialization) {
+  init.phase = `wood-${face}`;
   const random = seededRandom(face === "plain" ? 319 : 216);
-  const color = document.createElement("canvas"), height = document.createElement("canvas");
-  color.width = height.width = 1536;
-  color.height = height.height = face === "plain" ? 512 : 256;
-  const ctx = color.getContext("2d")!, bump = height.getContext("2d")!;
+  const color = document.createElement("canvas"), height = document.createElement("canvas"),
+    emission = document.createElement("canvas");
+  color.width = height.width = emission.width = 1536;
+  color.height = height.height = emission.height = face === "plain" ? 512 : 256;
+  const ctx = color.getContext("2d")!, bump = height.getContext("2d")!,
+    glow = emission.getContext("2d")!;
+  glow.fillStyle = "#000000"; glow.fillRect(0, 0, emission.width, emission.height);
   const h = color.height;
   ctx.fillStyle = "#64635b"; ctx.fillRect(0, 0, 1536, h);
   bump.fillStyle = "#909090"; bump.fillRect(0, 0, 1536, h);
   // 不规则浅灰磨斑打散长条木纹，粗糙木质不会呈现拉丝金属的整齐反射。
   for (let i = 0; i < 190; i++) {
+    if (i % 16 === 0) { const pause = init.checkpoint(); if (pause) await pause; }
     const x = random() * 1536, y = random() * h, radius = 12 + random() * 75;
     const stain = ctx.createRadialGradient(x, y, 0, x, y, radius);
     stain.addColorStop(0, random() > 0.5 ? "#a9a59535" : "#12151038");
@@ -26,6 +33,7 @@ function makeWood(face: "plain" | "spell" | "name") {
     ctx.restore();
   }
   for (let i = 0; i < 2600; i++) {
+    if (i % 16 === 0) { const pause = init.checkpoint(); if (pause) await pause; }
     const y = random() * h, x = random() * 1536, length = 40 + random() * 700;
     const light = random() > 0.48;
     for (const [context, isHeight] of [[ctx, false], [bump, true]] as const) {
@@ -39,38 +47,57 @@ function makeWood(face: "plain" | "spell" | "name") {
   }
   // 稀疏斜向磨痕与边角露出的浅木色避免规则条纹和均匀包边。
   for (let i = 0; i < 130; i++) {
+    if (i % 16 === 0) { const pause = init.checkpoint(); if (pause) await pause; }
     const x = random() * 1536, y = random() * h;
     ctx.strokeStyle = `rgba(186,177,152,${0.06 + random() * 0.15})`;
     ctx.lineWidth = 0.5 + random();
     ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + random() * 160, y - random() * 16); ctx.stroke();
   }
   for (let i = 0; i < 170; i++) {
+    if (i % 16 === 0) { const pause = init.checkpoint(); if (pause) await pause; }
     const x = random() * 1536, y = random() > 0.5 ? random() * 9 : h - random() * 9;
     ctx.fillStyle = `rgba(159,143,114,${random() * 0.35})`;
     ctx.fillRect(x, y, random() * 35, 1 + random() * 2);
   }
-  // 两排字分别属于两条半盒的外侧木板，长缝就是半盒的实际合拢边。
-  if (face === "spell") engrave(ctx, bump, "般若波羅蜜", 205, 46, 156, 180);
-  if (face === "name") engrave(ctx, bump, "月光寶盒", 226, 46, 154, 190);
-  const map = new THREE.CanvasTexture(color), bumpMap = new THREE.CanvasTexture(height);
+  // 三种纹理同步生成并旋转；展开侧面补偿真实转轴带来的倒置，字形本身不镜像。
+  if (face === "spell") engrave(ctx, bump, glow, "般若波羅蜜", 245, 46, 156, 180);
+  if (face === "name") engrave(ctx, bump, glow, "回到未來", 398, 46, 154, 190);
+  if (face === "return") engrave(ctx, bump, glow, "時光倒流", 398, 46, 154, 190,
+    { reverse: true, rotation: Math.PI });
+  const map = init.track(new THREE.CanvasTexture(color)),
+    bumpMap = init.track(new THREE.CanvasTexture(height)),
+    emissiveMap = face === "plain" ? null : init.track(new THREE.CanvasTexture(emission));
   map.colorSpace = THREE.SRGBColorSpace;
   map.anisotropy = bumpMap.anisotropy = 4;
-  return new THREE.MeshStandardMaterial({ map, bumpMap, bumpScale: 0.018, roughness: 0.94 });
+  // 遮罩使用线性黑白数据；0.25 的常亮发光仅作用于金色字槽。
+  if (emissiveMap) emissiveMap.anisotropy = 4;
+  const material = init.track(new THREE.MeshStandardMaterial({ map, bumpMap,
+    bumpScale: 0.018, roughness: 0.94, emissiveMap,
+    emissive: face === "plain" ? 0x000000 : 0xe9b95d, emissiveIntensity: 0.25 }));
+  // 材质名标明刻字所在面，便于离线检查 UV 与转轴组合后的真实朝向。
+  material.name = `wood-${face}`;
+  return material;
 }
 
 /** 上下两条木质半盒通过左短端水平铰链相连，闭合后形成横放的完整长盒。 */
-export function createChest() {
-  const wood = makeWood("plain"), spellWood = makeWood("spell"), nameWood = makeWood("name");
+export async function createChest(init = new Initialization()) {
+  const wood = await makeWood("plain", init), spellWood = await makeWood("spell", init),
+    nameWood = await makeWood("name", init), returnWood = await makeWood("return", init);
+  // 最后一张刻字贴图与实体几何分开提交，避免两段短工作叠成同一个长任务。
+  await init.checkpoint(true);
+  init.phase = "chest-geometry";
   const inner = new THREE.MeshStandardMaterial({ map: wood.map, bumpMap: wood.bumpMap,
     bumpScale: 0.012, color: 0xb0a18c, roughness: 0.98,
     emissive: 0xffe1a6, emissiveIntensity: 0.018 });
-  const box = new THREE.Group(), openingPivot = new THREE.Group();
+  const box = ownTree(init, new THREE.Group()), openingPivot = new THREE.Group();
   // 为上翻后落到左侧的双倍长度预留空间；底盒在整个动画中保持落地且不平移。
   // 长边左右摆放，局部右端铰链转到画面左侧；上半盒真正抬离地面。
   box.rotation.y = Math.PI;
   box.position.x = 1;
   box.scale.setScalar(0.64);
-  for (const texture of [spellWood.map!, spellWood.bumpMap!, nameWood.map!, nameWood.bumpMap!]) {
+  for (const texture of [spellWood.map!, spellWood.bumpMap!, spellWood.emissiveMap!,
+    nameWood.map!, nameWood.bumpMap!, nameWood.emissiveMap!,
+    returnWood.map!, returnWood.bumpMap!, returnWood.emissiveMap!]) {
     texture.center.set(0.5, 0.5); texture.rotation = Math.PI;
   }
   openingPivot.position.set(1.93, 0.61, 0);
@@ -83,18 +110,24 @@ export function createChest() {
     parent.add(mesh); return mesh;
   }
   const rim = new THREE.MeshStandardMaterial({ color: 0x283446, roughness: 0.94 });
-  function half(sign: number, topWood: THREE.Material, parent: THREE.Group) {
+  async function half(sign: number, topWood: THREE.Material, parent: THREE.Group) {
     const group = new THREE.Group();
     // 既有侧槽实体转成上下槽：底盒开口朝上、上盒开口朝下；上盒原点跟随水平铰链。
     group.rotation.x = -Math.PI / 2;
     group.position.set(parent === openingPivot ? -1.93 : 0,
       parent === openingPivot ? 0 : 0.61, 0.22);
     parent.add(group);
-    cuboid(3.86, 0.44, 0.065, 0, 0.22, sign * 0.5775,
-      sign > 0 ? [wood, wood, wood, wood, wood, inner] : [wood, wood, wood, wood, inner, wood], group);
+    // 上盖外表面闭合朝天，翻转 180° 后朝地；与前侧刻字分用独立面材质。
+    const outer = cuboid(3.86, 0.44, 0.065, 0, 0.22, sign * 0.5775,
+      sign > 0 ? [wood, wood, wood, wood, spellWood, inner] : [wood, wood, wood, wood, inner, wood], group);
+    outer.name = sign > 0 ? "lid-outer-spell" : "base-floor";
+    // 磨圆边缘的细分几何各自切批，保留圆角精度并避免弱 CPU 上连续构造阻塞。
+    await init.checkpoint(true);
     cuboid(3.86, 0.055, 0.604, 0, 0.4125, sign * 0.308,
       [wood, wood, topWood, inner, wood, wood], group, true);
+    await init.checkpoint(true);
     cuboid(3.86, 0.055, 0.604, 0, 0.0275, sign * 0.308, wood, group, true);
+    await init.checkpoint(true);
     for (const x of [-1.8975, 1.8975])
       cuboid(0.065, 0.33, 0.604, x, 0.22, sign * 0.308, wood, group);
     // 内槽的窄边沿来自第二张参考图；不封住槽口，旋开后可直接看到真实凹腔。
@@ -104,8 +137,8 @@ export function createChest() {
       cuboid(0.018, 0.312, 0.025, x, 0.22, sign * 0.025, rim, group);
     return group;
   }
-  const fixedHalf = half(-1, nameWood, box);
-  const movingHalf = half(1, spellWood, openingPivot);
+  const fixedHalf = await half(-1, nameWood, box);
+  const movingHalf = await half(1, returnWood, openingPivot);
   // 水平销轴贯穿短端厚度，实体铰链与上翻轴重合。
   const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.44, 12),
     new THREE.MeshStandardMaterial({ color: 0x57564c, roughness: 0.85, metalness: 0.25 }));

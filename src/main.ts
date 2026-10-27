@@ -26,6 +26,8 @@ const motionPreference = matchMedia("(prefers-reduced-motion: reduce)");
 const coarsePointer = matchMedia("(pointer: coarse)");
 const state = new JourneyState();
 let scene: MoonScene | undefined;
+// 离页时动态导入可能仍在等待，后续回调必须保持终止状态。
+let leaving = false;
 // 入口超时后才抵达的模块直接沿用静态入口，禁止再次初始化和覆盖已显示的页面。
 let fallback = window.__moonBoot?.failed ?? false;
 let transitionRaf = 0;
@@ -235,6 +237,7 @@ window.addEventListener("pageshow", (event) => {
   if (event.persisted) window.location.reload();
 });
 window.addEventListener("pagehide", () => {
+  leaving = true;
   cancelAnimationFrame(transitionRaf);
   scene?.dispose();
 });
@@ -245,9 +248,9 @@ async function initialize() {
   try {
     // 动态导入将 WebGL 初始化错误和模块资源失败纳入同一降级路径。
     const { createScene } = await import("./scene");
-    if (fallback) return;
+    if (fallback || leaving) return;
     scene = await createScene(sceneHost, button, showFallback);
-    if (fallback) {
+    if (fallback || leaving) {
       scene.dispose();
       scene = undefined;
       return;
@@ -259,7 +262,7 @@ async function initialize() {
     updateHint();
     status.textContent = "月光宝盒已就绪，可以点击或使用键盘开启";
   } catch (error) {
-    showFallback(error);
+    if (!leaving) showFallback(error);
   }
 }
 void initialize();

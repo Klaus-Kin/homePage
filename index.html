@@ -15,8 +15,26 @@
     <!-- 样式独立于模块脚本加载，开发模式禁用 JavaScript 时也保留完整静态页面。 -->
     <link rel="stylesheet" href="/src/style.css" />
     <title>程序猿的月光宝盒</title>
+    <style>
+      /* 首屏关键样式不依赖 CSS 或模块下载，隐藏内容仍保留尺寸供相机计算。 */
+      html, body { margin: 0; background: #080f20; }
+      #app[data-state="loading"] { visibility: hidden; }
+      #moon-loader { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; justify-items: center; background: #080f20; color: #cbb77f; }
+      /* 静态柔光与旋转层分开绘制，避免 SVG 滤镜阻断合成线程旋转。 */
+      #moon-loader .hoop-halo { grid-area: 1 / 1; width: 142px; height: 142px; margin: -15px; background: radial-gradient(ellipse, #c99d3515 15%, #c99d3509 46%, transparent 70%); }
+      #moon-loader .hoop-rotor { grid-area: 1 / 1; width: 112px; height: 112px; animation: hoop-spin 1.8s linear infinite; will-change: transform; }
+      #moon-loader svg { display: block; width: 112px; height: 112px; }
+      #moon-loader .loading-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+      @keyframes hoop-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) {
+        #moon-loader .hoop-rotor { animation: none; will-change: auto; }
+        #moon-loader .loading-label { position: static; width: auto; height: auto; clip-path: none; margin-top: 20px; font: 14px/1.5 serif; letter-spacing: .18em; }
+      }
+    </style>
     <noscript
       ><style>
+        /* 无脚本无需等待场景，加载层直接退出。 */
+        #moon-loader { display: none; }
         /* 无脚本时直接展示静态页面；提高优先级，兼容构建后样式链接顺序变化。 */
         html #app[data-state="loading"] {
           visibility: visible;
@@ -37,6 +55,18 @@
     >
   </head>
   <body>
+    <!-- 金箍直接内联，Three.js 尚未下载时也有独立、可访问的加载反馈。 -->
+    <div id="moon-loader" role="status" aria-live="polite" aria-label="正在加载月光宝盒">
+      <span class="hoop-halo" aria-hidden="true"></span>
+      <span class="hoop-rotor" aria-hidden="true">
+      <svg viewBox="0 0 160 160" fill="none" aria-hidden="true">
+        <defs><linearGradient id="hoop-gold" x1="28" y1="18" x2="126" y2="143" gradientUnits="userSpaceOnUse"><stop stop-color="#b3812c"/><stop offset=".35" stop-color="#f4dda1"/><stop offset=".65" stop-color="#c99d45"/><stop offset="1" stop-color="#8b5d20"/></linearGradient></defs>
+        <path d="M62 129C38 124 22 104 22 79C22 46 47 22 80 22C113 22 138 46 138 79C138 104 122 124 98 129C84 132 81 117 90 112C100 106 110 119 101 124M62 129C76 132 79 117 70 112C60 106 50 119 59 124" stroke="url(#hoop-gold)" stroke-width="7" stroke-linecap="round"/>
+        <path d="M57 121C39 113 29 98 29 79C29 51 51 29 80 29C109 29 131 51 131 79C131 98 121 113 103 121" stroke="#f8e9bd" stroke-opacity=".5" stroke-width="1.3"/>
+      </svg>
+      </span>
+      <span class="loading-label">正在唤醒月光…</span>
+    </div>
     <main id="app" data-state="loading">
       <!-- 静态图由同一新场景导出，只在 WebGL 失败或禁用脚本时显示。 -->
       <div class="scene-fallback">
@@ -126,6 +156,7 @@
           stopWatching();
           app.classList.add("fallback", "boot-failed");
           app.dataset.state = "idle";
+          document.querySelector("#moon-loader")?.remove();
           document.querySelector("#status").textContent =
             "已启用静态场景，可以通过宝盒或文字链接进入博客";
           // 主模块若已部分运行，通知它释放资源并锁定降级，迟到的初始化不得切回 3D。
@@ -149,6 +180,7 @@
             if (phase === "failed") return false;
             phase = "ready";
             stopWatching();
+            document.querySelector("#moon-loader")?.remove();
             return true;
           },
         };

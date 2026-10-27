@@ -1,42 +1,50 @@
 import * as THREE from "three";
+import type { Initialization } from "./initialization";
+import { ownTree } from "./resources";
+import { createPlane, computeNormals } from "./geometry";
 import { sceneConfig } from "../config";
 import { fbm, groundHeight, seededRandom } from "./terrain-math";
 import { surfaceTexture } from "./textures";
 import { createMountains } from "./mountains";
+import { obstacleFootprint, overlapsFootprint, grassReach, chestFootprint } from "./terrain-clearance";
 
 /** 连续山坡、山谷和植被共享世界坐标；相机看到的是一整片地形。 */
-export function createTerrain() {
-  const group = new THREE.Group();
+export async function createTerrain(init: Initialization) {
+  const group = ownTree(init, new THREE.Group());
   const random = seededRandom(842);
   const quality = sceneConfig.quality.desktop;
-  const groundMap = surfaceTexture("ground"),
-    rockMap = surfaceTexture("rock");
-  const earth = new THREE.MeshStandardMaterial({
+  const groundMap = await surfaceTexture("ground", init),
+    rockMap = await surfaceTexture("rock", init);
+  const earth = init.track(new THREE.MeshStandardMaterial({
     map: groundMap,
     bumpMap: groundMap,
     bumpScale: 0.13,
     roughness: 1,
-  });
-  const stone = new THREE.MeshStandardMaterial({
+  }));
+  const stone = init.track(new THREE.MeshStandardMaterial({
     map: rockMap,
     bumpMap: rockMap,
     bumpScale: 0.17,
     roughness: 0.96,
-  });
-  const geometry = new THREE.PlaneGeometry(130, 130, 180, 180);
+  }));
+  init.phase = "ground";
+  const geometry = await createPlane(130, 130, 180, 180, init);
   geometry.rotateX(-Math.PI / 2);
   geometry.translate(0, 0, -40);
   const positions = geometry.attributes.position;
-  for (let i = 0; i < positions.count; i++)
+  for (let i = 0; i < positions.count; i++) {
+    if (i % 32 === 0) { const pause = init.checkpoint(); if (pause) await pause; }
     positions.setY(i, groundHeight(positions.getX(i), positions.getZ(i)));
-  geometry.computeVertexNormals();
+  }
+  await computeNormals(geometry, init);
   const ground = new THREE.Mesh(geometry, earth);
   ground.receiveShadow = true;
   group.add(ground);
 
   // 数层真正的起伏山脊位于不同距离，距离雾统一衰减，不使用背景照片。
-  const mountains = createMountains();
+  const mountains = await createMountains(init);
   group.add(mountains.group);
+  init.phase = "vegetation";
 
   // 岩石采用实例化多面体，各实例非等比缩放并埋入地表，减少重复轮廓。
   const rockGeometry = new THREE.IcosahedronGeometry(1, 1);
@@ -47,8 +55,12 @@ export function createTerrain() {
   }
   rockGeometry.computeVertexNormals();
   const rocks = new THREE.InstancedMesh(rockGeometry, stone, quality.rocks);
+  group.add(rocks);
   const dummy = new THREE.Object3D();
-  for (let i = 0; i < quality.rocks; i++) {
+  const rockFootprints: ReturnType<typeof obstacleFootprint>[] = [];
+  let rockCount = 0;
+  for (let attempt = 0; rockCount < quality.rocks && attempt < quality.rocks * 8; attempt++) {
+    const pause = init.checkpoint(); if (pause) await pause;
     let x = (random() - 0.5) * 33,
       z = random() * 20 - 8;
     if (Math.abs(x) < 2.2 && Math.abs(z) < 1.5) x += 3;
@@ -57,7 +69,12 @@ export function createTerrain() {
     dummy.scale.set(size * 1.5, size * 0.7, size);
     dummy.rotation.set(random() * 0.4, random() * 6, random() * 0.4);
     dummy.updateMatrix();
-    rocks.setMatrixAt(i, dummy.matrix);
+    // 使用变形后顶点和实例完整矩阵；先避开盒体及上盖落点，再用于草叶避让。
+    const footprint = obstacleFootprint(rp.array, dummy.matrix.elements);
+    const radius = Math.max(...footprint.map((p) => Math.hypot(p.x - x, p.z - z)));
+    if (overlapsFootprint(x, z, radius, chestFootprint)) continue;
+    rocks.setMatrixAt(rockCount++, dummy.matrix);
+    rockFootprints.push(footprint);
   }
   rocks.castShadow = rocks.receiveShadow = true;
   group.add(rocks);
@@ -98,10 +115,14 @@ export function createTerrain() {
     );
   };
   const grass = new THREE.InstancedMesh(blade, grassMaterial, quality.grass);
+  group.add(grass);
   const color = new THREE.Color();
   let clusterX = 0,
     clusterZ = 0;
-  for (let i = 0; i < quality.grass; i++) {
+  let grassCount = 0;
+  for (let i = 0; grassCount < quality.grass && i < quality.grass * 8; i++) {
+    // 避让检查会遍历岩石轮廓，按尝试次数切批，包含未成功放置的草叶。
+    if (i % 16 === 0) { const pause = init.checkpoint(); if (pause) await pause; }
     // 成簇散布，远处草叶自动缩小；盒体内不生成草，但边缘可自然遮挡脚部。
     if (i % 5 === 0) {
       clusterX = (random() - 0.5) * 24;
@@ -115,17 +136,21 @@ export function createTerrain() {
     const density = fbm(x * 1.5 + 3, z * 1.5 + 8);
     const size =
       (0.25 + random() * 0.5) * (z < -3 ? 0.65 : 1) * (0.6 + density);
+    const yaw = random() * Math.PI * 2, lean = (random() - 0.5) * 0.3;
+    const reach = grassReach(size, lean);
+    if (overlapsFootprint(x, z, reach, chestFootprint) ||
+      rockFootprints.some((footprint) => overlapsFootprint(x, z, reach, footprint))) continue;
     dummy.position.set(x, groundHeight(x, z) - 0.015, z);
-    dummy.rotation.set(0, random() * Math.PI * 2, (random() - 0.5) * 0.3);
+    dummy.rotation.set(0, yaw, lean);
     dummy.scale.setScalar(size);
     dummy.updateMatrix();
-    grass.setMatrixAt(i, dummy.matrix);
+    grass.setMatrixAt(grassCount, dummy.matrix);
     color.setHSL(
       0.18 + random() * 0.09,
       0.25 + random() * 0.3,
       0.32 + random() * 0.23,
     );
-    grass.setColorAt(i, color);
+    grass.setColorAt(grassCount++, color);
   }
   grass.receiveShadow = true;
   group.add(grass);
@@ -136,30 +161,42 @@ export function createTerrain() {
     new THREE.MeshStandardMaterial({ color: 0xe7d9b4, roughness: 0.9 }),
     quality.flowers,
   );
-  for (let i = 0; i < quality.flowers; i++) {
+  group.add(flowers);
+  let flowerCount = 0;
+  for (let i = 0; flowerCount < quality.flowers && i < quality.flowers * 8; i++) {
+    const pause = init.checkpoint(); if (pause) await pause;
     let x = (random() - 0.5) * 17,
       z = random() * 12 - 3;
     if (Math.abs(x) < 2 && Math.abs(z) < 1) x += 2.3;
+    // 花头同样避开石体和盒盖，避免修复草叶后留下穿石花朵。
+    if (overlapsFootprint(x, z, 0.04, chestFootprint) ||
+      rockFootprints.some((footprint) => overlapsFootprint(x, z, 0.04, footprint))) continue;
     dummy.position.set(x, groundHeight(x, z) + 0.12 + random() * 0.15, z);
     dummy.rotation.set(0, 0, 0);
     dummy.scale.set(1, 0.45, 1);
     dummy.updateMatrix();
-    flowers.setMatrixAt(i, dummy.matrix);
-    flowers.setColorAt(i, color.set(i % 3 ? 0xd0c3a2 : 0xc9a74c));
+    flowers.setMatrixAt(flowerCount, dummy.matrix);
+    flowers.setColorAt(flowerCount++, color.set(i % 3 ? 0xd0c3a2 : 0xc9a74c));
   }
   group.add(flowers);
+  // 达到尝试上限时不绘制未初始化实例；轻量模式仍沿用同一批通过避让的对象。
+  grass.count = grassCount; rocks.count = rockCount; flowers.count = flowerCount;
+  let qualityRevision = 0;
   return {
     group,
     update(time: number, reduced: boolean) {
       wind.value = time;
       windStrength.value = reduced ? 0 : 1;
     },
-    setQuality(mobile: boolean) {
-      mountains.setQuality(mobile);
+    async setQuality(mobile: boolean) {
+      // 山体等待期间可能再次旋转屏幕，旧请求不能覆盖最新的植被数量。
+      const request = ++qualityRevision;
+      await mountains.setQuality(mobile);
+      if (request !== qualityRevision || init.controller.signal.aborted) return;
       const preset = sceneConfig.quality[mobile ? "mobile" : "desktop"];
-      grass.count = preset.grass;
-      rocks.count = preset.rocks;
-      flowers.count = preset.flowers;
+      grass.count = Math.min(preset.grass, grassCount);
+      rocks.count = Math.min(preset.rocks, rockCount);
+      flowers.count = Math.min(preset.flowers, flowerCount);
     },
   };
 }

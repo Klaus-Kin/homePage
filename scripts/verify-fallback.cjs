@@ -52,6 +52,8 @@ async (page) => {
     await target.waitForFunction(() =>
       document.querySelector("#app").classList.contains("fallback"),
     );
+    // 初始化失败与运行期上下文丢失都必须退出加载层，保留静态入口可点击。
+    if (await target.locator("#moon-loader").count()) throw new Error(`${kind}: 加载层未移除`);
     await target.screenshot({ path: `output/playwright/${kind}.png` });
     await target
       .getByRole("button", { name: "开启月光宝盒，前往博客" })

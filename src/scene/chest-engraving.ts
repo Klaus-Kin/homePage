@@ -1,5 +1,12 @@
-/** 依据参考照片可辨笔画手绘九字；保留不规则刻线，不调用系统字体或描画金色字。 */
-const glyphs: Record<string, string[]> = {
+/** 手绘繁体刻字笔画；保留不规则刻线，颜色、槽深和金色发光均由同一路径生成。 */
+export const glyphs: Record<string, string[]> = {
+  "回": ["M13 12L88 10L87 92L12 94ZM31 33L70 31L69 73L30 75Z"],
+  "到": ["M8 16L57 13M32 16L14 42L53 39M42 28L59 47", "M10 57L59 54M34 44L33 81M8 88L61 81", "M71 23L70 70M87 8L87 88L76 95"],
+  "未": ["M16 29L85 26M8 52L93 48M50 7L49 95", "M45 52L28 76L8 89M55 52L72 74L94 85"],
+  "來": ["M12 29L91 26M50 7L49 96", "M27 34L20 52L8 64M26 43L37 60M73 33L66 52L57 62M73 44L91 61", "M47 60L29 79L8 93M54 60L72 79L94 91"],
+  "時": ["M9 23L34 21L33 79L8 82ZM10 49L33 47", "M47 25L89 23M68 8L68 42M41 45L95 42M43 59L94 56M80 45L79 90L67 95M50 69L61 80"],
+  "倒": ["M24 8L15 37L5 53M17 32L16 96", "M31 22L66 20M48 23L33 45L62 42M54 32L67 49M32 61L65 59M49 47L48 82M29 91L68 83", "M76 24L75 72M90 9L89 90L79 96"],
+  "流": ["M9 12L22 23M7 38L21 48M8 91L26 62", "M58 6L65 17M33 28L94 24M59 28L41 49L85 45M76 34L92 53", "M43 58L42 77L31 94M62 57L62 92M80 56L80 88L85 93L95 90L97 79"],
   "般": ["M8 84L14 25L42 24L42 88L31 94", "M20 24L25 9", "M16 45L36 44M14 65L36 63M26 32L26 80", "M53 13L79 13L79 37L91 37M54 14L54 31L45 42", "M49 51L87 51L75 72L48 94M52 56L67 77L92 92"],
   "若": ["M8 25L93 21M30 8L32 36M70 6L68 33", "M12 47L89 44M44 34L34 57L9 80", "M35 64L80 62L79 91L33 93ZM35 87L78 85"],
   "波": ["M10 13L23 24M7 40L21 49M9 90L27 62", "M37 85L42 28L89 25L83 39M65 7L64 56", "M44 53L85 51L72 75L43 95M48 58L65 79L92 93"],
@@ -11,25 +18,48 @@ const glyphs: Record<string, string[]> = {
   "盒": ["M50 8L30 30L8 40M50 9L70 26L92 34M30 34L72 32", "M29 43L75 41L74 60L28 62ZM18 72L84 69L83 90L18 93ZM37 72L37 91M62 71L62 90M9 95L93 92"],
 };
 
-/** 同一笔画同时写入颜色和高度纹理，暗槽配微弱磨亮的下缘，产生阴刻而非贴字。 */
+/** 字序与每字角度独立控制；围绕字心旋转不会镜像笔画或改变槽深。 */
+type GlyphTransform = { reverse?: boolean; rotation?: number };
+export function engravingPlacements(text: string, x: number, y: number, size: number,
+  spacing: number, transform: GlyphTransform = {}) {
+  return [...text].map((character, index, letters) => ({ character,
+    x: x + (transform.reverse ? letters.length - 1 - index : index) * spacing + size / 2,
+    y: y + size / 2, rotation: transform.rotation ?? 0 }));
+}
+
+/** 同一组手绘笔画共享字心变换；暖金槽底、较亮槽缘与凹槽高度逐笔对齐。 */
 export function engrave(color: CanvasRenderingContext2D, height: CanvasRenderingContext2D,
-  text: string, x: number, y: number, size: number, spacing: number) {
-  [...text].forEach((character, index) => {
-    for (const [context, isHeight] of [[color, false], [height, true]] as const) {
+  emission: CanvasRenderingContext2D,
+  text: string, x: number, y: number, size: number, spacing: number, transform: GlyphTransform = {}) {
+  engravingPlacements(text, x, y, size, spacing, transform).forEach((placement) => {
+    const { character } = placement;
+    if (!glyphs[character]) throw new Error(`木盒刻字缺少手绘字形：${character}`);
+    for (const [context, channel] of [[color, "color"], [height, "height"], [emission, "emission"]] as const) {
       context.save();
-      context.translate(x + index * spacing, y);
+      context.translate(placement.x, placement.y);
+      context.rotate(placement.rotation);
       context.scale(size / 100, size / 100);
+      context.translate(-50, -50);
       context.lineJoin = "round";
       context.lineCap = "round";
       for (const stroke of glyphs[character]) {
         const path = new Path2D(stroke);
+        if (channel === "emission") {
+          // 窄范围柔化仅沿字槽分布，黑色背景使木面不会整体自发光。
+          context.shadowColor = "#ffffff";
+          context.shadowBlur = 1.4;
+          context.strokeStyle = "#ffffff";
+          context.lineWidth = 2.9;
+          context.stroke(path);
+          continue;
+        }
         context.save();
         context.translate(1.8, 2.2);
-        context.strokeStyle = isHeight ? "#a5a5a5" : "#8b877b";
+        context.strokeStyle = channel === "height" ? "#a5a5a5" : "#e5bd68";
         context.lineWidth = 2.6;
         context.stroke(path);
         context.restore();
-        context.strokeStyle = isHeight ? "#191919" : "#161714";
+        context.strokeStyle = channel === "height" ? "#191919" : "#b99143";
         context.lineWidth = 2.9;
         context.stroke(path);
       }
