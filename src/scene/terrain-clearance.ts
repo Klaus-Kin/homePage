@@ -51,7 +51,26 @@ export const chestFootprint: readonly Point[] = [
   { x: chestX - chestScale * (1.93 + sweepRadius) - 0.025, z: chestZ + 0.17 },
 ];
 
+// 主体四周额外留出近一米的圆角留白；与开盖扫掠区分别检查，避免把整条坡面清空。
+const chestBodyFootprint: readonly Point[] = [
+  { x: chestX - chestScale * 1.93, z: chestZ - chestScale * 0.32 },
+  { x: chestX + chestScale * 1.93, z: chestZ - chestScale * 0.32 },
+  { x: chestX + chestScale * 1.93, z: chestZ + chestScale * 0.32 },
+  { x: chestX - chestScale * 1.93, z: chestZ + chestScale * 0.32 },
+];
+
+/** 岩石、草叶和整株花使用相同的留白规则，并计入各自的外伸半径。 */
+export function overlapsChestScenery(x: number, z: number, radius: number) {
+  return overlapsFootprint(x, z, radius + 0.9, chestBodyFootprint) ||
+    overlapsFootprint(x, z, radius, chestFootprint);
+}
+
 /** 手机前景留空：连石头靠镜头的边缘都必须退到宝盒后方，不能只凭中心点判断。 */
 export function isForegroundRock(footprint: readonly Point[]) {
   return footprint.some(point => point.z > chestPlacement.z - 0.2);
+}
+
+/** 宽屏中间已定位的三块石头位于这一小片草坡，其余石头保持原位。 */
+export function isCenterMeadowRock(x: number, z: number) {
+  return x > -3.5 && x < -0.6 && z > 4.2 && z < 5.9;
 }

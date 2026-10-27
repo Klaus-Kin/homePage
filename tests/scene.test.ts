@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { meteorFrame } from "../src/scene/meteor.ts";
-import { groundHeight, mountainHeight } from "../src/scene/terrain-math.ts";
+import { groundHeight, mountainHeight, groundTextureValue } from "../src/scene/terrain-math.ts";
 import { chestPlacement } from "../src/scene/chest-placement.ts";
 
 // 连续三个时刻检查头尾与速度的点积，防止旋转和位移分别计算后出现倒飞。
@@ -19,6 +19,14 @@ test("meteor head leads its tapering tail down and left", () => {
     assert.ok(frame.headWidth > frame.tailWidth);
     assert.ok(frame.headAlpha > frame.tailAlpha);
     previous = frame;
+  }
+});
+
+// 地表贴图在反复铺设时必须首尾相接；凹凸贴图也使用同一数值，不能在循环边缘形成割线。
+test("ground texture tiles join at both edges without a bump discontinuity", () => {
+  for (let i=0;i<=255;i+=5) {
+    assert.ok(Math.abs(groundTextureValue(0,i)-groundTextureValue(255,i)) < 1e-10);
+    assert.ok(Math.abs(groundTextureValue(i,0)-groundTextureValue(i,255)) < 1e-10);
   }
 });
 

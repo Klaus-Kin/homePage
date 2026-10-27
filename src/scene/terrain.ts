@@ -7,7 +7,9 @@ import { sceneConfig } from "../config";
 import { fbm, groundHeight, seededRandom } from "./terrain-math";
 import { surfaceTexture } from "./textures";
 import { createMountains } from "./mountains";
-import { obstacleFootprint, overlapsFootprint, grassReach, chestFootprint, isForegroundRock } from "./terrain-clearance";
+import { obstacleFootprint, overlapsFootprint, grassReach, overlapsChestScenery, isForegroundRock, isCenterMeadowRock } from "./terrain-clearance";
+import { sampleGrassTuft, grassCountForBudget } from "./grass-distribution";
+import { createGrassMaterials } from "./grass-material";
 
 /** 连续山坡、山谷和植被共享世界坐标；相机看到的是一整片地形。 */
 export async function createTerrain(init: Initialization) {
@@ -19,9 +21,11 @@ export async function createTerrain(init: Initialization) {
   const earth = init.track(new THREE.MeshStandardMaterial({
     map: groundMap,
     bumpMap: groundMap,
-    bumpScale: 0.13,
+    // 凹凸仅保留细微起伏，避免把重复纹理渲染成割裂草坡的沟槽。
+    bumpScale: 0.045,
     roughness: 1,
   }));
+  earth.name = "meadow-ground";
   const stone = init.track(new THREE.MeshStandardMaterial({
     map: rockMap,
     bumpMap: rockMap,
@@ -39,6 +43,7 @@ export async function createTerrain(init: Initialization) {
   }
   await computeNormals(geometry, init);
   const ground = new THREE.Mesh(geometry, earth);
+  ground.name = "terrain-ground";
   ground.receiveShadow = true;
   group.add(ground);
 
@@ -68,12 +73,13 @@ export async function createTerrain(init: Initialization) {
   // 背景实例放在前段，手机画质直接截断前景段；旋转屏幕无需销毁或重新生成石头。
   const backgroundRocks: THREE.Matrix4[] = [], foregroundRocks: THREE.Matrix4[] = [];
   let rockCount = 0;
-  for (let attempt = 0; rockCount < quality.rocks && attempt < quality.rocks * 8; attempt++) {
+  let candidateRockCount = 0;
+  for (let attempt = 0; candidateRockCount < quality.rocks && attempt < quality.rocks * 8; attempt++) {
     const pause = init.checkpoint(); if (pause) await pause;
     let x = (random() - 0.5) * 33,
       z = random() * 20 - 8;
     if (Math.abs(x) < 2.2 && Math.abs(z) < 1.5) x += 3;
-    // 镜头附近只保留低矮小石，保留原有数量但降低它们在画面中的体量。
+    // 镜头附近只保留低矮小石，降低它们在画面中的体量。
     const nearScale = z > 3 ? 0.56 : 0.8;
     const size = (0.12 + Math.pow(random(), 3) * 0.95) * nearScale;
     dummy.position.set(x, groundHeight(x, z) - size * 0.18, z);
@@ -83,7 +89,10 @@ export async function createTerrain(init: Initialization) {
     // 使用变形后顶点和实例完整矩阵；先避开盒体及上盖落点，再用于草叶避让。
     const footprint = obstacleFootprint(rp.array, dummy.matrix.elements);
     const radius = Math.max(...footprint.map((p) => Math.hypot(p.x - x, p.z - z)));
-    if (overlapsFootprint(x, z, radius, chestFootprint)) continue;
+    if (overlapsChestScenery(x, z, radius)) continue;
+    // 三块中央石头不补位，随机序列也保持不变，左右和背景石头不会因此重新洗牌。
+    candidateRockCount++;
+    if (isCenterMeadowRock(x, z)) continue;
     (isForegroundRock(footprint) ? foregroundRocks : backgroundRocks).push(dummy.matrix.clone());
     rockCount++;
     rockFootprints.push(footprint);
@@ -108,100 +117,58 @@ export async function createTerrain(init: Initialization) {
   );
   blade.setIndex([0, 1, 2, 1, 3, 2, 2, 3, 4]);
   blade.computeVertexNormals();
-  const wind = { value: 0 },
-    windStrength = { value: 1 };
-  const grassMaterial = new THREE.MeshStandardMaterial({
-    color: 0xb3bc83,
-    emissive: 0x182413,
-    emissiveIntensity: 0.25,
-    roughness: 1,
-    side: THREE.DoubleSide,
-  });
-  grassMaterial.onBeforeCompile = (shader) => {
-    shader.uniforms.uWindTime = wind;
-    shader.uniforms.uWindStrength = windStrength;
-    shader.vertexShader =
-      "uniform float uWindTime; uniform float uWindStrength;\n" +
-      shader.vertexShader;
-    shader.vertexShader = shader.vertexShader.replace(
-      "#include <begin_vertex>",
-      `#include <begin_vertex>
-      transformed.x += sin(uWindTime * 1.4 + instanceMatrix[3].x * 0.8 + instanceMatrix[3].z) * position.y * position.y * 0.24 * uWindStrength;`,
-    );
-  };
-  const grass = new THREE.InstancedMesh(blade, grassMaterial, quality.grass);
+  const grassMaterials = createGrassMaterials();
+  const grass = new THREE.InstancedMesh(blade, grassMaterials.material, quality.grass);
+  // 深度通道复用风动变形，且独立登记释放；打开投影后草簇才会在地面留下真实阴影。
+  grass.customDepthMaterial = init.track(grassMaterials.depth);
   group.add(grass);
   const color = new THREE.Color();
-  let clusterX = 0,
-    clusterZ = 0;
+  const tuftEnds: number[] = [];
+  const tuftCenters: { x: number; z: number }[] = [];
   let grassCount = 0;
   for (let i = 0; grassCount < quality.grass && i < quality.grass * 8; i++) {
     // 避让检查会遍历岩石轮廓，按尝试次数切批，包含未成功放置的草叶。
     if (i % 16 === 0) { const pause = init.checkpoint(); if (pause) await pause; }
     // 成簇散布，远处草叶自动缩小；盒体内不生成草，但边缘可自然遮挡脚部。
-    if (i % 5 === 0) {
-      clusterX = (random() - 0.5) * 24;
-      clusterZ = random() * 18 - 5;
+    const tuft = sampleGrassTuft(random);
+    if (!tuft) continue;
+    // 簇间保留距离，防止多个紧凑根部重叠后又连成均匀草海。
+    if (tuftCenters.some(center => Math.hypot(center.x - tuft.x, center.z - tuft.z) < 0.4)) continue;
+    if (grassCount + tuft.blades.length > quality.grass) break;
+    // 按整簇检查每片草的完整摆动包络；靠近石头或盒盖时整簇跳过，避免剩下零散几片。
+    if (tuft.blades.some(({ x, z, size, lean }) => {
+      const reach = grassReach(size, lean);
+      return overlapsChestScenery(x, z, reach) ||
+        rockFootprints.some(footprint => overlapsFootprint(x, z, reach, footprint));
+    })) continue;
+    for (const { x, z, size, yaw, lean } of tuft.blades) {
+      dummy.position.set(x, groundHeight(x, z) - 0.015, z);
+      dummy.rotation.set(0, yaw, lean);
+      dummy.scale.setScalar(size);
+      dummy.updateMatrix();
+      grass.setMatrixAt(grassCount, dummy.matrix);
+      // 簇内轻微明暗差保留层次，色相统一，避免黄绿叶片交错产生杂乱感。
+      color.setHSL(tuft.hue, 0.42, tuft.lightness + random() * 0.035);
+      grass.setColorAt(grassCount++, color);
     }
-    let x = clusterX + (random() - 0.5) * 0.35,
-      z = clusterZ + (random() - 0.5) * 0.35;
-    if (Math.abs(x) < 1.86 && Math.abs(z) < 0.86) {
-      x += Math.sign(x || 1) * 2.0;
-    }
-    const density = fbm(x * 1.5 + 3, z * 1.5 + 8);
-    const size =
-      (0.25 + random() * 0.5) * (z < -3 ? 0.65 : 1) * (0.6 + density);
-    const yaw = random() * Math.PI * 2, lean = (random() - 0.5) * 0.3;
-    const reach = grassReach(size, lean);
-    if (overlapsFootprint(x, z, reach, chestFootprint) ||
-      rockFootprints.some((footprint) => overlapsFootprint(x, z, reach, footprint))) continue;
-    dummy.position.set(x, groundHeight(x, z) - 0.015, z);
-    dummy.rotation.set(0, yaw, lean);
-    dummy.scale.setScalar(size);
-    dummy.updateMatrix();
-    grass.setMatrixAt(grassCount, dummy.matrix);
-    color.setHSL(
-      0.18 + random() * 0.09,
-      0.25 + random() * 0.3,
-      0.32 + random() * 0.23,
-    );
-    grass.setColorAt(grassCount++, color);
+    tuftEnds.push(grassCount);
+    tuftCenters.push({ x: tuft.x, z: tuft.z });
   }
-  grass.receiveShadow = true;
+  grass.name = "terrain-grass";
+  grass.castShadow = grass.receiveShadow = true;
   group.add(grass);
 
-  // 花朵以少量实例点缀；花色压低，避免抢占宝盒的暖光焦点。
-  const flowers = new THREE.InstancedMesh(
-    new THREE.SphereGeometry(0.034, 5, 3),
-    new THREE.MeshStandardMaterial({ color: 0xe7d9b4, roughness: 0.9 }),
-    quality.flowers,
-  );
-  group.add(flowers);
-  let flowerCount = 0;
-  for (let i = 0; flowerCount < quality.flowers && i < quality.flowers * 8; i++) {
-    const pause = init.checkpoint(); if (pause) await pause;
-    let x = (random() - 0.5) * 17,
-      z = random() * 12 - 3;
-    if (Math.abs(x) < 2 && Math.abs(z) < 1) x += 2.3;
-    // 花头同样避开石体和盒盖，避免修复草叶后留下穿石花朵。
-    if (overlapsFootprint(x, z, 0.04, chestFootprint) ||
-      rockFootprints.some((footprint) => overlapsFootprint(x, z, 0.04, footprint))) continue;
-    dummy.position.set(x, groundHeight(x, z) + 0.12 + random() * 0.15, z);
-    dummy.rotation.set(0, 0, 0);
-    dummy.scale.set(1, 0.45, 1);
-    dummy.updateMatrix();
-    flowers.setMatrixAt(flowerCount, dummy.matrix);
-    flowers.setColorAt(flowerCount++, color.set(i % 3 ? 0xd0c3a2 : 0xc9a74c));
-  }
-  group.add(flowers);
   // 达到尝试上限时不绘制未初始化实例；轻量模式仍沿用同一批通过避让的对象。
-  grass.count = grassCount; rocks.count = rockCount; flowers.count = flowerCount;
+  grass.count = grassCount; rocks.count = rockCount;
+  // 在首次画质截断前计算全部实例的包围盒；超宽屏、手机旋转和完整开盖共用稳定覆盖范围。
+  grass.computeBoundingBox(); rocks.computeBoundingBox();
+  const shadowBounds = grass.boundingBox!.clone().union(rocks.boundingBox!).expandByScalar(0.8);
   let qualityRevision = 0;
   return {
     group,
+    shadowBounds,
     update(time: number, reduced: boolean) {
-      wind.value = time;
-      windStrength.value = reduced ? 0 : 1;
+      return grassMaterials.update(time, reduced);
     },
     async setQuality(mobile: boolean) {
       // 山体等待期间可能再次旋转屏幕，旧请求不能覆盖最新的植被数量。
@@ -211,8 +178,7 @@ export async function createTerrain(init: Initialization) {
       rocks.count = Math.min(preset.rocks, mobile ? backgroundRocks.length : rockCount);
       await mountains.setQuality(mobile);
       if (request !== qualityRevision || init.controller.signal.aborted) return;
-      grass.count = Math.min(preset.grass, grassCount);
-      flowers.count = Math.min(preset.flowers, flowerCount);
+      grass.count = grassCountForBudget(tuftEnds, preset.grass);
     },
   };
 }

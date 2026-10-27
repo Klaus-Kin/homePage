@@ -9,7 +9,7 @@ import { chestPlacement } from "./scene/chest-placement";
 import { chestMotionBounds, chestPose } from "./scene/chest-motion";
 import { createTerrain } from "./scene/terrain";
 import { createSky } from "./scene/sky";
-import { createMoonLight, syncMoonLight, preserveLandscapeLight } from "./scene/moonlight";
+import { createMoonLight, syncMoonLight, fitMoonShadow, preserveLandscapeLight } from "./scene/moonlight";
 
 export interface MoonScene {
   setHover(value: boolean): void;
@@ -126,8 +126,14 @@ export async function createScene(
   const moonLight = createMoonLight();
   // 主光对准实际宝盒中心；月球随响应式构图移动时，受光面与背月投影使用同一个方向。
   const moonTarget = new THREE.Vector3(chestPlacement.x, 0.3, chestPlacement.z);
+  const sceneShadowBounds = new THREE.Box3();
+  let shadowVolumeReady = false;
   function syncLighting() {
-    if (syncMoonLight(moonLight, sky.moon, moonTarget)) {
+    const directionChanged = syncMoonLight(moonLight, sky.moon, moonTarget);
+    // 月球位置随构图改变时重新拟合整片植被，解决旧固定范围漏掉宽屏左侧草簇的问题。
+    if (directionChanged || !shadowVolumeReady) {
+      fitMoonShadow(moonLight, sceneShadowBounds);
+      shadowVolumeReady = true;
       renderer.shadowMap.needsUpdate = true;
       recordResources = true;
     }
@@ -209,7 +215,8 @@ export async function createScene(
     host.dataset.lightSource = JSON.stringify(getLightScreenPosition());
     host.dataset.shadowMoving = String(frame.lid > 0 && frame.lid < 1);
     host.dataset.beamsVisible = String(!reduced && frame.glow > 0);
-    terrain.update(time, reduced);
+    // 草簇投影按风场节奏刷新；静止、减少动态与后台状态仍沿用按需渲染。
+    if (terrain.update(time, reduced)) renderer.shadowMap.needsUpdate = true;
     sky.update(time, reduced);
     syncLighting();
     renderer.render(scene, camera);
@@ -291,6 +298,10 @@ export async function createScene(
     chest = await createChest(init);
     performance.mark("moon-generation-end");
     scene.add(chest.box);
+    // 阴影范围同时合并盒盖完整扫掠体积，不能只扩大左右草地而裁掉竖起的上盖。
+    chest.box.updateMatrixWorld(true);
+    sceneShadowBounds.copy(motionBounds).applyMatrix4(chest.box.matrixWorld)
+      .union(terrain.shadowBounds).expandByScalar(0.1);
     scene.add(
       new THREE.HemisphereLight(0x9ebde8, 0x292719, 1.1),
       moonLight,

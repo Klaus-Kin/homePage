@@ -55,20 +55,20 @@ export const sceneConfig = {
     desktop: {
       pixelRatio: 1.75,
       shadowSize: 1024,
-      grass: 15000,
+      // 草叶集中成簇，降低总量，让簇间裸地在近景中清晰可见。
+      grass: 6000,
       clouds: 30,
       stars: 2000,
       rocks: 90,
-      flowers: 160,
     },
     mobile: {
       pixelRatio: 1.5,
       shadowSize: 512,
-      grass: 5000,
+      // 手机保留完整草簇，以更少的簇覆盖相同地形。
+      grass: 2400,
       clouds: 10,
       stars: 700,
       rocks: 40,
-      flowers: 55,
     },
   },
 } as const;

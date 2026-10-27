@@ -35,6 +35,17 @@ export function fbm(x: number, y: number) {
   );
 }
 
+/** 地表色斑在四边平滑闭合，颜色图与凹凸图共用同一数值，重复铺设时不再出现硬接缝。 */
+export function groundTextureValue(x: number, y: number) {
+  const u = x / 255, v = y / 255, span = 255 / 22;
+  const sx = u * u * (3 - 2 * u), sy = v * v * (3 - 2 * v);
+  const top = fbm(u * span, v * span) * (1 - sx) + fbm((u - 1) * span, v * span) * sx;
+  const bottom = fbm(u * span, (v - 1) * span) * (1 - sx) + fbm((u - 1) * span, (v - 1) * span) * sx;
+  // 微小颗粒同样首尾相接，并压低幅度，避免凹凸贴图把噪声放大成一道道沟槽。
+  const grain = noise((x % 255) * 0.73, (y % 255) * 0.73);
+  return (top * (1 - sy) + bottom * sy) * 0.8 + grain * 0.035 + 0.08;
+}
+
 /** 宝盒附近平缓，远离后自然起伏并向山谷下降；近坡一直延伸到相机后方。 */
 export function groundHeight(x: number, z: number) {
   // 平缓区覆盖上盖翻到左侧后的落点，避免完全展开时末端悬在山谷上方。
