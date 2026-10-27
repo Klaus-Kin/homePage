@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72" fill="none">
+  <!-- 双翎羽保留细长弧线与羽片轮廓，小尺寸下仍能辨认出凤翅紫金冠的造型。 -->
+  <defs>
+    <linearGradient id="crown-gold" x1="15" y1="17" x2="53" y2="66" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#927042"/>
+      <stop offset=".28" stop-color="#f0dc9e"/>
+      <stop offset=".53" stop-color="#b98b43"/>
+      <stop offset=".76" stop-color="#ebce82"/>
+      <stop offset="1" stop-color="#8c5c2b"/>
+    </linearGradient>
+    <linearGradient id="crown-purple" x1="36" y1="43" x2="36" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#73516b"/>
+      <stop offset="1" stop-color="#302435"/>
+    </linearGradient>
+    <linearGradient id="plume-gold" x1="7" y1="5" x2="30" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ead49b"/>
+      <stop offset=".5" stop-color="#c6a361"/>
+      <stop offset="1" stop-color="#8f6b39"/>
+    </linearGradient>
+    <g id="crown-plume">
+      <path d="M29 49C27 34 24 19 14 12C8 8 5 9 5 14C2 8 6 4 12 6C26 11 31 32 32 47Z" fill="url(#plume-gold)"/>
+      <path d="M30.5 48C28 29 23 13 10 8" stroke="#f1dca6" stroke-width=".9" stroke-linecap="round"/>
+      <!-- 羽片沿着弯曲羽轴展开，避免把两根长翎画成普通皇冠的尖角。 -->
+      <path d="M26 28L29 26M23.5 22L26 20M20 17L22 14.5M15 12L16 8M28 35L30.5 33" stroke="#644a2d" stroke-width=".8" stroke-linecap="round"/>
+    </g>
+  </defs>
+  <use href="#crown-plume"/>
+  <use href="#crown-plume" transform="translate(72 0) scale(-1 1)"/>
+  <!-- 冠体以起伏的金属护额、中央紫色镶片和双侧凤翅组成，不另加圆形外框。 -->
+  <path d="M16 48L22 44L27 49L30 40L36 35L42 40L45 49L50 44L56 48L53 60Q36 67 19 60Z" fill="url(#crown-gold)" stroke="#5f4429" stroke-width="1.2" stroke-linejoin="round"/>
+  <path d="M25 52L29 47L31 42L36 39L41 42L43 47L47 52L44 60Q36 62 28 60Z" fill="url(#crown-purple)" stroke="#e1c382" stroke-width="1.1" stroke-linejoin="round"/>
+  <path d="M36 42L40 48L36 54L32 48Z" fill="url(#crown-gold)"/>
+  <path d="M36 44L37.8 48L36 50.5L34.2 48Z" fill="#f3deac"/>
+  <path d="M19 56Q36 61 53 56L52 61Q36 67 20 61Z" fill="url(#crown-gold)" stroke="#6e4d2c" stroke-width=".8"/>
+  <path d="M20 56.5Q36 61 52 56.5M23 62Q36 66 49 62" stroke="#f2dda6" stroke-width="1" stroke-linecap="round"/>
+  <path d="M21 48L24 52M51 48L48 52M29 44L27 51M43 44L45 51" stroke="#f0d99c" stroke-width="1.2" stroke-linecap="round"/>
+</svg>

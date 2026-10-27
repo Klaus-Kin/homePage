@@ -157,17 +157,15 @@ h1 > strong {
   letter-spacing: 2px;
   color: #dac399;
 }
-.arrow-circle {
-  width: 39px;
-  height: 39px;
-  border: 1px solid #ba9f6e6b;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-family: Arial, sans-serif;
-  font-size: 20px;
+/* 冠饰使用完整 SVG 轮廓，双翎羽与冠体一起缩放，固定占位避免图片加载时挤动入口文字。 */
+.phoenix-crown {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: block;
+  object-fit: contain;
   transition:
-    background 0.25s,
+    filter 0.25s,
     transform 0.25s;
 }
 .journey-link small {
@@ -179,9 +177,10 @@ h1 > strong {
   color: #818b9b;
   margin-top: 6px;
 }
-.journey-link:hover .arrow-circle {
-  background: #ddba7120;
-  transform: translate(2px, -2px);
+.journey-link:hover .phoenix-crown,
+.journey-link:focus-visible .phoenix-crown {
+  filter: brightness(1.15);
+  transform: translateY(-2px);
 }
 
 #scene {
@@ -333,10 +332,9 @@ h1 > strong {
     letter-spacing: 1px;
     gap: 11px;
   }
-  .arrow-circle {
-    width: 32px;
-    height: 32px;
-    font-size: 17px;
+  .phoenix-crown {
+    width: 36px;
+    height: 36px;
   }
   .journey-link small {
     font-size: 6px;
@@ -412,10 +410,9 @@ h1 > strong {
     gap: 9px;
     min-height: 36px;
   }
-  .arrow-circle {
-    width: 27px;
-    height: 27px;
-    font-size: 15px;
+  .phoenix-crown {
+    width: 30px;
+    height: 30px;
   }
   .journey-link small {
     display: none;
