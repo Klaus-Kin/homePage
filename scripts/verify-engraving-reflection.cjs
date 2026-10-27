@@ -20,7 +20,7 @@ async (page) => {
         banks: document.querySelectorAll('.seal-glyph-bank').length,
         unresolved: [...document.querySelectorAll('use[href^="#seal-"]')].filter(el => !document.getElementById(el.getAttribute('href').slice(1))).length };
     });
-    if (typography.banks !== 1 || typography.unresolved || typography.characters !== 50 ||
+    if (typography.banks !== 1 || typography.unresolved || typography.characters !== 0 ||
       typography.text !== '开发者·写作者·时空旅人写代码也写故事此间有故事，亦有远方把热爱写进代码，把故事交给月光')
       throw new Error(JSON.stringify({ name, typography }));
     const frames = [];

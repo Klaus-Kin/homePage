@@ -41,7 +41,7 @@ test("golden hoop and critical styles exist before the module entry", () => {
   assert.match(html, /prefers-reduced-motion: reduce[\s\S]*animation: none/);
   assert.match(html, /<noscript[\s\S]*#moon-loader[\s\S]*display: none/);
   // 无脚本与慢入口共用同一份静态内容，欢迎语只允许出现在加载层，主页品牌必须移除。
-  // 加载语与正文使用同一字形库，辅助文本与标点组合后仍必须是原文。
+  // 加载语与正文恢复原生简体显示，文案和标点仍必须是原文。
   const labelStart = html.indexOf('<span class="loading-label">');
   assert.equal(html.slice(labelStart, html.indexOf('</div>', labelStart)).replace(/<[^>]+>/g, "").trim(), "月色正好，欢迎来访");
   assert.equal((html.match(/class="loading-label"/g) ?? []).length, 1);
