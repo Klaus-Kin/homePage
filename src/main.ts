@@ -1,4 +1,5 @@
 import { pageConfig } from "./config";
+import { installStaffCursor } from "./staff-cursor";
 import {
   JourneyState,
   isActivation,
@@ -23,6 +24,8 @@ const whiteout = document.querySelector<HTMLElement>("#whiteout")!;
 const sceneHost = document.querySelector<HTMLElement>("#scene")!;
 const motionPreference = matchMedia("(prefers-reduced-motion: reduce)");
 const coarsePointer = matchMedia("(pointer: coarse)");
+// 光标独立于 WebGL 就绪状态工作，场景正常降级时仍能处理窗口边缘。
+const disposeStaffCursor = installStaffCursor();
 const state = new JourneyState();
 let scene: MoonScene | undefined;
 // 离页时动态导入可能仍在等待，后续回调必须保持终止状态。
@@ -221,6 +224,7 @@ window.addEventListener("pageshow", (event) => {
 });
 window.addEventListener("pagehide", () => {
   leaving = true;
+  disposeStaffCursor();
   cancelAnimationFrame(transitionRaf);
   scene?.dispose();
 });

@@ -36,7 +36,7 @@ button:disabled {
 ::selection {
   background: #b398694d;
 }
-/* 桌面精细指针采用原生光标：3,3 对准缩小后棒头的前缘，不使用有跟随延迟的页面装饰层。 */
+/* 桌面保留原生金箍棒回退；图片就绪后由固定热点的图层显示，使越界部分自然裁切且不改变方向。 */
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
   :root {
     cursor: url("/assets/golden-staff-cursor.svg") 3 3, auto;
@@ -49,6 +49,34 @@ button:disabled {
   #box-button:disabled {
     cursor: wait;
   }
+  /* 仅在图层已经可见时隐藏系统光标，链接和宝盒继承同一显示策略；禁用按钮仍显示等待状态。 */
+  :root.staff-cursor-active,
+  .staff-cursor-active a,
+  .staff-cursor-active #box-button:not(:disabled) {
+    cursor: none;
+  }
+  :root:has(#box-button:disabled:hover) .staff-cursor-layer {
+    visibility: hidden;
+  }
+}
+/* 全视口透明裁切层不参与布局、命中和可访问名称，不产生页面滚动或覆盖宝盒的点击目标。 */
+.staff-cursor-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+.staff-cursor-layer img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 72px;
+  height: 72px;
+  max-width: none;
+  will-change: transform;
+  user-select: none;
 }
 #app {
   /* 截图原尺寸与宝盒投影共同维护；所有降级元素共享同一个 cover 平面。 */
