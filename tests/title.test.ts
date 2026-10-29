@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { renderStaticHtml } from "../src/static-html.ts";
-import { renderSealTitleLine, renderSealCopy, renderSealGlyphDefinitions } from "../src/title.ts";
+import { renderSealTitleLine } from "../src/title.ts";
+import { renderCalligraphyCopy } from "../src/calligraphy.ts";
 import { pageConfig } from "../src/config.ts";
 import { glyphs } from "../src/scene/seal-glyphs.ts";
 import { titleGlyphs } from "../src/title-glyphs.ts";
@@ -16,21 +17,22 @@ test("static heading contains both seal lines and original accessible wording", 
   assert.equal(html.split(`<path d="${glyphs["光"][0]}"`).length - 1, 1);
 });
 
-// 所有指定汉字复用同一个字形表；标点与空格保持普通文本，不换形、不改码点。
-test("all requested copy uses shared seal glyphs while punctuation stays unchanged", () => {
-  const lines = [...pageConfig.description, "循着月光，走进我的世界", "月色正好，欢迎来访"];
-  const bank = renderSealGlyphDefinitions([...pageConfig.titleLines, ...lines]);
+// 指定文案与欢迎语共享题词行书字形；重复汉字只定义一次，原文、标点和空格完整提供给辅助技术。
+test("static copy shares calligraphy outlines and preserves accessible wording", () => {
+  const lines = [...pageConfig.description, pageConfig.entranceLabel, pageConfig.loadingLabel];
+  const page = renderStaticHtml(readFileSync(new URL("../index.html", import.meta.url), "utf8"), "/blog");
   for (const line of lines) {
-    const html = renderSealCopy(line);
-    for (const letter of line) if (/\p{Script=Han}/u.test(letter)) {
-      assert.ok(html.includes(`<span class="sr-only">${letter}</span>`), `缺少汉字 ${letter}`);
-      assert.ok(html.includes('<use href="#seal-'));
-    }
+    const html = renderCalligraphyCopy(line);
     assert.equal(html.replace(/<[^>]+>/g, ""), line);
+    assert.ok(page.includes(`<span class="sr-only calligraphy-text">${line}</span>`));
+    for (const letter of line) {
+      const id = `calligraphy-${letter.codePointAt(0)!.toString(16)}`;
+      assert.ok(html.includes(`href="#${id}"`), `缺少行书字形 ${letter}`);
+      assert.equal(page.split(`id="${id}"`).length - 1, 1, `重复定义行书字形 ${letter}`);
+    }
   }
-  const ids = [...bank.matchAll(/id="([^"]+)"/g)].map(match => match[1]);
-  assert.equal(new Set(ids).size, ids.length);
-  assert.ok(renderSealTitleLine("月光宝盒").includes('<use href="#seal-'));
+  assert.doesNotMatch(page, /@font-face|<text\b|__MOON_CALLIGRAPHY_GLYPHS__/);
+  assert.equal((page.match(/class="calligraphy-copy"/g) ?? []).length, 5);
 });
 
 // 配置扩展时仍能显示未收录字，并把特殊字符作为文本处理。

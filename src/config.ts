@@ -3,9 +3,9 @@ export const pageConfig = {
   title: "程序猿的月光宝盒",
   titleLines: ["程序猿的", "月光宝盒"],
   description: ["开发者 · 写作者 · 时空旅人", "写代码也写故事", "此间有故事，亦有远方", "把热爱写进代码，把故事交给月光"],
-  // 页面、加载层与静态降级共用文案，统一由同一小篆渲染器处理，标点保持原样。
+  // 页面、加载层与静态降级共用配置及题词行书；各处保留原有标点，欢迎语使用英文逗号。
   entranceLabel: "循着月光，走进我的世界",
-  loadingLabel: "月色正好，欢迎来访",
+  loadingLabel: "月色正好,欢迎来访",
   blogUrl: "https://example.com/blog",
   // 光幕铺满后开始题词；完成实际帧立即落墨，导航等待实际全黑呈现。
   transition: { charge: 800, fade: 2000, reducedFade: 600, inscriptionDelay: 120, write: 3000, reducedWrite: 180 },

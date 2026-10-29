@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { renderStaticHtml } from "../src/static-html.ts";
 import { runInNewContext } from "node:vm";
+import { renderCalligraphyCopy } from "../src/calligraphy.ts";
+import { calligraphyGlyphs } from "../src/calligraphy-glyphs.ts";
 
+const loadingSvg = renderCalligraphyCopy("月色正好,欢迎来访", true);
 const html = renderStaticHtml(readFileSync(new URL("../index.html", import.meta.url), "utf8"), "/blog");
 
 // 不加载主模块，直接执行 HTML 守卫，覆盖最早可用的加载与失败出口。
@@ -41,9 +44,15 @@ test("golden hoop and critical styles exist before the module entry", () => {
   assert.match(html, /prefers-reduced-motion: reduce[\s\S]*animation: none/);
   assert.match(html, /<noscript[\s\S]*#moon-loader[\s\S]*display: none/);
   // 无脚本与慢入口共用同一份静态内容，欢迎语只允许出现在加载层，主页品牌必须移除。
-  // 加载语与正文恢复原生简体显示，文案和标点仍必须是原文。
+  // 欢迎语行书沿用题词字体来源，英文逗号与可访问文本一致，颜色仍继承加载层原金色。
   const labelStart = html.indexOf('<span class="loading-label">');
-  assert.equal(html.slice(labelStart, html.indexOf('</div>', labelStart)).replace(/<[^>]+>/g, "").trim(), "月色正好，欢迎来访");
+  assert.equal(html.slice(labelStart, html.indexOf('</div>', labelStart)).replace(/<[^>]+>/g, "").trim(), "月色正好,欢迎来访");
+  assert.equal([...loadingSvg.matchAll(/data-calligraphy-character="([^"]+)"/g)].map(match => match[1]).join(""), "月色正好,欢迎来访");
+  assert.match(loadingSvg, /fill="currentColor"/);
+  assert.match(html, /#moon-loader\s*\{[^}]*color: #cbb77f;/);
+  assert.doesNotMatch(loadingSvg, /<text|@font-face|<image|fill="#/);
+  const inscription = readFileSync(new URL("../src/assets/inscription.svg", import.meta.url), "utf8");
+  assert.equal(calligraphyGlyphs[","].path, inscription.match(/id="ink-0-3-full" d="([^"]+)"/)![1]);
   assert.equal((html.match(/class="loading-label"/g) ?? []).length, 1);
   assert.doesNotMatch(html, /class="(?:site-header|brand|night-note)\b/);
 });

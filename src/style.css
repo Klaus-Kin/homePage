@@ -1,4 +1,4 @@
-/* 标题使用构建时生成的同源小篆矢量字形，正文保留清晰的系统无衬线字体。 */
+/* 标题使用同源小篆矢量字形；指定中文文案复用题词行书，英文仍沿用系统字体。 */
 :root {
   font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
   color: #e6e8ed;
@@ -119,7 +119,7 @@ button:disabled {
 .intro {
   position: absolute;
   left: 10%;
-  /* 整组介绍共用同一外层定位，内部字号、行距与入口间距保持原样。 */
+  /* 整组介绍共用同一外层定位，字号与行距由各文案样式按屏幕尺寸维护。 */
   top: 25%;
   z-index: 4;
   /* 介绍区的透明留白可能覆盖宝盒上缘；容器不接收指针，文字入口单独恢复命中。 */
@@ -180,11 +180,20 @@ h1 > strong {
   background: linear-gradient(90deg, #9f8a66a6, #9f8a6615);
 }
 .description {
-  font-size: clamp(13px, 1.05vw, 17px);
-  line-height: 2.15;
+  /* 行书细笔画需要更大字框，适度收紧行距，让放大后的四行仍与入口保持清楚层次。 */
+  font-size: clamp(20px, 1.65vw, 26px);
+  line-height: 1.75;
   letter-spacing: 2.2px;
   color: #aeb8c9;
   margin: 20px 0 27px;
+}
+/* 行书继承各处文案字号和 currentColor；整行 SVG 与文字基线对齐，不新增字体声明。 */
+.calligraphy-copy {
+  display: inline-block;
+  max-width: 100%;
+  height: 1em;
+  vertical-align: -.1em;
+  overflow: visible;
 }
 .journey-link {
   /* 保留正文入口的鼠标、触摸与悬停交互，不让父容器的透传规则禁用链接。 */
@@ -193,7 +202,7 @@ h1 > strong {
   align-items: center;
   gap: 14px;
   min-height: 48px;
-  font-size: 11px;
+  font-size: 18px;
   letter-spacing: 2px;
   color: #dac399;
 }
@@ -372,10 +381,10 @@ h1 > strong {
   }
 
   .description {
-    font-size: 13px;
+    font-size: 18px;
   }
   .journey-link {
-    font-size: 10px;
+    font-size: 17px;
   }
 }
 /* 手机使用独立竖屏构图，文字在上、宝盒在下，静态背景采用较小的本地资源。 */
@@ -408,13 +417,14 @@ h1 > strong {
     font-size: 10px;
   }
   .description {
-    font-size: 11px;
-    line-height: 2;
+    /* 手机维持可读的 16px 行书；长句仍完整排在原介绍区域内。 */
+    font-size: 16px;
+    line-height: 1.75;
     letter-spacing: 1.6px;
     margin: 13px 0 15px;
   }
   .journey-link {
-    font-size: 9px;
+    font-size: 16px;
     letter-spacing: 1px;
     gap: 11px;
   }
@@ -486,13 +496,14 @@ h1 > strong {
     width: 90%;
   }
   .description {
-    font-size: 9px;
+    /* 矮屏也不退回难辨认的小字，四行与入口通过较紧行距适配。 */
+    font-size: 14px;
     letter-spacing: 1px;
-    line-height: 1.7;
+    line-height: 1.55;
     margin: 8px 0;
   }
   .journey-link {
-    font-size: 8px;
+    font-size: 14px;
     gap: 9px;
     min-height: 36px;
   }
@@ -504,6 +515,18 @@ h1 > strong {
     display: none;
   }
 
+}
+/* 500px 起场景切回常规相机；同步压缩标题与留白，保留放大的正文和入口字号，避免临界横竖屏压住宝盒。 */
+@media (min-height: 500px) and (max-height: 600px) {
+  /* 提高此处选择器优先级，让末段平板和静态背景规则不会恢复旧的顶部留白。 */
+  #app .intro { top: 60px; }
+  .eyebrow { margin-bottom: 12px; }
+  h1 { font-size: clamp(38px, 7.5vw, 48px); line-height: 1.08; }
+  h1 > strong { margin-top: 5px; }
+  .title-rule { margin-top: 7px; }
+  .description { line-height: 1.6; margin: 10px 0 12px; }
+  /* 备用原生入口使用顶部独立空间，保持可点击尺寸，避免额外遮住介绍文字或静态宝盒。 */
+  #app .noscript-entry { top: 8px; bottom: auto; padding: 8px 12px; min-height: 44px; font-size: 12px; }
 }
 /* 系统减少动态偏好即时生效；后台标签页同样暂停 CSS 环境动画。 */
 @media (prefers-reduced-motion: reduce) {
@@ -617,7 +640,8 @@ h1 > strong {
     --static-box-h: calc(123.453125 / 844);
   }
 }
-@media (max-height: 499px) {
+/* 短横屏降级复用现有横版背景和对应热点，避免竖版 cover 放大后的宝盒占满文字区域。 */
+@media (max-height: 499px), (min-height: 500px) and (max-height: 600px) and (orientation: landscape) {
   #app {
     --static-image: url("/assets/scene-short.webp");
     --static-aspect: calc(844 / 390);

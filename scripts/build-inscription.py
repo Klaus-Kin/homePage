@@ -12,6 +12,7 @@ import urllib.request
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--tooling", type=Path)
+parser.add_argument("--loading-only", "--copy-only", action="store_true", help="仅生成页面静态行书，复用题词字体与轮廓提取，不改写题词资源或授权文件")
 args = parser.parse_args()
 if args.tooling:
     sys.path.insert(0, str(args.tooling.resolve()))
@@ -186,6 +187,47 @@ def partition(shape, trajectories):
 
 
 font = TTFont(CACHE / "ZhiMangXing-Regular.ttf")
+
+# 欢迎语、介绍与入口共用题词字体、坐标变换和轮廓提取；同字只导出一次，不新增字体声明或下载。
+def build_static_glyphs():
+    import json
+    import re
+    import unicodedata
+    from shapely.affinity import translate
+    # 文案仍以页面配置为唯一来源；标点与空格也从同一字体提取，辅助技术读取完整原文。
+    config = (ROOT / "src/config.ts").read_text(encoding="utf-8")
+    lines = json.loads(re.search(r'description:\s*(\[[^\]]*\])', config).group(1))
+    lines += [json.loads(re.search(rf'{key}:\s*("[^"]*")', config).group(1)) for key in ("entranceLabel", "loadingLabel")]
+    cmap = font.getBestCmap()
+    result = ['// 由 scripts/build-inscription.py 从题词同源志莽行书生成；授权见 /assets/inscription.LICENSE.txt。',
+              'export const calligraphyGlyphs: Record<string, { path: string; width: number }> = {']
+    for character in sorted(set("".join(lines))):
+        if character == "·":
+            # 源字体没有间隔号，用同字体句点的墨面居中排成间隔号，不引入第二种字体或改变原文码点。
+            shape = outline(font, ".")
+            left, top, right, bottom = shape.bounds
+            shape = translate(shape, 20 - (left + right) / 2, 42 - (top + bottom) / 2)
+            width = 40
+        else:
+            if ord(character) not in cmap:
+                raise ValueError(f"页面静态行书缺少字形 U+{ord(character):04X}：{character!r}")
+            # 汉字及全角标点沿用题词的百单位字框；英文逗号保持紧凑，空格保留源字体的实际宽度。
+            width = 100 if unicodedata.east_asian_width(character) in ("W", "F") else font["hmtx"].metrics[cmap[ord(character)]][0] / 10
+            if character == ",":
+                width = 22
+            shape = outline(font, character)
+        glyph = {"path": path_for(shape), "width": width}
+        result.append(f'  {json.dumps(character, ensure_ascii=False)}: {json.dumps(glyph, ensure_ascii=False)},')
+    result.append('};')
+    asset = ROOT / "src/calligraphy-glyphs.ts"
+    asset.write_text("\n".join(result) + "\n", encoding="utf-8")
+    print(f"Static glyph bank: {asset.stat().st_size} bytes")
+
+
+build_static_glyphs()
+if args.loading_only:
+    sys.exit(0)
+
 bank = {}
 for character, pens in PENS.items():
     shape = outline(font, character)

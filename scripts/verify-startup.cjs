@@ -49,7 +49,10 @@ async (page) => {
             welcome: (() => {
               const label = document.querySelector('#moon-loader .loading-label');
               const rotor = document.querySelector('#moon-loader .hoop-rotor');
-              return label.textContent === '月色正好，欢迎来访' &&
+              const lettering = label.querySelector('.loading-calligraphy');
+              return label.textContent.trim() === '月色正好,欢迎来访' &&
+                lettering?.getAttribute('fill') === 'currentColor' &&
+                getComputedStyle(lettering).fill === 'rgb(203, 183, 127)' &&
                 label.checkVisibility({checkOpacity:true, checkVisibilityCSS:true}) &&
                 label.getBoundingClientRect().top > rotor.getBoundingClientRect().bottom;
             })(),
@@ -99,7 +102,7 @@ async (page) => {
             throw new Error(`场景就绪后未显示 ${selector}`);
         }
         if (await target.locator('.brand, .night-note, .site-header').count() ||
-            (await target.locator('body').textContent()).includes('月色正好，欢迎来访'))
+            (await target.locator('body').textContent()).includes('月色正好,欢迎来访'))
           throw new Error('主页仍残留品牌或欢迎语');
         const sizes = [];
         for (let i = 0; i < 3; i++) {
