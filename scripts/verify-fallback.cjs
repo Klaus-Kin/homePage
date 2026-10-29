@@ -56,8 +56,10 @@ async (page) => {
     if (await target.locator("#moon-loader").count()) throw new Error(`${kind}: 加载层未移除`);
     await target.screenshot({ path: `output/playwright/${kind}.png` });
     await target
-      .getByRole("button", { name: "开启月光宝盒，前往博客" })
+      .getByRole("button", { name: "提示选择旅程入口" })
       .click();
+    if (await target.locator("#app").getAttribute("data-state") !== "idle") throw new Error("降级宝盒误启动转场");
+    await target.locator("[data-entrance=blog]").click();
     await target.waitForURL("https://example.com/blog");
     results.push({ kind, staticEntryWorks: true });
     await context.close();

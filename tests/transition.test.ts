@@ -26,13 +26,42 @@ test("reduced motion fades in 600ms without calculating navigation", () => {
 
 test("loading, repeated activation and redirect cannot restart the journey", () => {
   const state = new JourneyState();
-  assert.equal(state.begin(), false);
+  assert.equal(state.begin(pageConfig.blogUrl), false);
   state.ready();
-  assert.equal(state.begin(), true);
-  assert.equal(state.begin(), false);
+  assert.equal(state.begin(pageConfig.blogUrl), true);
+  assert.equal(state.begin(pageConfig.worldUrl), false);
   state.redirect();
-  assert.equal(state.begin(), false);
+  assert.equal(state.begin(pageConfig.worldUrl), false);
   assert.equal(state.phase, "redirect");
+});
+
+// 宝盒只提示选择，既不推进旅程也不锁定目的地；提示完成前重复激活必须被忽略。
+test("choice prompts remain idle, do not queue, and can be repeated after completion", () => {
+  const state = new JourneyState();
+  assert.equal(state.promptChoice(), false);
+  state.ready();
+  assert.equal(state.promptChoice(), true);
+  assert.equal(state.promptChoice(), false);
+  assert.equal(state.phase, "idle");
+  assert.equal(state.destination, null);
+  state.cancelChoicePrompt();
+  assert.equal(state.promptChoice(), true);
+});
+
+// 两个入口均可抢先接受正在提示的选择；同步锁定后，任何后续输入都不能改写地址。
+test("the first text entry locks its own destination and cancels the prompt", () => {
+  for (const destination of [pageConfig.blogUrl, pageConfig.worldUrl]) {
+    const state = new JourneyState();
+    state.ready();
+    state.promptChoice();
+    assert.equal(state.begin(destination), true);
+    assert.equal(state.choicePrompting, false);
+    assert.equal(state.destination, destination);
+    assert.equal(state.begin("https://other.test/"), false);
+    assert.equal(state.promptChoice(), false);
+    state.redirect();
+    assert.equal(state.destination, destination);
+  }
 });
 
 test("taps activate while swipes, long presses and different pointers do not", () => {

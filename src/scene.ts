@@ -4,6 +4,8 @@ import { ownTree } from "./scene/resources";
 import { fitCamera, projectBounds, keepBoundsInView, openingCameraPosition } from "./responsive";
 import { sceneConfig, pageConfig } from "./config";
 import { transitionFrame } from "./transition";
+import { choiceYaw, CHOICE_DURATION } from "./choice-prompt";
+import { VisibleTime } from "./inscription-timeline";
 import { createChest } from "./scene/chest";
 import { chestPlacement, selectChestPlacement } from "./scene/chest-placement";
 import { chestMotionBounds, chestPose } from "./scene/chest-motion";
@@ -12,6 +14,8 @@ import { createSky } from "./scene/sky";
 import { createMoonLight, syncMoonLight, fitMoonShadow, preserveLandscapeLight } from "./scene/moonlight";
 
 export interface MoonScene {
+  promptChoice(): void;
+  cancelChoicePrompt(): void;
   setHover(value: boolean): void;
   setTransition(value: number): void;
   getLightScreenPosition(): { x: number; y: number };
@@ -73,6 +77,9 @@ export async function createScene(
     currentPointer = new THREE.Vector2();
   const baseCamera = new THREE.Vector3(), openCamera = new THREE.Vector3();
   let lidProgress = 0;
+  // 提示时钟只累计前台可见时间，角度始终叠加在固定基准姿态上，避免累计漂移。
+  let promptClock: VisibleTime | null = null;
+  let baseYaw = Math.PI;
   // 预先计算待机近景与完整展开两个端点；播放中只插值，不触发边缘阈值修正。
   const motion = chestMotionBounds();
   const motionBounds = new THREE.Box3(
@@ -101,6 +108,8 @@ export async function createScene(
   function updateLoop() {
     if (disposed) return;
     lastTime = performance.now();
+    if (document.hidden) promptClock?.pause();
+    else promptClock?.sample(lastTime);
     renderer.setAnimationLoop(!reduced && !document.hidden ? animate : null);
     render();
   }
@@ -202,10 +211,18 @@ export async function createScene(
       : pageConfig.transition.charge + pageConfig.transition.fade;
     const frame = transitionFrame(transition * duration, reduced, pageConfig.transition);
     lidProgress = frame.lid;
-    if (chest.update(frame.lid, frame.glow, reduced, time)) {
+    const promptElapsed = promptClock?.sample(performance.now()) ?? CHOICE_DURATION;
+    if (promptElapsed >= CHOICE_DURATION) promptClock = null;
+    const yaw = baseYaw + choiceYaw(promptElapsed, reduced);
+    const yawChanged = chest.box.rotation.y !== yaw;
+    chest.box.rotation.y = yaw;
+    const lidChanged = chest.update(frame.lid, frame.glow, reduced, time);
+    if (lidChanged || yawChanged) {
       renderer.shadowMap.needsUpdate = true;
       syncTargets();
     }
+    // 验收读数只记录真实盒体姿态，不暴露可写场景接口。
+    host.dataset.choiceYaw = String(chest.box.rotation.y - baseYaw);
     // 补光只保留暗面木纹，方向性明暗由月光主导；激活后的暖光仍由盒内光源负责。
     warmLight.intensity = 2 + (hovered ? 0.2 : 0) + frame.glow;
     renderer.toneMappingExposure = 1.05 + frame.glow * 0.35;
@@ -254,6 +271,9 @@ export async function createScene(
   function resize() {
     if (disposed) return;
     size = fitCamera(camera, renderer, host);
+    // 取景只依据基准闭合姿态，尺寸变化不能把瞬时颤动写入相机端点。
+    const currentYaw = chest.box.rotation.y;
+    chest.box.rotation.y = baseYaw;
     // 只让 PC 模式移动盒体；手机位置、模型比例及取景预设继续沿用已确认的参数。
     const placement = selectChestPlacement(size.mobile);
     chest.box.position.set(placement.x, 0, placement.z);
@@ -275,6 +295,7 @@ export async function createScene(
     camera.position.copy(presetCamera);
     keepBoundsInView(closedBounds, chest.box.matrixWorld, camera, size.width, size.height);
     baseCamera.copy(camera.position);
+    chest.box.rotation.y = currentYaw;
     currentPointer.set(0, 0);
     pointer.set(0, 0);
     // 画质切换也分批生成；完成后才提交新几何，取消后的续体不再渲染。
@@ -306,6 +327,7 @@ export async function createScene(
     sky = await createSky(lunarMap, init);
     scene.add(sky.group);
     chest = await createChest(init);
+    baseYaw = chest.box.rotation.y;
     performance.mark("moon-generation-end");
     scene.add(chest.box);
     // 阴影范围同时合并盒盖完整扫掠体积，不能只扩大左右草地而裁掉竖起的上盖。
@@ -340,6 +362,21 @@ export async function createScene(
     throw error;
   }
   return {
+    promptChoice() {
+      if (disposed || promptClock) return;
+      promptClock = new VisibleTime();
+      promptClock.sample(performance.now());
+    },
+    cancelChoicePrompt() {
+      promptClock = null;
+      if (chest.box.rotation.y !== baseYaw) {
+        chest.box.rotation.y = baseYaw;
+        renderer.shadowMap.needsUpdate = true;
+        syncTargets();
+        // 立即归位后才交给转场，正常循环继续负责后续帧。
+        render();
+      }
+    },
     // 正常模式由唯一渲染循环提交，避免过渡回调与动画回调在同一帧重复绘制。
     setHover(value) {
       hovered = value;

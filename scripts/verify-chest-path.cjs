@@ -23,7 +23,7 @@ async (page) => {
       if (idle.angle !== 0 || idle.path.tip.x <= idle.path.hinge.x ||
           Math.abs(idle.path.tip.y - idle.path.hinge.y) > 0.4 * (idle.path.tip.x - idle.path.hinge.x))
         throw new Error(`${width}x${height}: 待机未闭合、长边未横放或铰链未在左端 ${JSON.stringify(idle)}`);
-      await target.locator("#box-button").focus();
+      await target.locator("[data-entrance=blog]").focus();
       await target.keyboard.press("Enter");
       let samples = 0;
       for (let step = 0; step < 11; step++) {

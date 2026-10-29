@@ -197,7 +197,8 @@ def build_static_glyphs():
     # 文案仍以页面配置为唯一来源；标点与空格也从同一字体提取，辅助技术读取完整原文。
     config = (ROOT / "src/config.ts").read_text(encoding="utf-8")
     lines = json.loads(re.search(r'description:\s*(\[[^\]]*\])', config).group(1))
-    lines += [json.loads(re.search(rf'{key}:\s*("[^"]*")', config).group(1)) for key in ("entranceLabel", "loadingLabel")]
+    # 两个入口与欢迎语共用同一离线字形表，不增加浏览器字体请求。
+    lines += [json.loads(re.search(rf'{key}:\s*("[^"]*")', config).group(1)) for key in ("entranceLabel", "worldLabel", "loadingLabel")]
     cmap = font.getBestCmap()
     result = ['// 由 scripts/build-inscription.py 从题词同源志莽行书生成；授权见 /assets/inscription.LICENSE.txt。',
               'export const calligraphyGlyphs: Record<string, { path: string; width: number }> = {']

@@ -19,7 +19,7 @@ test("static heading contains both seal lines and original accessible wording", 
 
 // 指定文案与欢迎语共享题词行书字形；重复汉字只定义一次，原文、标点和空格完整提供给辅助技术。
 test("static copy shares calligraphy outlines and preserves accessible wording", () => {
-  const lines = [...pageConfig.description, pageConfig.entranceLabel, pageConfig.loadingLabel];
+  const lines = [...pageConfig.description, pageConfig.entranceLabel, ...pageConfig.worldLabel.split(/(?<=,)/), pageConfig.loadingLabel];
   const page = renderStaticHtml(readFileSync(new URL("../index.html", import.meta.url), "utf8"), "/blog");
   for (const line of lines) {
     const html = renderCalligraphyCopy(line);
@@ -32,7 +32,7 @@ test("static copy shares calligraphy outlines and preserves accessible wording",
     }
   }
   assert.doesNotMatch(page, /@font-face|<text\b|__MOON_CALLIGRAPHY_GLYPHS__/);
-  assert.equal((page.match(/class="calligraphy-copy"/g) ?? []).length, 5);
+  assert.equal((page.match(/class="calligraphy-copy"/g) ?? []).length, 7);
 });
 
 // 配置扩展时仍能显示未收录字，并把特殊字符作为文本处理。

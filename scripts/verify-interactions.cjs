@@ -103,11 +103,13 @@ async (page) => {
   }
   await scenario("mouse double click", {}, async (target) => {
     const button = target.getByRole("button", {
-      name: "开启月光宝盒，前往博客",
+      name: "提示选择旅程入口",
     });
     const box = await button.boundingBox();
     await target.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await target.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    if (await target.locator("#app").getAttribute("data-state") !== "idle") throw new Error("宝盒误启动转场");
+    await target.locator("[data-entrance=blog]").click();
     await target.waitForFunction(
       () => document.querySelector("#whiteout").dataset.white === "true",
     );
@@ -127,6 +129,7 @@ async (page) => {
         (bounds.left + bounds.right) / 2,
         (bounds.top + bounds.bottom) / 2,
       );
+      await target.locator("[data-entrance=blog]").click();
     },
   );
   await scenario(
@@ -134,9 +137,10 @@ async (page) => {
     { viewport: { width: 1366, height: 768 }, reducedMotion: "reduce" },
     async (target) => {
       await target
-        .getByRole("button", { name: "开启月光宝盒，前往博客" })
+        .getByRole("button", { name: "提示选择旅程入口" })
         .focus();
       await target.keyboard.press("Enter");
+      await target.locator("[data-entrance=blog]").press("Enter");
     },
   );
   await scenario(
@@ -144,9 +148,10 @@ async (page) => {
     { reducedMotion: "reduce" },
     async (target) => {
       await target
-        .getByRole("button", { name: "开启月光宝盒，前往博客" })
+        .getByRole("button", { name: "提示选择旅程入口" })
         .focus();
       await target.keyboard.press("Space");
+      await target.locator("[data-entrance=blog]").press("Enter");
     },
   );
   await scenario(
@@ -186,13 +191,14 @@ async (page) => {
       );
       if (!capped) throw new Error("Mobile DPR cap failed");
       await target.touchscreen.tap(x, y);
+      await target.locator("[data-entrance=blog]").tap();
     },
   );
   await scenario(
     "text entry link",
     { reducedMotion: "reduce" },
     async (target) => {
-      await target.locator("[data-entrance]").click();
+      await target.locator("[data-entrance=blog]").click();
     },
   );
   await scenario(
@@ -201,6 +207,7 @@ async (page) => {
     async (target) => {
       await target.locator("#box-button").focus();
       await target.keyboard.press("Enter");
+      await target.locator("[data-entrance=blog]").press("Enter");
       await target.waitForFunction(
         () => document.querySelector("#whiteout").dataset.white === "true",
       );
@@ -213,6 +220,7 @@ async (page) => {
     async (target) => {
       await target.locator("#box-button").focus();
       await target.keyboard.press("Enter");
+      await target.locator("[data-entrance=blog]").press("Enter");
       await target.waitForTimeout(200);
       const before = await target.evaluate(() => {
         Object.defineProperty(document, "hidden", {

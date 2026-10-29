@@ -15,7 +15,7 @@ async (page) => {
     await page.setViewportSize({ width, height });
     await page.goto(origin); await page.waitForSelector('#app[data-state="idle"]');
     const typography = await page.evaluate(() => {
-      const copy = [...document.querySelectorAll('.description .seal-character, [data-entrance] .seal-character')];
+      const copy = [...document.querySelectorAll('.description .seal-character, [data-entrance=blog] .seal-character')];
       return { text: document.querySelector('.description').textContent.replace(/\s/g, ''), characters: copy.length,
         banks: document.querySelectorAll('.seal-glyph-bank').length,
         unresolved: [...document.querySelectorAll('use[href^="#seal-"]')].filter(el => !document.getElementById(el.getAttribute('href').slice(1))).length };

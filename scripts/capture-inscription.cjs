@@ -15,7 +15,7 @@ async (page) => {
     });
     observer.observe(document.querySelector("#inscription"),{attributes:true});
   });
-  await page.locator("#box-button").focus(); await page.keyboard.press("Enter");
+  await page.locator("[data-entrance=blog]").focus(); await page.keyboard.press("Enter");
   await page.waitForFunction(()=>+document.querySelector("#inscription").dataset.progress>.012);
   await page.mouse.move(-100,-100);
   await page.screenshot({path:"output/playwright/inscription-live-start.png"});

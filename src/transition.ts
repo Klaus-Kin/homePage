@@ -52,11 +52,23 @@ export function lightSpread(
 /** 状态门闩在同步调用内锁定入口，阻止鼠标、键盘和触屏重复触发导航。 */
 export class JourneyState {
   phase: Phase = "loading";
+  // 地址只能由首次被接受的文字入口写入，宝盒提示不拥有默认目的地。
+  private lockedDestination: string | null = null;
+  choicePrompting = false;
+  get destination() { return this.lockedDestination; }
   ready() {
     if (this.phase === "loading") this.phase = "idle";
   }
-  begin() {
+  promptChoice() {
+    if (this.phase !== "idle" || this.choicePrompting) return false;
+    this.choicePrompting = true;
+    return true;
+  }
+  cancelChoicePrompt() { this.choicePrompting = false; }
+  begin(destination: string) {
     if (this.phase !== "idle") return false;
+    this.lockedDestination = destination;
+    this.cancelChoicePrompt();
     this.phase = "transition";
     return true;
   }

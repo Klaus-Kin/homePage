@@ -3,6 +3,17 @@ async (page) => {
   const origin = new URL(page.url()).origin;
   const sizes = [
     [1920, 1080],
+    // 覆盖桌面短视口的排版断点，检查双入口完整可见及其与月亮、宝盒的间距。
+    [1920, 600],
+    [1920, 601],
+    [1920, 700],
+    [1920, 701],
+    [1920, 720],
+    [1920, 721],
+    [1920, 768],
+    [1920, 800],
+    [1920, 840],
+    [1920, 841],
     [1366, 768],
     [768, 1024],
     [1024, 1366],
@@ -19,8 +30,17 @@ async (page) => {
     [844, 390],
     [640, 600],
     [320, 480],
+    [320, 500],
+    [640, 500],
     [1100, 1000],
   ];
+  // 同时跨过 768px/1024px 宽度和 720px/840px 高度断点，避免只验证桌面和手机。
+  for (const width of [767, 768, 800, 900, 1023, 1024])
+    for (const height of [700, 701, 720, 721, 768, 800, 840, 841]) sizes.push([width, height]);
+  // 宽手机静态背景切换也必须保持正常场景的文字、月亮和宝盒关系。
+  sizes.push([320,721],[390,721],[430,721],[480,601],[480,721],[500,601],[500,721],
+    [600,601],[600,721],[640,601],[640,721],[700,601],[767,601],
+    [430,601],[431,601],[432,721],[433,721],[500,833],[500,834]);
   const results = [];
   await page.bringToFront();
   await page.goto(origin);
@@ -66,6 +86,12 @@ async (page) => {
         canvas = rect("canvas");
       const overlaps = (a, b) =>
         a.x < b.right && a.right > b.x && a.y < b.bottom && a.bottom > b.y;
+      // 检查宝盒内部网格的真实命中；容器边界或中心点正确并不代表盒面没有被入口遮挡。
+      const boxElement = document.querySelector('#box-button'), blockedBoxPoints = [];
+      for (const x of [.1, .3, .5, .7, .9]) for (const y of [.1, .3, .5, .7, .9]) {
+        const px = box.x + box.width * x, py = box.y + box.height * y;
+        if (!boxElement.contains(document.elementFromPoint(px, py))) blockedBoxPoints.push({ x: px, y: py });
+      }
       // 整组上移后，首行与月亮可以并排；检查真实文字片段，避免把容器的空白区当成遮挡。
       const textRects = [];
       const walker = document.createTreeWalker(document.querySelector('.intro'), NodeFilter.SHOW_TEXT);
@@ -86,7 +112,10 @@ async (page) => {
       };
       return {
         title,
+        // 页面禁止滚动，介绍区域必须整体留在视口内，不能只检查横向溢出。
+        titleVisible: title.x >= 0 && title.right <= innerWidth && title.y >= 0 && title.bottom <= innerHeight,
         box,
+        blockedBoxPoints,
         model,
         modelVisible:
           model.left >= 0 &&
@@ -122,6 +151,8 @@ async (page) => {
     });
     if (
       layout.overflow ||
+      layout.blockedBoxPoints.length ||
+      !layout.titleVisible ||
       !layout.boxVisible ||
       !layout.modelVisible ||
       layout.titleOverlap ||

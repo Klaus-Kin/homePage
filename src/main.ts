@@ -5,6 +5,7 @@ import { INSCRIPTION_TEXT } from "./inscription-strokes";
 import { InscriptionTimeline, VisibleTime } from "./inscription-timeline";
 import { InkTimeline, BlackPresentationGate } from "./ink-timeline";
 import { InkTransition } from "./ink-transition";
+import { CHOICE_DURATION, choiceKeyframes } from "./choice-prompt";
 import {
   JourneyState,
   isActivation,
@@ -22,7 +23,9 @@ declare global {
 
 const app = document.querySelector<HTMLElement>("#app")!;
 const button = document.querySelector<HTMLButtonElement>("#box-button")!;
-const entrance = document.querySelector<HTMLAnchorElement>("[data-entrance]")!;
+const entrances = [...document.querySelectorAll<HTMLAnchorElement>("[data-entrance]")];
+const choices = document.querySelector<HTMLElement>("#journey-choices")!;
+const choiceMotion = choices.querySelector<HTMLElement>(".choice-motion")!;
 const status = document.querySelector<HTMLElement>("#status")!;
 const whiteout = document.querySelector<HTMLElement>("#whiteout")!;
 const sceneHost = document.querySelector<HTMLElement>("#scene")!;
@@ -47,14 +50,18 @@ const inkTransition = new InkTransition(document.querySelector<SVGSVGElement>('#
 let inscriptionLocked = false;
 let renderedBlack = false;
 let gesture: { x: number; y: number; time: number; id: number } | null = null;
+// Web Animations 的完成事件维护提示门禁；盒体仍由场景既有循环绘制，不新增 RAF 或定时器。
+let choiceAnimation: Animation | undefined;
 
 // 文案只从配置写入文本节点，避免配置内容经由 HTML 注入页面。
 document.title = pageConfig.title;
 // 标题的小篆和可访问文字由构建时共用配置生成，保留静态 SVG，避免启动后换字。
 // 正文、入口和加载语也在 HTML 转换阶段复用同一小篆字形，启动时保留已有节点。
-entrance.href = pageConfig.blogUrl;
+entrances.forEach(link => {
+  link.href = link.dataset.entrance === "world" ? pageConfig.worldUrl : pageConfig.blogUrl;
+});
 document
-  .querySelectorAll<HTMLAnchorElement>("#static-box, .noscript-entry a")
+  .querySelectorAll<HTMLAnchorElement>(".noscript-entry a")
   .forEach((link) => {
     link.href = pageConfig.blogUrl;
   });
@@ -77,7 +84,7 @@ function showFallback(error: unknown) {
   state.ready();
   app.dataset.state = state.phase;
   button.disabled = state.phase !== "idle";
-  status.textContent = "已启用静态场景，仍可点击宝盒或文字入口进入博客";
+  status.textContent = "已启用静态场景，请选择文字入口开启旅程";
   // 正常的场景降级同样代表首屏就绪，应撤销 HTML 守卫的超时监听。
   // 降级入口优先恢复可用性，不等待正常场景的拉幕动画。
   void window.__moonBoot?.ready(true);
@@ -141,17 +148,49 @@ function animateTransition(now: number) {
   if (black && canNavigate) {
     state.redirect();
     app.dataset.state = state.phase;
-    window.location.assign(pageConfig.blogUrl);
+    window.location.assign(state.destination!);
     return;
   }
   transitionRaf = requestAnimationFrame(animateTransition);
 }
-function beginJourney() {
-  if (!state.begin()) return;
+/** 结束或取消均释放动画效果并恢复精确原位，避免后续转场继承抖动偏移。 */
+function cancelChoicePrompt() {
+  if (choiceAnimation) {
+    choiceAnimation.onfinish = null;
+    choiceAnimation.cancel();
+    choiceAnimation = undefined;
+  }
+  state.cancelChoicePrompt();
+  delete choices.dataset.prompt;
+  scene?.cancelChoicePrompt();
+  // 清空已结束的播报，让下一次独立提示再次产生可被辅助技术感知的文本变化。
+  if (state.phase === "idle" && status.textContent === "请选择一个文字入口，开启旅程") status.textContent = "";
+}
+
+/** 宝盒不选择地址；键盘激活后进入第一项，鼠标与触屏保留当前焦点。 */
+function promptChoice(keyboard = false) {
+  if (!state.promptChoice()) return;
+  choices.dataset.prompt = "true";
+  scene?.promptChoice();
+  choiceAnimation = choiceMotion.animate(choiceKeyframes(motionPreference.matches), {
+    duration: CHOICE_DURATION, easing: "linear", fill: "both",
+  });
+  choiceAnimation.onfinish = cancelChoicePrompt;
+  if (document.hidden) choiceAnimation.pause();
+  status.textContent = "请选择一个文字入口，开启旅程";
+  if (keyboard) entrances[0].focus({ preventScroll: true });
+}
+
+function beginJourney(destination: string) {
+  if (!state.begin(destination)) return;
+  cancelChoicePrompt();
   app.dataset.state = state.phase;
   button.disabled = true;
-  entrance.setAttribute("aria-disabled", "true");
-  status.textContent = "宝盒已开启，正在前往博客";
+  entrances.forEach(link => {
+    link.setAttribute("aria-disabled", "true");
+    link.tabIndex = -1;
+  });
+  status.textContent = "宝盒已开启，正在前往所选旅程";
   transitionRaf = requestAnimationFrame(animateTransition);
 }
 
@@ -177,7 +216,7 @@ button.addEventListener("pointerup", (event) => {
   gesture = null;
   if (button.hasPointerCapture(event.pointerId))
     button.releasePointerCapture(event.pointerId);
-  if (valid) beginJourney();
+  if (valid) promptChoice();
 });
 button.addEventListener("pointermove", (event) => {
   if (
@@ -193,7 +232,7 @@ button.addEventListener("lostpointercapture", () => {
   gesture = null;
 });
 button.addEventListener("click", (event) => {
-  if (event.detail === 0) beginJourney();
+  if (event.detail === 0) promptChoice(true);
 });
 button.addEventListener("pointerenter", (event) => {
   if (event.pointerType === "mouse") scene?.setHover(true);
@@ -204,13 +243,16 @@ button.addEventListener("blur", () => scene?.setHover(false));
 function onEntryClick(event: MouseEvent) {
   // 主模块只运行了一部分时也保留原生导航，不让已失效的状态机吞掉链接。
   if (window.__moonBoot?.failed) return;
+  // 接受首项后包括修饰键激活也不再执行，防止过渡期间另开目的地或改写地址。
+  if (state.phase !== "idle") { event.preventDefault(); return; }
   // 保留链接的标准修饰键行为；普通点击在当前标签页走泛白过渡。
   if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
-  beginJourney();
+  const link = event.currentTarget as HTMLAnchorElement;
+  beginJourney(link.dataset.entrance === "world" ? pageConfig.worldUrl : pageConfig.blogUrl);
 }
-// WebGL 降级后的宝盒链接和文字入口走同一题词流程；模块失效与无脚本仍沿用原生 href。
-document.querySelectorAll<HTMLAnchorElement>("[data-entrance], #static-box, .noscript-entry a")
+// WebGL 降级后的文字入口走同一题词流程；静态宝盒热点仅定位到选项区域。
+document.querySelectorAll<HTMLAnchorElement>("[data-entrance], .noscript-entry a")
   .forEach(link => link.addEventListener("click", onEntryClick));
 window.addEventListener(
   "pointermove",
@@ -229,28 +271,39 @@ window.addEventListener(
   },
   { passive: true },
 );
-motionPreference.addEventListener("change", () =>
-  scene?.setReducedMotion(motionPreference.matches),
-);
+/** 偏好切换只替换关键帧，保留已播放时间，绝不重播提示或重置旅程。 */
+function onMotionChange() {
+  if (choiceAnimation) {
+    (choiceAnimation.effect as KeyframeEffect).setKeyframes(choiceKeyframes(motionPreference.matches));
+  }
+  scene?.setReducedMotion(motionPreference.matches);
+}
+motionPreference.addEventListener("change", onMotionChange);
 window.addEventListener("resize", syncViewport, { passive: true });
 window.visualViewport?.addEventListener("resize", syncViewport, {
   passive: true,
 });
-document.addEventListener("visibilitychange", () => {
+function onVisibilityChange() {
   app.classList.toggle("paused", document.hidden);
+  if (document.hidden) choiceAnimation?.pause();
+  else choiceAnimation?.play();
   if (document.hidden) {
     cancelAnimationFrame(transitionRaf);
     transitionRaf = 0;
     transitionClock.pause();
   } else if (state.phase === "transition" && !transitionRaf)
     transitionRaf = requestAnimationFrame(animateTransition);
-});
+}
+document.addEventListener("visibilitychange", onVisibilityChange);
 // bfcache 返回时重新建立待机状态，避免用户看到上一次跳转遗留的淡黄光幕。
 window.addEventListener("pageshow", (event) => {
   if (event.persisted) window.location.reload();
 });
 window.addEventListener("pagehide", () => {
   leaving = true;
+  cancelChoicePrompt();
+  motionPreference.removeEventListener("change", onMotionChange);
+  document.removeEventListener("visibilitychange", onVisibilityChange);
   disposeStaffCursor();
   inkTransition.dispose();
   cancelAnimationFrame(transitionRaf);
@@ -276,7 +329,7 @@ async function initialize() {
     state.ready();
     app.dataset.state = state.phase;
     button.disabled = false;
-    status.textContent = "月光宝盒已就绪，可以点击或使用键盘开启";
+    status.textContent = "月光宝盒已就绪，请选择文字入口开启旅程";
   } catch (error) {
     if (!leaving) showFallback(error);
   }

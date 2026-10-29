@@ -106,8 +106,8 @@
         <!-- 原生链接独立于主模块；位置跟随截图平面缩放，脚本失效时仍能点击宝盒。 -->
         <a
           id="static-box"
-          href="__MOON_BLOG_URL__"
-          aria-label="开启月光宝盒，前往博客"
+          href="#journey-choices"
+          aria-label="提示选择旅程入口"
         ></a>
       </div>
       <section class="intro fade-content" aria-labelledby="page-title">
@@ -117,13 +117,31 @@
         <p class="description">
           __MOON_DESCRIPTION__
         </p>
-        <a class="journey-link" href="__MOON_BLOG_URL__" data-entrance>
-          <!-- 装饰冠沿用链接本身的可访问名称，空替代文本避免屏幕阅读器重复朗读。 -->
-          <img class="phoenix-crown" src="/assets/phoenix-crown.svg" width="44" height="44" alt="" aria-hidden="true" draggable="false" />
-          <span
-            >__MOON_ENTRANCE__<small>LET THE JOURNEY BEGIN</small></span
-          >
-        </a>
+        <!-- 两项共用提示动画外层，图标列固定宽度，独立文字层负责悬停动效。 -->
+        <nav id="journey-choices" aria-label="选择旅程入口" tabindex="-1">
+          <div class="choice-motion">
+            <a class="journey-link" href="__MOON_BLOG_URL__" data-entrance="blog">
+              <!-- 装饰冠沿用链接本身的可访问名称，空替代文本避免屏幕阅读器重复朗读。 -->
+              <img class="phoenix-crown" src="/assets/phoenix-crown.svg" width="44" height="44" alt="" aria-hidden="true" draggable="false" />
+              <span
+                >__MOON_ENTRANCE__<small>LET THE JOURNEY BEGIN</small></span
+              >
+            </a>
+            <a class="journey-link world-link" href="__MOON_WORLD_URL__" data-entrance="world">
+              <!-- 无金箍猴王面容以中轴对称雕刻；双眼只响应此链接的悬停或键盘聚焦。 -->
+              <svg class="monkey-face" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false">
+                <path d="M17 23C8 16 4 25 8 35L15 39M47 23C56 16 60 25 56 35L49 39" fill="#71502c" stroke="#a7874c" stroke-width="1.4"/>
+                <path d="M14 28L12 20L21 21L19 13L28 16L32 7L36 16L45 13L43 21L52 20L50 29L52 40L45 51L39 54L32 60L25 54L19 51L12 40Z" fill="#584127" stroke="#a7874c" stroke-width="1.3" stroke-linejoin="round"/>
+                <path d="M32 25C26 12 16 22 18 32C19 39 21 43 24 46C21 52 27 55 32 54C37 55 43 52 40 46C43 43 45 39 46 32C48 22 38 12 32 25Z" fill="#aa8751"/>
+                <path d="M17 27L28 30L26 34L19 33M47 27L36 30L38 34L45 33" fill="#392c20" stroke="#624626" stroke-width="1.2" stroke-linejoin="round"/>
+                <path class="monkey-eye" d="M20 31L26 32L23 33ZM44 31L38 32L41 33Z" fill="#c1a36c"/>
+                <path d="M32 30L29 40L32 42L35 40ZM27 47Q32 50 37 47M25 52L22 56M39 52L42 56" stroke="#543d25" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M19 38L23 41M45 38L41 41M27 20L30 26M37 20L34 26" stroke="#d1b379" stroke-opacity=".55" stroke-width="1.1"/>
+              </svg>
+              <span class="journey-copy">__MOON_WORLD__<small>BEYOND THE CODE</small></span>
+            </a>
+          </div>
+        </nav>
       </section>
 
       <section class="artifact" aria-label="月光宝盒">
@@ -131,7 +149,8 @@
         <button
           id="box-button"
           type="button"
-          aria-label="开启月光宝盒，前往博客"
+          aria-label="提示选择旅程入口"
+          aria-controls="journey-choices"
           disabled
         ></button>
       </section>
@@ -164,7 +183,7 @@
           app.dataset.state = "idle";
           document.querySelector("#moon-loader")?.remove();
           document.querySelector("#status").textContent =
-            "已启用静态场景，可以通过宝盒或文字链接进入博客";
+            "已启用静态场景，请选择文字入口开启旅程";
           // 主模块若已部分运行，通知它释放资源并锁定降级，迟到的初始化不得切回 3D。
           window.dispatchEvent(new Event("moon-boot-failed"));
           console.warn("月光页面启动失败，已恢复静态入口：", reason);

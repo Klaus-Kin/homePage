@@ -44,7 +44,7 @@ async (page) => {
         acknowledgements.push(cdp.send("Page.screencastFrameAck",{sessionId:event.sessionId}));
       });
       await cdp.send("Page.startScreencast",{format:"jpeg",quality:92,maxWidth:width,maxHeight:height,everyNthFrame:2});
-      await target.locator("#box-button").focus(); await target.keyboard.press("Enter");
+      await target.locator("[data-entrance=blog]").focus(); await target.keyboard.press("Enter");
       const performance=await Promise.race([presentedBlack,target.waitForTimeout(20000).then(()=>{throw new Error(`${name}: 未收到全黑提交帧`);})]);
       await target.waitForURL("https://example.com/blog"); await target.waitForTimeout(100);
       await cdp.send("Page.stopScreencast"); await Promise.all(acknowledgements);

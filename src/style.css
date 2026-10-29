@@ -454,7 +454,8 @@ h1 > strong {
     margin: 12px 0 15px;
   }
 }
-@media (max-height: 720px) and (max-width: 767px) and (orientation: portrait) {
+/* 宽手机横向摆放也使用短屏字号，避免在静态宝盒上方塞入两组入口时高度不足。 */
+@media (max-height: 720px) and (max-width: 767px) {
   .intro {
     top: 15.5%;
   }
@@ -640,6 +641,18 @@ h1 > strong {
     --static-box-h: calc(123.453125 / 844);
   }
 }
+/* 较宽的手机视口复用现有平板截图，避免竖版 cover 把宝盒放大到双入口下方。
+   背景与热点共用这组参数；常见的窄长手机仍保留原有竖屏背景。 */
+@media (min-width: 431px) and (max-width: 767px) and (min-height: 601px) and (min-aspect-ratio: 3/5) {
+  #app {
+    --static-image: url("/assets/scene-tablet.webp");
+    --static-aspect: calc(768 / 1024);
+    --static-box-x: calc(358.375000 / 768);
+    --static-box-y: calc(853.218750 / 1024);
+    --static-box-w: calc(273.640625 / 768);
+    --static-box-h: calc(111.843750 / 1024);
+  }
+}
 /* 短横屏降级复用现有横版背景和对应热点，避免竖版 cover 放大后的宝盒占满文字区域。 */
 @media (max-height: 499px), (min-height: 500px) and (max-height: 600px) and (orientation: landscape) {
   #app {
@@ -653,4 +666,96 @@ h1 > strong {
   .journey-link {
     min-height: 44px;
   }
+}
+
+/* 两个入口共用固定图标列与提示外层；横向留白容纳完整的 ±6px 抖动。 */
+#journey-choices { max-width: calc(100vw - 12px); outline-offset: 3px; }
+.choice-motion { display: grid; justify-items: start; gap: 10px; padding-inline: 6px; margin-inline: -6px; }
+.journey-link {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  width: max-content;
+  max-width: 100%;
+  min-height: 48px;
+}
+.journey-link > span { min-width: 0; }
+.phoenix-crown, .monkey-face { justify-self: center; }
+.monkey-face { display: block; width: 44px; height: 44px; }
+.world-line { display: inline-block; max-width: 100%; }
+.journey-link small { display: block; }
+/* 提示作用于外层，悬停只动画猴头入口的整块文字，两个 transform 互不覆盖。 */
+.world-link:hover > *, .world-link:focus-visible > * { transform: none; filter: none; }
+.world-link:hover .journey-copy, .world-link:focus-visible .journey-copy {
+  animation: world-curiosity 1.8s ease-in-out infinite;
+}
+.monkey-eye { transition: fill .3s, filter .3s; }
+.world-link:hover .monkey-eye, .world-link:focus-visible .monkey-eye {
+  fill: #c66656;
+  filter: drop-shadow(0 0 2px #b8413690);
+}
+@keyframes world-curiosity { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+@media (max-width: 767px) {
+  .journey-link { grid-template-columns: 36px minmax(0, 1fr); }
+  .monkey-face { width: 36px; height: 36px; }
+  .world-line { display: block; }
+  .world-line + .world-line { margin-top: 5px; }
+  .intro { right: max(7%, 12px); }
+}
+/* 小屏保留两组中英文和至少 44px 命中高度，以顶部留白换取第二入口空间。 */
+@media (max-height: 600px) {
+  #app .intro { top: 28px; }
+  .eyebrow { margin-bottom: 9px; }
+  h1 { font-size: clamp(28px, 7vh, 42px); line-height: 1.08; }
+  h1 > strong { margin-top: 4px; }
+  .title-rule { margin-top: 7px; }
+  .description { font-size: 14px; line-height: 1.5; margin: 8px 0; }
+  .journey-link { font-size: 14px; grid-template-columns: 30px minmax(0, 1fr); gap: 9px; min-height: 44px; }
+  .phoenix-crown, .monkey-face { width: 30px; height: 30px; }
+  .journey-link small { font-size: 6px; margin-top: 4px; }
+  /* 两段中文按实际字高排布，缩短窄屏第二项，给静态宝盒及焦点轮廓保留间隙。 */
+  .world-line { line-height: 1; }
+  .world-line + .world-line { margin-top: 3px; }
+  .choice-motion { gap: 5px; }
+}
+@media (max-height: 600px) and (max-width: 400px) {
+  /* 极窄竖屏让正文从月面下方开始，双入口仍完整留在宝盒按钮上方。 */
+  #app .intro { top: 52px; }
+  .title-rule { width: 55%; }
+}
+@media (min-height: 601px) and (max-height: 720px) {
+  /* 常规字号刚恢复时仍给双入口留出高度，避免 600px 临界值后一像素重新遮住宝盒。 */
+  #app .intro { top: 28px; }
+}
+@media (min-width: 1024px) and (min-height: 701px) and (max-height: 840px) {
+  /* 桌面大标题恢复后，介绍区最高约 618px；预留 650px 容纳正文、双入口与底部间距。
+     顶部留白随高度增长，并以原有 25% 定位为上限，避免相邻短视口继续裁切入口。 */
+  #app .intro { top: min(25%, max(28px, calc(var(--view-height) - 650px))); }
+}
+@media (min-width: 768px) and (max-width: 1023px) and (min-height: 721px) and (max-height: 840px) {
+  /* 平板在 720px 后恢复常规标题留白，但双入口仍需要避开宝盒上缘。
+     沿用短视口的高度预算，并以平板原有 20.5% 为上限，保留更高视口的构图。 */
+  #app .intro { top: min(20.5%, max(28px, calc(var(--view-height) - 650px))); }
+}
+@media (min-height: 500px) and (max-width: 340px) {
+  /* 320px 常规竖屏的月亮靠近英文眉题，允许眉题自然分行，保留原字号与完整文字。 */
+  .eyebrow { max-width: 175px; }
+}
+/* 备用提示条占据顶部独立区域，不遮住两项原生入口或风景中的宝盒热点。 */
+#app .noscript-entry { top: 4px; bottom: auto; padding: 8px 12px; min-height: 44px; font-size: 12px; }
+@media (prefers-reduced-motion: reduce) {
+  .journey-link:hover > *, .journey-link:focus-visible > * { transform: none; }
+  /* 无位移提示同时强调两项，不自动点亮猴眼，也不暗示已经选中某一项。 */
+  #journey-choices[data-prompt="true"] .journey-link {
+    outline: 1px solid #dac399;
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+}
+@media (forced-colors: active) {
+  .journey-link { color: LinkText; background: Canvas; }
+  .journey-link small { color: LinkText; background: Canvas; }
+  .journey-link:focus-visible, #journey-choices[data-prompt="true"] .journey-link {
+    outline: 2px solid Highlight; outline-offset: 3px;
+  }
+  .monkey-face { stroke: CanvasText; }
 }

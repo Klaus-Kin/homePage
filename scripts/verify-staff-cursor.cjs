@@ -7,7 +7,7 @@ async (page) => {
   await page.mouse.move(600,400);
   await page.waitForSelector('.staff-cursor-layer:not([hidden])', {timeout:3000});
   const desktop = await page.evaluate(() => {
-    const selectors = ['html','#scene canvas','[data-entrance]','#box-button'];
+    const selectors = ['html','#scene canvas','[data-entrance=blog]','#box-button'];
     return selectors.map(selector => ({selector, cursor:getComputedStyle(document.querySelector(selector)).cursor}));
   });
   if(desktop.some(item=>item.cursor!=='none'))

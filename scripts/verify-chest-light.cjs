@@ -2,8 +2,8 @@
 async (page) => {
   const origin = new URL(page.url()).origin, results = [];
   for (const [name, width, height, trigger] of [
-    ['pc-box', 1920, 1080, '#box-button'], ['pc-link', 2560, 1080, '[data-entrance]'],
-    ['phone-box', 390, 844, '#box-button'], ['phone-link', 390, 844, '[data-entrance]'],
+    ['pc-box', 1920, 1080, '[data-entrance=blog]'], ['pc-link', 2560, 1080, '[data-entrance=blog]'],
+    ['phone-box', 390, 844, '[data-entrance=blog]'], ['phone-link', 390, 844, '[data-entrance=blog]'],
   ]) {
     const context = await page.context().browser().newContext({ viewport: { width, height } });
     try {

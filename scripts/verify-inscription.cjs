@@ -71,7 +71,7 @@ async (page) => {
   for (const [name,width,height] of [["desktop",1366,768],["phone",390,844],["small",320,480],["landscape",640,600],["square",1100,1000],["breakpoint",768,1024]]) {
     const check = await setup({viewport:{width,height}}), {context,target} = check;
     try {
-      await target.locator("#box-button").focus(); await target.keyboard.press("Enter");
+      await target.locator("[data-entrance=blog]").focus(); await target.keyboard.press("Enter");
       await target.keyboard.press("Enter");
       await target.clock.runFor(2848);
       const covered = await inspect(target);
@@ -108,7 +108,7 @@ async (page) => {
     const reduced = kind === "reduced-fade" || kind === "hidden-reading" || kind.startsWith("fallback");
     const check = await setup({reducedMotion:reduced?"reduce":"no-preference"},kind.startsWith("fallback")),{context,target}=check;
     try {
-      const trigger = kind === "fallback-text" ? "[data-entrance]" : "#box-button";
+      const trigger = kind === "fallback-text" ? "[data-entrance=blog]" : "[data-entrance=blog]";
       await target.locator(trigger).focus(); await target.keyboard.press("Enter");
       await target.clock.runFor(reduced?800:4400);
       let snapshot = await inspect(target);

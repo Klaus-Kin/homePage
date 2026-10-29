@@ -79,7 +79,7 @@ async (page) => {
       if (late) await target.clock.runFor(10100);
       await target.waitForSelector("#app.boot-failed", { timeout: 2000 });
       if (
-        !(await target.locator("[data-entrance]").isVisible()) ||
+        !(await target.locator("[data-entrance=blog]").isVisible()) ||
         !(await target.locator("#static-box").isVisible())
       )
         throw new Error(`${kind}: 未恢复可见原生入口`);
@@ -92,14 +92,17 @@ async (page) => {
         locked: window.__moonBoot.failed,
         fallback: document.querySelector("#app").classList.contains("fallback"),
         state: document.querySelector("#app").dataset.state,
-        canvases: document.querySelectorAll("canvas").length,
+        // 落墨模块有独立的隐藏 2D 画布；恢复门禁检查 WebGL 场景及实际可见画布，避免把预备层当成泄漏。
+        canvases: document.querySelectorAll("#scene canvas").length,
+        visibleCanvases: [...document.querySelectorAll("canvas")].filter(canvas =>
+          canvas.getClientRects().length && getComputedStyle(canvas).visibility !== "hidden").length,
         loaders: document.querySelectorAll("#moon-loader").length,
       }));
       if (
         !recovered.locked ||
         !recovered.fallback ||
         recovered.state !== "idle" ||
-        recovered.canvases || recovered.loaders
+        recovered.canvases || recovered.visibleCanvases || recovered.loaders
       )
         throw new Error(
           `${kind}: 迟到的初始化覆盖静态页面或未释放画布 ${JSON.stringify(recovered)}`,
@@ -109,8 +112,12 @@ async (page) => {
       });
       // 同时验证静态文字链接和图片上的宝盒链接，二者均不依赖主模块的处理器。
       await target
-        .locator(kind === "late-moon" ? "#static-box" : "[data-entrance]")
+        .locator(kind === "late-moon" ? "#static-box" : "[data-entrance=blog]")
         .click();
+      if (kind === "late-moon") {
+        await target.waitForURL(`${origin}/#journey-choices`);
+        await target.locator("[data-entrance=blog]").click();
+      }
       await target.waitForURL("https://example.com/blog");
       results.push({ scenario: kind, recovered, nativeEntryWorks: true });
     } catch (error) {
@@ -173,7 +180,8 @@ async (page) => {
       for (const [width, height] of sizes) {
         await target.setViewportSize({ width, height });
         const name =
-          height < 500
+          // 静态背景在 500–600px 横屏也使用既有短横屏截图，与竖屏手机的 cover 平面分开。
+          height < 500 || (height <= 600 && width > height)
             ? "short"
             : width < 768
               ? "mobile"
@@ -230,6 +238,11 @@ async (page) => {
         point.x,
         point.y,
       );
+      // 旋转后的宝盒也仅提示或定位选项，之后由文字入口负责选择目的地。
+      if (javaScriptEnabled) {
+        if (await target.locator("#app").getAttribute("data-state") !== "idle") throw new Error("降级宝盒误启动转场");
+      } else await target.waitForURL(`${origin}/#journey-choices`);
+      await target.locator("[data-entrance=blog]").click();
       await target.waitForURL("https://example.com/blog");
       results.push({
         scenario: javaScriptEnabled

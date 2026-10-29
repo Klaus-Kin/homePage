@@ -60,7 +60,7 @@ async (page) => {
         });
         return { colors, natives, svgVisible: [...document.querySelectorAll(".calligraphy-copy")].some(svg => getComputedStyle(svg).display !== "none") };
       });
-      if (palette.natives.length !== 5 || palette.svgVisible || palette.natives.some(span => span.position !== "static" ||
+      if (palette.natives.length !== 7 || palette.svgVisible || palette.natives.some(span => span.position !== "static" ||
           span.width < 20 || span.background !== palette.colors.canvas || span.color !== (span.link ? palette.colors.link : palette.colors.text)))
         failures.push({ kind: "forced-colors", colorScheme, palette });
       await target.screenshot({ path: `output/playwright/calligraphy-forced-${colorScheme}.png` });
@@ -79,13 +79,13 @@ async (page) => {
       native: [...document.querySelectorAll(".calligraphy-text")].every(span => getComputedStyle(span).position === "absolute"),
       colors: [...document.querySelectorAll(".calligraphy-copy")].map(svg => getComputedStyle(svg).fill),
     }));
-    if (!restored.svg || !restored.native || restored.colors.some((color, index) => color !== (index === 4 ? "rgb(218, 195, 153)" : "rgb(174, 184, 201)")) || fonts.length)
+    if (!restored.svg || !restored.native || restored.colors.some((color, index) => color !== (index >= 4 ? "rgb(218, 195, 153)" : "rgb(174, 184, 201)")) || fonts.length)
       failures.push({ kind: "restore", restored, fonts });
     // 入口和宝盒分别沿用自己的交互，不通过修改层级或指针透传掩盖画面重叠。
     await target.setViewportSize({ width: 640, height: 500 }); await target.waitForTimeout(100);
     await target.mouse.move(280, 435);
     if (await target.evaluate(() => document.elementFromPoint(280, 435)?.id) !== "box-button") failures.push({ kind: "reported-hit-point" });
-    await target.locator(".journey-link").focus(); await target.keyboard.press("Enter");
+    await target.locator(".journey-link[data-entrance=blog]").focus(); await target.keyboard.press("Enter");
     await target.waitForSelector('#app[data-state="transition"]');
   } finally { await context.close(); }
 

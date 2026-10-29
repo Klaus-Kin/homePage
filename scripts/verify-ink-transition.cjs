@@ -28,7 +28,7 @@ async (page) => {
       });
       observer.observe(document.querySelector("#ink-transition"), { attributes: true });
     });
-    const trigger = fault === "fallback-text" ? "[data-entrance]" : "#box-button";
+    const trigger = fault === "fallback-text" ? "[data-entrance=blog]" : "[data-entrance=blog]";
     await target.locator(trigger).focus(); await target.keyboard.press("Enter"); await target.keyboard.press("Enter");
     return { target, context, errors, logs, navigations: () => navigations };
   }

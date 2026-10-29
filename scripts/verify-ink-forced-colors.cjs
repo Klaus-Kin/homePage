@@ -24,7 +24,7 @@ async (page) => {
       });
       if (!palette.active || palette.color !== (colorScheme === "light" ? "rgb(255, 255, 255)" : "rgb(0, 0, 0)"))
         throw new Error(`${name}: 强制颜色调色板未正确启用 ${JSON.stringify(palette)}`);
-      await target.locator("#box-button").focus(); await target.keyboard.press("Enter");
+      await target.locator("[data-entrance=blog]").focus(); await target.keyboard.press("Enter");
       const inspect = () => target.evaluate(() => {
         const layer = document.querySelector("#ink-transition"), shade = layer.querySelector(".ink-shade");
         return { stage: layer.dataset.stage, elapsed: +layer.dataset.elapsed, fade: +shade.style.opacity,

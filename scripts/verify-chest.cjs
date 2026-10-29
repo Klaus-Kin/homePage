@@ -70,7 +70,7 @@ async (page) => {
       const idle = await sample("idle");
       if (Math.abs(idle.angle) > 0.01 || Math.abs(idle.height[1] - 1.25) > 1e-8)
         throw new Error("待机应完全闭合，上下半盒叠合");
-      await target.locator("#box-button").focus();
+      await target.locator("[data-entrance=blog]").focus();
       await target.keyboard.press("Enter");
       await target.clock.runFor(432);
       const opening = await sample("opening");
@@ -115,7 +115,7 @@ async (page) => {
     await target.clock.pauseAt(new Date(Date.now() + 1000));
     await target.goto(origin);
     await target.waitForSelector('#app[data-state="idle"]');
-    await target.locator("#box-button").focus();
+    await target.locator("[data-entrance=blog]").focus();
     await target.keyboard.press("Enter");
     await target.clock.runFor(320);
     await target.setViewportSize({ width: 844, height: 390 });

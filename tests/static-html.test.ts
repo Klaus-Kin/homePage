@@ -4,22 +4,25 @@ import { readFileSync } from "node:fs";
 import { renderStaticHtml } from "../src/static-html.ts";
 
 // 使用实际 HTML 模板，防止将来新增入口又绕过统一配置。
-test("all three static blog entries use the configured URL before scripts run", () => {
+test("static entries have independent destinations and the box points to the choices", () => {
   const template = readFileSync(
     new URL("../index.html", import.meta.url),
     "utf8",
   );
   const address = "https://blog.example.test/notes?from=moon&tag=night";
-  const html = renderStaticHtml(template, address);
+  const world = 'https://world.example.test/?from="moon"&tag=$&';
+  const html = renderStaticHtml(template, address, "", world);
   const links = [...html.matchAll(/<a\b[^>]*\bhref="([^"]+)"/g)].map(
     (match) => match[1],
   );
-  assert.equal(links.filter((link) => link !== "/").length, 3);
+  assert.ok(links.includes("#journey-choices"));
+  assert.ok(links.includes('https://world.example.test/?from=&quot;moon&quot;&amp;tag=$&amp;'));
   assert.equal(
     links.filter((link) => link === address.replaceAll("&", "&amp;")).length,
-    3,
+    2,
   );
   assert.ok(!html.includes("__MOON_BLOG_URL__"));
+  assert.ok(!html.includes("__MOON_WORLD_URL__"));
   assert.ok(!html.includes("https://example.com/blog"));
 });
 

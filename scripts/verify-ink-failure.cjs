@@ -10,7 +10,7 @@ async (page) => {
     try {
       await target.goto(origin); await target.waitForSelector('#app[data-state="idle"]:not([inert])');
       await target.clock.install(); await target.clock.pauseAt(new Date(Date.now()+100));
-      await target.locator("#box-button").focus(); await target.keyboard.press("Enter");
+      await target.locator("[data-entrance=blog]").focus(); await target.keyboard.press("Enter");
       const stage = () => target.locator("#ink-transition").getAttribute("data-stage");
       for (let i=0;i<650 && await stage()!=="spread";i++) await target.clock.runFor(16);
       if (await stage()!=="spread") throw new Error("未进入扩散阶段");

@@ -18,7 +18,7 @@ async (page) => {
         bounds: JSON.parse(el.dataset.boxBounds),
       }));
       const idle = await sample(), frames = [idle];
-      await target.locator('#box-button').tap();
+      await target.locator('[data-entrance=blog]').tap();
       for (let frame = 1; frame <= 53; frame++) {
         await target.clock.runFor(16);
         frames.push(await sample());
