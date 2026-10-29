@@ -35,6 +35,9 @@ async (page) => {
         if (overlay.dataset.white === "true" && !window.__whiteAt)
           window.__whiteAt = performance.now();
         if (overlay.dataset.white !== "true") window.__whiteAt = null;
+        // 阅读停留必须从完整题词出现之后累计，不能用早已铺满的背景光幕代替。
+        const ink = document.querySelector("#inscription");
+        if (ink.dataset.complete === "true" && !window.__inkAt) window.__inkAt = performance.now();
         if (state === "redirect")
           window.recordVisualState({
             opacity: getComputedStyle(overlay).opacity,
@@ -43,6 +46,8 @@ async (page) => {
             white: overlay.dataset.white,
             state,
             whiteAt: window.__whiteAt,
+            inkAt: window.__inkAt,
+            complete: ink.dataset.complete,
             now: performance.now(),
             rect: overlay.getBoundingClientRect().toJSON(),
             width: innerWidth,
@@ -53,6 +58,7 @@ async (page) => {
         attributes: true,
       });
       observer.observe(document.querySelector("#app"), { attributes: true });
+      observer.observe(document.querySelector("#inscription"), { attributes: true });
     });
     const started = Date.now();
     await activate(target);
@@ -64,7 +70,9 @@ async (page) => {
       atNavigation.veilColor !== "rgb(255, 241, 199)" ||
       atNavigation.white !== "true" ||
       atNavigation.state !== "redirect" ||
-      atNavigation.now - atNavigation.whiteAt < 380 ||
+      atNavigation.complete !== "true" ||
+      atNavigation.now - atNavigation.inkAt < 1190 ||
+      atNavigation.now - atNavigation.whiteAt < 1490 ||
       errors.length
     )
       throw new Error(
@@ -80,6 +88,7 @@ async (page) => {
       elapsed,
       requests,
       whiteHoldMs: Math.round(atNavigation.now - atNavigation.whiteAt),
+      readingHoldMs: Math.round(atNavigation.now - atNavigation.inkAt),
       opacity: atNavigation.opacity,
       errors,
     });

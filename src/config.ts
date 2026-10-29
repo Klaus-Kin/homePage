@@ -7,7 +7,8 @@ export const pageConfig = {
   entranceLabel: "循着月光，走进我的世界",
   loadingLabel: "月色正好，欢迎来访",
   blogUrl: "https://example.com/blog",
-  transition: { charge: 800, fade: 2000, hold: 400, reducedFade: 600 },
+  // 光幕铺满后稍作停顿，再书写题词；完整阅读时间由实际呈现帧开始累计。
+  transition: { charge: 800, fade: 2000, hold: 1200, reducedFade: 600, inscriptionDelay: 120, write: 3000, reducedWrite: 180 },
 } as const;
 
 /** 全屏构图采用固定预设；位置以视口比例维护，避免 CSS 与相机各自猜测。 */

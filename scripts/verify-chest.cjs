@@ -93,8 +93,13 @@ async (page) => {
       if (white.veilColor !== "rgb(255, 241, 199)" || white.veilOpacity !== "1")
         throw new Error(`淡黄光幕颜色或遮盖强度错误 ${JSON.stringify(white)}`);
       await target.clock.runFor(250);
-      if (navigations) throw new Error("完整光幕停留不足四百毫秒");
-      await target.clock.runFor(200);
+      if (navigations) throw new Error("题词尚未写完就发生导航");
+      await target.clock.runFor(2950);
+      if (await target.locator("#inscription").getAttribute("data-complete") !== "true" || navigations)
+        throw new Error("题词没有在三秒内写完，或尚未完整停留就跳转");
+      await target.clock.runFor(1050);
+      if (navigations) throw new Error("完整题词阅读停留不足 1.2 秒");
+      await target.clock.runFor(100);
       await target.waitForURL("https://example.com/blog");
       if (navigations !== 1 || errors.length) throw new Error(JSON.stringify({ navigations, errors }));
       results.push({ name, idle, opening, open, spread, white, navigations, errors });

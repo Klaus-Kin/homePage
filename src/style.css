@@ -293,6 +293,30 @@ h1 > strong {
   /* 完成态用完全不透明的淡黄光幕，保留原有导航停留门禁，并覆盖横竖屏全部边角。 */
   background: #fff1c7;
 }
+/* 题词属于光幕装饰层；只在完全覆盖且等候结束后显露，背景本身始终保持不透明。 */
+#inscription {
+  position: absolute;
+  inset: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  visibility: hidden;
+  pointer-events: none;
+  font-size: min(104px, calc((100vw - 96px) / 10.8), calc(100svh - 48px));
+}
+#inscription[data-visible="true"] { visibility: visible; }
+.inscription-composition, .inscription-line { display: flex; align-items: center; }
+.inscription-line { gap: .035em; }
+.inscription-composition { gap: .035em; }
+.inscription-line svg { display: block; flex: 0 0 auto; width: 1em; height: 1em; overflow: visible; }
+.inscription-line .inscription-comma { width: .22em; }
+/* 完成态直接使用完整墨面，避免分笔轮廓相接处的抗锯齿缝隙，并一直保留到离页。 */
+#inscription[data-complete="true"] [data-writing] { visibility: hidden; }
+.inscription-line svg[data-finished="true"] [data-writing] { visibility: hidden; }
+@media (width < 768px) {
+  #inscription { font-size: min(76px, calc((100vw - 48px) / 7.5), calc((100svh - 48px) / 2.4)); }
+  .inscription-composition { flex-direction: column; gap: .18em; }
+}
 #app[data-state="transition"] #whiteout,
 #app[data-state="redirect"] #whiteout {
   pointer-events: auto;

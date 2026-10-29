@@ -4,6 +4,9 @@ export interface Timings {
   fade: number;
   hold: number;
   reducedFade: number;
+  inscriptionDelay: number;
+  write: number;
+  reducedWrite: number;
 }
 
 /** 纯时间函数方便验证光幕时序；跳转只允许发生在完整不透明光幕的停留阶段之后。 */
@@ -26,7 +29,8 @@ export function transitionFrame(
     progress: Math.max(0, Math.min(1, elapsed / Math.max(1, charge + fade))),
     glow: Math.max(0, Math.min(1, reduced ? spread : lid * 0.18 + spread * 0.82)),
     white: elapsed >= charge + fade,
-    redirect: elapsed >= charge + fade + timings.hold,
+    // 这里只提供理想连续帧的参考终点；运行时导航另由实际呈现的题词时间轴门禁决定。
+    redirect: elapsed >= charge + fade + timings.inscriptionDelay + (reduced ? timings.reducedWrite : timings.write) + timings.hold,
   };
 }
 

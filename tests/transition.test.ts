@@ -10,26 +10,26 @@ import {
 import { pageConfig } from "../src/config.ts";
 
 // 关键验收条件先写测试：光幕必须完全遮盖画面并停留后才允许跳转，颜色由展示层控制。
-test("normal transition charges for 800ms, fades for 2000ms and holds full coverage for 400ms", () => {
+test("normal transition charges for 800ms, spreads for 2000ms and includes the inscription before navigation", () => {
   const frame = (ms: number) =>
     transitionFrame(ms, false, pageConfig.transition);
   assert.equal(frame(799).opacity, 0);
   assert.equal(frame(1800).opacity, 0.5);
   assert.equal(frame(2799).white, false);
   assert.equal(frame(2800).opacity, 1);
-  assert.equal(frame(3199).redirect, false);
-  assert.equal(frame(3200).redirect, true);
+  assert.equal(frame(7119).redirect, false);
+  assert.equal(frame(7120).redirect, true);
 });
 
 test("reduced motion fades in 600ms and still holds full coverage before navigation", () => {
   assert.equal(transitionFrame(300, true, pageConfig.transition).opacity, 0.5);
   assert.equal(transitionFrame(600, true, pageConfig.transition).white, true);
   assert.equal(
-    transitionFrame(999, true, pageConfig.transition).redirect,
+    transitionFrame(2099, true, pageConfig.transition).redirect,
     false,
   );
   assert.equal(
-    transitionFrame(1000, true, pageConfig.transition).redirect,
+    transitionFrame(2100, true, pageConfig.transition).redirect,
     true,
   );
 });

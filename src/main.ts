@@ -1,11 +1,13 @@
 import { pageConfig } from "./config";
 import { installStaffCursor } from "./staff-cursor";
+import { Inscription } from "./inscription";
+import { INSCRIPTION_TEXT } from "./inscription-strokes";
+import { InscriptionTimeline, VisibleTime } from "./inscription-timeline";
 import {
   JourneyState,
   isActivation,
   transitionFrame,
   lightSpread,
-  WhiteoutGate,
 } from "./transition";
 import type { MoonScene } from "./scene";
 
@@ -33,9 +35,10 @@ let leaving = false;
 // 入口超时后才抵达的模块直接沿用静态入口，禁止再次初始化和覆盖已显示的页面。
 let fallback = window.__moonBoot?.failed ?? false;
 let transitionRaf = 0;
-let transitionElapsed = 0;
-let transitionLast = 0;
-const whiteGate = new WhiteoutGate();
+// 题词复用转场 RAF；可见时间在隐藏事件与恢复首帧之间暂停，导航由实际呈现的完整题词门禁控制。
+const transitionClock = new VisibleTime();
+const inscriptionTimeline = new InscriptionTimeline(pageConfig.transition);
+const inscription = new Inscription(document.querySelector<HTMLElement>("#inscription")!, pageConfig.transition.write);
 let gesture: { x: number; y: number; time: number; id: number } | null = null;
 
 // 文案只从配置写入文本节点，避免配置内容经由 HTML 注入页面。
@@ -78,12 +81,11 @@ window.addEventListener("moon-boot-failed", () =>
 /** 累计实际可见的动画时间；切回后台标签页时不会跳过完整淡黄光幕的展示和停留。 */
 function animateTransition(now: number) {
   if (document.hidden) {
-    transitionLast = 0;
+    transitionClock.pause();
     transitionRaf = 0;
     return;
   }
-  if (transitionLast) transitionElapsed += Math.min(now - transitionLast, 64);
-  transitionLast = now;
+  const transitionElapsed = transitionClock.sample(now);
   const frame = transitionFrame(
     transitionElapsed,
     motionPreference.matches,
@@ -111,12 +113,13 @@ function animateTransition(now: number) {
   whiteout.dataset.spread = String(frame.spread);
   // 扩散层自身保持不透明，局部渐变决定光照范围；不用整屏透明度代替空间扩散。
   whiteout.style.opacity = frame.spread > 0 ? "1" : "0";
-  // 以首次完整呈现不透明光幕的时刻计算停留，避免运行中切换动态偏好提前导航。
-  // 过渡中由减少动态切回普通模式时，重新计算下一次连续光幕的停留时间。
-  if (whiteGate.present(transitionElapsed, frame.white, pageConfig.transition.hold)) {
+  // 光幕持续完全覆盖、题词完整呈现且实际阅读满 1.2 秒后，才允许一次导航。
+  const inkFrame = inscriptionTimeline.present(transitionElapsed, frame.white, motionPreference.matches);
+  inscription.render(inkFrame);
+  if (inkFrame.announce) status.textContent = INSCRIPTION_TEXT;
+  if (inkFrame.redirect) {
     state.redirect();
     app.dataset.state = state.phase;
-    status.textContent = "月光之旅即将启程";
     window.location.assign(pageConfig.blogUrl);
     return;
   }
@@ -177,14 +180,17 @@ button.addEventListener("pointerenter", (event) => {
 button.addEventListener("pointerleave", () => scene?.setHover(false));
 button.addEventListener("focus", () => scene?.setHover(true));
 button.addEventListener("blur", () => scene?.setHover(false));
-entrance.addEventListener("click", (event) => {
+function onEntryClick(event: MouseEvent) {
   // 主模块只运行了一部分时也保留原生导航，不让已失效的状态机吞掉链接。
   if (window.__moonBoot?.failed) return;
   // 保留链接的标准修饰键行为；普通点击在当前标签页走泛白过渡。
   if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
   beginJourney();
-});
+}
+// WebGL 降级后的宝盒链接和文字入口走同一题词流程；模块失效与无脚本仍沿用原生 href。
+document.querySelectorAll<HTMLAnchorElement>("[data-entrance], #static-box, .noscript-entry a")
+  .forEach(link => link.addEventListener("click", onEntryClick));
 window.addEventListener(
   "pointermove",
   (event) => {
@@ -214,7 +220,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     cancelAnimationFrame(transitionRaf);
     transitionRaf = 0;
-    transitionLast = 0;
+    transitionClock.pause();
   } else if (state.phase === "transition" && !transitionRaf)
     transitionRaf = requestAnimationFrame(animateTransition);
 });
