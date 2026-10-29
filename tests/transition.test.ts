@@ -5,33 +5,23 @@ import {
   isActivation,
   transitionFrame,
   lightSpread,
-  WhiteoutGate,
 } from "../src/transition.ts";
 import { pageConfig } from "../src/config.ts";
 
-// 关键验收条件先写测试：光幕必须完全遮盖画面并停留后才允许跳转，颜色由展示层控制。
-test("normal transition charges for 800ms, spreads for 2000ms and includes the inscription before navigation", () => {
+// 光幕只负责覆盖画面，导航由独立的实际全黑门禁控制。
+test("normal transition charges for 800ms and spreads for 2000ms without calculating navigation", () => {
   const frame = (ms: number) =>
     transitionFrame(ms, false, pageConfig.transition);
   assert.equal(frame(799).opacity, 0);
   assert.equal(frame(1800).opacity, 0.5);
   assert.equal(frame(2799).white, false);
   assert.equal(frame(2800).opacity, 1);
-  assert.equal(frame(7119).redirect, false);
-  assert.equal(frame(7120).redirect, true);
+  assert.equal("redirect" in frame(10000), false);
 });
-
-test("reduced motion fades in 600ms and still holds full coverage before navigation", () => {
+test("reduced motion fades in 600ms without calculating navigation", () => {
   assert.equal(transitionFrame(300, true, pageConfig.transition).opacity, 0.5);
   assert.equal(transitionFrame(600, true, pageConfig.transition).white, true);
-  assert.equal(
-    transitionFrame(2099, true, pageConfig.transition).redirect,
-    false,
-  );
-  assert.equal(
-    transitionFrame(2100, true, pageConfig.transition).redirect,
-    true,
-  );
+  assert.equal("redirect" in transitionFrame(10000, true, pageConfig.transition), false);
 });
 
 test("loading, repeated activation and redirect cannot restart the journey", () => {
@@ -82,15 +72,4 @@ test("source-centered spread covers every corner in portrait and landscape", () 
       assert.ok(lightSpread(width, height, source, 0.001).feather < middle.feather * 0.03);
     }
   }
-});
-
-// 偏好切换可能改变理论终点，导航仍须等实际连续呈现完整光幕四百毫秒。
-test("navigation requires a fresh uninterrupted full veil hold after preference changes", () => {
-  const gate = new WhiteoutGate();
-  assert.equal(gate.present(600, true, 400), false);
-  assert.equal(gate.present(850, true, 400), false);
-  assert.equal(gate.present(900, false, 400), false);
-  assert.equal(gate.present(2800, true, 400), false);
-  assert.equal(gate.present(3199, true, 400), false);
-  assert.equal(gate.present(3200, true, 400), true);
 });

@@ -87,22 +87,23 @@ async (page) => {
       await target.setViewportSize({width:height,height:width}); await target.setViewportSize({width,height});
       if ((await inspect(target)).progress !== half.progress) throw new Error("旋转重播了书写");
       await target.clock.runFor(1504);
-      const full = await inspect(target), fullPixels = await capture(target,`${name}-full`);
+      const full = await inspect(target);
+      // 完成同帧已有落滴，淡黄像素验收保留在起笔与半句阶段；完整题词截图包含真实墨滴。
+      await target.screenshot({path:`output/playwright/inscription-${name}-full.png`});
       if (full.complete !== "true" || full.progress !== 1 || full.opacity !== 1 || check.navigations() || full.text !== phrase || full.status !== phrase) throw new Error("完整题词或停留门禁异常");
-      if (fullPixels.inkPixels <= halfPixels.inkPixels) throw new Error("整句墨面丢失");
       const [first,second] = full.lines;
       if ((width<768 && second.top <= first.bottom) || (width>=768 && Math.abs(first.top-second.top)>.5)) throw new Error("断行位置错误");
       for (const rect of full.rects) if (rect.left<24 || rect.right>width-24 || rect.top<24 || rect.bottom>height-24) throw new Error("文字不足24px安全边距");
       const groupLeft = Math.min(first.left,second.left), groupRight = Math.max(first.right,second.right);
       if (Math.abs((groupLeft+groupRight)/2-width/2)>.6 || Math.abs((first.top+second.bottom)/2-height/2)>.6) throw new Error("题词组没有居中");
-      await target.clock.runFor(1008); await capture(target,`${name}-before-navigation`);
-      if (check.navigations()) throw new Error("完整阅读不足1.2秒");
-      await target.clock.runFor(240); await target.waitForURL("https://example.com/blog");
+      await target.clock.runFor(1008); await target.screenshot({path:`output/playwright/inscription-${name}-before-navigation.png`});
+      if (check.navigations()) throw new Error("落墨扩散尚未完成却提前导航");
+      await target.clock.runFor(1600); await target.waitForURL("https://example.com/blog");
       if (check.navigations()!==1 || check.errors.length || check.announcements.filter(text=>text===phrase).length!==1) throw new Error(JSON.stringify({errors:check.errors,announcements:check.announcements}));
-      results.push({name,stages:{start:start.progress,half:half.progress,full:full.progress},pixels:fullPixels,announcedOnce:true});
+      results.push({name,stages:{start:start.progress,half:half.progress,full:full.progress},pixels:halfPixels,announcedOnce:true});
     } finally { await context.close(); }
   }
-  // 分别在书写和阅读期间模拟后台，检测墨迹不变且恢复后不会补跳；中途偏好切换保留已写部分。
+  // 分别在书写和淡黑期间模拟后台，检测墨迹不变且恢复后不会补跳；中途偏好切换保留已写部分。
   for (const kind of ["hidden-writing","hidden-reading","reduce-mid-writing","reduced-fade","complete-preference","fallback-button","fallback-text"]) {
     const reduced = kind === "reduced-fade" || kind === "hidden-reading" || kind.startsWith("fallback");
     const check = await setup({reducedMotion:reduced?"reduce":"no-preference"},kind.startsWith("fallback")),{context,target}=check;
@@ -134,7 +135,7 @@ async (page) => {
       }
       if (kind === "reduced-fade") {
         if (snapshot.mode!=="fade" || snapshot.opacity<=0 || snapshot.opacity>=1) throw new Error("减少动态没有180ms整句淡入");
-        await target.clock.runFor(208); await capture(target,"reduced-full");
+        await target.clock.runFor(208); await target.screenshot({path:"output/playwright/inscription-reduced-full.png"});
       }
       // 剩余时间足够完成流程，重复激活不能产生第二次导航或第二次整句播报。
       await target.clock.runFor(8000); await target.waitForURL("https://example.com/blog");

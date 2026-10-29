@@ -2,7 +2,6 @@ export interface InscriptionTimings {
   inscriptionDelay: number;
   write: number;
   reducedWrite: number;
-  hold: number;
 }
 
 export interface InscriptionFrame {
@@ -11,7 +10,6 @@ export interface InscriptionFrame {
   progress: number;
   opacity: number;
   complete: boolean;
-  redirect: boolean;
   announce: boolean;
 }
 
@@ -30,12 +28,11 @@ export class VisibleTime {
   pause() { this.last = null; }
 }
 
-/** 光幕、题词与导航共享同一条可见时间轴；完成后的阅读门禁以实际完整呈现帧为准。 */
+/** 题词只负责书写、整句淡入和单次播报；实际完成帧交给落墨时间轴消费。 */
 export class InscriptionTimeline {
   private timings: InscriptionTimings;
   private last: number | null = null;
   private coverSince: number | null = null;
-  private readSince: number | null = null;
   private wasReady = false;
   private announced = false;
   private mode: InscriptionFrame["mode"] = "waiting";
@@ -50,7 +47,6 @@ export class InscriptionTimeline {
     let announce = false;
     if (!white) {
       this.coverSince = null;
-      this.readSince = null;
       this.wasReady = false;
     } else {
       this.coverSince ??= elapsed;
@@ -66,8 +62,6 @@ export class InscriptionTimeline {
         if (this.mode === "writing") this.writing = Math.min(this.timings.write, this.writing + delta);
         if (this.mode === "fade") this.fading = Math.min(this.timings.reducedWrite, this.fading + delta);
         if (this.writing >= this.timings.write || this.fading >= this.timings.reducedWrite) this.mode = "complete";
-        // 已完整呈现后不响应偏好重播；失去连续覆盖才撤销旧的阅读锚点。
-        if (this.mode === "complete") this.readSince ??= elapsed;
       }
       this.wasReady = ready;
     }
@@ -77,7 +71,6 @@ export class InscriptionTimeline {
       progress: this.mode === "complete" ? 1 : this.writing / this.timings.write,
       opacity: this.mode === "complete" ? 1 : this.fading / this.timings.reducedWrite,
       complete: this.mode === "complete",
-      redirect: white && this.wasReady && this.readSince !== null && elapsed - this.readSince >= this.timings.hold,
       announce,
     };
   }

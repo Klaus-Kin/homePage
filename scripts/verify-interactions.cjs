@@ -35,9 +35,11 @@ async (page) => {
         if (overlay.dataset.white === "true" && !window.__whiteAt)
           window.__whiteAt = performance.now();
         if (overlay.dataset.white !== "true") window.__whiteAt = null;
-        // 阅读停留必须从完整题词出现之后累计，不能用早已铺满的背景光幕代替。
+        // 导航停留必须从真实全黑提交后累计，不能用早已铺满的背景光幕代替。
         const ink = document.querySelector("#inscription");
         if (ink.dataset.complete === "true" && !window.__inkAt) window.__inkAt = performance.now();
+        const black = document.querySelector('#ink-transition');
+        if (black.dataset.black === "true" && !window.__blackAt) window.__blackAt = performance.now();
         if (state === "redirect")
           window.recordVisualState({
             opacity: getComputedStyle(overlay).opacity,
@@ -48,6 +50,9 @@ async (page) => {
             whiteAt: window.__whiteAt,
             inkAt: window.__inkAt,
             complete: ink.dataset.complete,
+            black: black.dataset.black,
+            blackColor: getComputedStyle(black).backgroundColor,
+            blackAt: window.__blackAt,
             now: performance.now(),
             rect: overlay.getBoundingClientRect().toJSON(),
             width: innerWidth,
@@ -59,6 +64,7 @@ async (page) => {
       });
       observer.observe(document.querySelector("#app"), { attributes: true });
       observer.observe(document.querySelector("#inscription"), { attributes: true });
+      observer.observe(document.querySelector("#ink-transition"), { attributes: true });
     });
     const started = Date.now();
     await activate(target);
@@ -71,8 +77,9 @@ async (page) => {
       atNavigation.white !== "true" ||
       atNavigation.state !== "redirect" ||
       atNavigation.complete !== "true" ||
-      atNavigation.now - atNavigation.inkAt < 1190 ||
-      atNavigation.now - atNavigation.whiteAt < 1490 ||
+      atNavigation.black !== "true" ||
+      atNavigation.blackColor !== "rgb(0, 0, 0)" ||
+      atNavigation.now - atNavigation.blackAt < 159 ||
       errors.length
     )
       throw new Error(
@@ -88,7 +95,7 @@ async (page) => {
       elapsed,
       requests,
       whiteHoldMs: Math.round(atNavigation.now - atNavigation.whiteAt),
-      readingHoldMs: Math.round(atNavigation.now - atNavigation.inkAt),
+      blackHoldMs: Math.round(atNavigation.now - atNavigation.blackAt),
       opacity: atNavigation.opacity,
       errors,
     });

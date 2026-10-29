@@ -2,14 +2,13 @@ export type Phase = "loading" | "idle" | "transition" | "redirect";
 export interface Timings {
   charge: number;
   fade: number;
-  hold: number;
   reducedFade: number;
   inscriptionDelay: number;
   write: number;
   reducedWrite: number;
 }
 
-/** 纯时间函数方便验证光幕时序；跳转只允许发生在完整不透明光幕的停留阶段之后。 */
+/** 纯时间函数只计算开盖和光幕；导航由实际全黑呈现门禁独立决定。 */
 export function transitionFrame(
   elapsed: number,
   reduced: boolean,
@@ -29,8 +28,6 @@ export function transitionFrame(
     progress: Math.max(0, Math.min(1, elapsed / Math.max(1, charge + fade))),
     glow: Math.max(0, Math.min(1, reduced ? spread : lid * 0.18 + spread * 0.82)),
     white: elapsed >= charge + fade,
-    // 这里只提供理想连续帧的参考终点；运行时导航另由实际呈现的题词时间轴门禁决定。
-    redirect: elapsed >= charge + fade + timings.inscriptionDelay + (reduced ? timings.reducedWrite : timings.write) + timings.hold,
   };
 }
 
@@ -50,16 +47,6 @@ export function lightSpread(
     // 初始羽化也从盒口长出，避免刚进入扩散阶段就跳出数百像素宽的白色光团。
     feather: Math.max(24, distance * 0.18) * (1 - value) * Math.min(1, value / 0.08),
   };
-}
-
-/** 导航门禁依据实际呈现时间；切回光幕尚未完全覆盖的时间段会撤销先前的停留。 */
-export class WhiteoutGate {
-  private since: number | null = null;
-  present(elapsed: number, white: boolean, hold: number) {
-    if (!white) this.since = null;
-    else if (this.since === null) this.since = elapsed;
-    return white && this.since !== null && elapsed - this.since >= hold;
-  }
 }
 
 /** 状态门闩在同步调用内锁定入口，阻止鼠标、键盘和触屏重复触发导航。 */

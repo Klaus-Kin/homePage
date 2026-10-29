@@ -305,6 +305,30 @@ h1 > strong {
   font-size: min(104px, calc((100vw - 96px) / 10.8), calc(100svh - 48px));
 }
 #inscription[data-visible="true"] { visibility: visible; }
+/* 落墨独立于 WebGL 与题词布局；最终实心 CSS 黑底在旋转重设画布时仍完整覆盖页面。 */
+#ink-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  overflow: hidden;
+  pointer-events: none;
+}
+#ink-transition[hidden] { display: none; }
+/* 装饰性黑场必须保留实际墨色；仅豁免落墨层与淡黑遮罩，避免高对比度亮色调色板将黑底替换成白色。 */
+#ink-transition, #ink-transition .ink-shade { forced-color-adjust: none; }
+#ink-transition canvas, #ink-transition .ink-shade {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+#ink-transition .ink-shade { background: #000; opacity: 0; }
+#ink-transition[data-black="true"] { background: #000; }
+#ink-transition[data-black="true"] canvas,
+#ink-transition[data-black="true"] .ink-shade { visibility: hidden; }
+/* 黑场不能留下模拟金箍棒或系统指针；光标原有方向、大小、热点仍由原模块维护。 */
+:root.ink-transition-active, :root.ink-transition-active * { cursor: none !important; }
+.ink-transition-active .staff-cursor-layer { visibility: hidden !important; }
 .inscription-composition, .inscription-line { display: flex; align-items: center; }
 .inscription-line { gap: .035em; }
 .inscription-composition { gap: .035em; }

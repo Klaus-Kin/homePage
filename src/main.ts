@@ -3,6 +3,8 @@ import { installStaffCursor } from "./staff-cursor";
 import { Inscription } from "./inscription";
 import { INSCRIPTION_TEXT } from "./inscription-strokes";
 import { InscriptionTimeline, VisibleTime } from "./inscription-timeline";
+import { InkTimeline, BlackPresentationGate } from "./ink-timeline";
+import { InkTransition } from "./ink-transition";
 import {
   JourneyState,
   isActivation,
@@ -35,10 +37,15 @@ let leaving = false;
 // 入口超时后才抵达的模块直接沿用静态入口，禁止再次初始化和覆盖已显示的页面。
 let fallback = window.__moonBoot?.failed ?? false;
 let transitionRaf = 0;
-// 题词复用转场 RAF；可见时间在隐藏事件与恢复首帧之间暂停，导航由实际呈现的完整题词门禁控制。
+// 题词与落墨复用转场 RAF；后台暂停，导航由实际提交的全黑画面门禁控制。
 const transitionClock = new VisibleTime();
 const inscriptionTimeline = new InscriptionTimeline(pageConfig.transition);
 const inscription = new Inscription(document.querySelector<HTMLElement>("#inscription")!, pageConfig.transition.write);
+const inkTimeline = new InkTimeline();
+const blackGate = new BlackPresentationGate();
+const inkTransition = new InkTransition(document.querySelector<SVGSVGElement>('#inscription [data-character="界"]')!);
+let inscriptionLocked = false;
+let renderedBlack = false;
 let gesture: { x: number; y: number; time: number; id: number } | null = null;
 
 // 文案只从配置写入文本节点，避免配置内容经由 HTML 注入页面。
@@ -57,6 +64,7 @@ function syncViewport() {
   const height = window.visualViewport?.height ?? window.innerHeight;
   document.documentElement.style.setProperty("--view-height", `${height}px`);
   scene?.resize();
+  inkTransition.resize();
 }
 function showFallback(error: unknown) {
   if (fallback) return;
@@ -86,11 +94,15 @@ function animateTransition(now: number) {
     return;
   }
   const transitionElapsed = transitionClock.sample(now);
-  const frame = transitionFrame(
+  // 当前 RAF 只能确认上一帧提交的黑底已经有机会绘制；首次设置 CSS 的当帧不预支呈现时间。
+  const canNavigate = blackGate.present(transitionElapsed, renderedBlack);
+  const calculated = transitionFrame(
     transitionElapsed,
     motionPreference.matches,
     pageConfig.transition,
   );
+  // 落墨后锁住已呈现的淡黄底幕和完整题词，偏好切换不允许回退到开盖或光圈阶段。
+  const frame = inscriptionLocked ? { ...calculated, white: true, spread: 1, progress: 1 } : calculated;
   scene?.setTransition(frame.progress);
   // 正常场景读取盒内锚点；降级时以截图热点中心定位，不依赖 WebGL。
   let source = scene?.getLightScreenPosition();
@@ -113,11 +125,20 @@ function animateTransition(now: number) {
   whiteout.dataset.spread = String(frame.spread);
   // 扩散层自身保持不透明，局部渐变决定光照范围；不用整屏透明度代替空间扩散。
   whiteout.style.opacity = frame.spread > 0 ? "1" : "0";
-  // 光幕持续完全覆盖、题词完整呈现且实际阅读满 1.2 秒后，才允许一次导航。
-  const inkFrame = inscriptionTimeline.present(transitionElapsed, frame.white, motionPreference.matches);
-  inscription.render(inkFrame);
-  if (inkFrame.announce) status.textContent = INSCRIPTION_TEXT;
-  if (inkFrame.redirect) {
+  // 题词完整呈现的同一帧立即落墨；全黑由渲染器确认后另计前台停留，不使用理论终点跳转。
+  const inscriptionFrame = inscriptionTimeline.present(transitionElapsed, frame.white, motionPreference.matches);
+  inscription.render(inscriptionFrame);
+  if (inscriptionFrame.announce) status.textContent = INSCRIPTION_TEXT;
+  inscriptionLocked ||= inscriptionFrame.visible && inscriptionFrame.complete;
+  let inkFrame = inkTimeline.present(transitionElapsed, inscriptionLocked, motionPreference.matches, inkTransition.unavailable);
+  let black = inkTransition.render(inkFrame);
+  if (inkTransition.unavailable && inkFrame.stage !== "fade" && !inkFrame.black) {
+    // 初始化或当帧绘制失败立即启动新的 180ms 淡黑，避免等下一帧才建立故障锚点。
+    inkFrame = inkTimeline.present(transitionElapsed, inscriptionLocked, motionPreference.matches, true);
+    black = inkTransition.render(inkFrame);
+  }
+  renderedBlack = black;
+  if (black && canNavigate) {
     state.redirect();
     app.dataset.state = state.phase;
     window.location.assign(pageConfig.blogUrl);
@@ -231,6 +252,7 @@ window.addEventListener("pageshow", (event) => {
 window.addEventListener("pagehide", () => {
   leaving = true;
   disposeStaffCursor();
+  inkTransition.dispose();
   cancelAnimationFrame(transitionRaf);
   scene?.dispose();
 });
