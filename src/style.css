@@ -122,6 +122,8 @@ button:disabled {
   /* 整组介绍共用同一外层定位，内部字号、行距与入口间距保持原样。 */
   top: 25%;
   z-index: 4;
+  /* 介绍区的透明留白可能覆盖宝盒上缘；容器不接收指针，文字入口单独恢复命中。 */
+  pointer-events: none;
 }
 .eyebrow {
   font-size: 9px;
@@ -185,6 +187,8 @@ h1 > strong {
   margin: 20px 0 27px;
 }
 .journey-link {
+  /* 保留正文入口的鼠标、触摸与悬停交互，不让父容器的透传规则禁用链接。 */
+  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   gap: 14px;
@@ -263,6 +267,11 @@ h1 > strong {
 #app[data-state="redirect"] .fade-content {
   opacity: 0;
   filter: blur(3px);
+  pointer-events: none;
+}
+/* 链接显式恢复了指针命中，转场时也必须显式关闭，保持原有的输入锁定契约。 */
+#app[data-state="transition"] .journey-link,
+#app[data-state="redirect"] .journey-link {
   pointer-events: none;
 }
 #whiteout {

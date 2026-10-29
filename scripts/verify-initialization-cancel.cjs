@@ -69,18 +69,26 @@ async (page) => {
     const quality = await target.evaluate(async () => {
       const { Initialization } = await import("/src/scene/initialization.ts");
       const { createTerrain } = await import("/src/scene/terrain.ts");
-      const { sceneConfig } = await import("/src/config.ts");
       const init = new Initialization(), terrain = await createTerrain(init);
       const meshes = terrain.group.children.filter((item) => item.isInstancedMesh);
-      const maximum = meshes.map((mesh) => mesh.count);
+      // 先串行取得各模式的稳定数量：完整草簇截断与 PC 避让会让实例数小于配置预算。
+      // 基线与并发检查复用同一地形，避免硬编码数量后随生成规则变化再次产生误报。
+      const baseline = new Map();
+      for (const mobile of [true, false]) {
+        await terrain.setQuality(mobile);
+        baseline.set(mobile, meshes.map((mesh) => mesh.count));
+      }
+      const transitions = [];
       for (const choices of [[true, false, true], [false, true, false]]) {
         await Promise.all(choices.map((mobile) => terrain.setQuality(mobile)));
-        const preset = sceneConfig.quality[choices.at(-1) ? "mobile" : "desktop"];
-        const expected = [preset.rocks, preset.grass, preset.flowers].map((count, i) => Math.min(count, maximum[i]));
-        if (meshes.some((mesh, i) => mesh.count !== expected[i])) throw new Error("旧画质请求覆盖了最终植被数量");
+        const expected = baseline.get(choices.at(-1));
+        const actual = meshes.map((mesh) => mesh.count);
+        if (actual.some((count, i) => count !== expected[i]))
+          throw new Error(`旧画质请求覆盖了最终植被数量：${JSON.stringify({ choices, expected, actual })}`);
+        transitions.push({ choices, expected, actual });
       }
       init.dispose();
-      return { rapidQualityChanges: true, finalCounts: meshes.map((mesh) => mesh.count), released: init.resources.size === 0 };
+      return { rapidQualityChanges: true, transitions, finalCounts: meshes.map((mesh) => mesh.count), released: init.resources.size === 0 };
     });
     results.push(quality);
   } finally { await context.close(); }
