@@ -88,6 +88,11 @@ export function preserveLandscapeLight(group: THREE.Object3D) {
         let landscapeLights = THREE.ShaderChunk.lights_fragment_begin.replace(
             "getDirectionalLightInfo( directionalLight, directLight );",
             "getDirectionalLightInfo( directionalLight, directLight );\n directLight.direction = uLandscapeLightDirection;");
+        if (material.name === "meadow-foliage") {
+          // 细叶之间的遮蔽由环境光填充，减轻亚像素阴影的锯齿亮斑；投到地面上的真实草影保持原有强度。
+          landscapeLights = landscapeLights.replaceAll("directionalLightShadow.shadowIntensity",
+            "min(directionalLightShadow.shadowIntensity, 0.46)");
+        }
         if (material.name === "meadow-ground") {
           // 同一张真实阴影贴图在宝盒附近保持深度，远处草影柔和减淡；不会另画假阴影贴片。
           shader.uniforms.uChestShadowArea = shadowArea;

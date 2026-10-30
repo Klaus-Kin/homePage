@@ -1,4 +1,4 @@
-// 通过 playwright-cli run-code --filename 调用；检查无花草坡、中央留白、循环纹理与真实阴影。
+// 通过 playwright-cli run-code --filename 调用；检查分层草甸、完整花株、中央留白、循环纹理与真实阴影。
 async (page) => {
   const errors = [], results = [];
   const origin = new URL(page.url()).origin;
@@ -19,13 +19,21 @@ async (page) => {
     await page.waitForTimeout(500);
     const result = await page.evaluate(async () => {
       const THREE = await import('/node_modules/.vite/deps/three.js');
-      const {overlapsChestScenery,obstacleFootprint,grassReach,isCenterMeadowRock} = await import('/src/scene/terrain-clearance.ts');
+      const {overlapsChestScenery,obstacleFootprint,isCenterMeadowRock} = await import('/src/scene/terrain-clearance.ts');
       const {terrain,renderer,camera,scene,moonLight,chest,motionBounds} = window.__vegetationReview;
       const placement = { x: chest.box.position.x, z: chest.box.position.z, scale: chest.box.scale.x };
       const grass = terrain.group.getObjectByName('terrain-grass');
+      const plants = ['terrain-turf','terrain-grass','terrain-long-grass','terrain-seed-heads','terrain-flowers'].map(name=>terrain.group.getObjectByName(name));
+      const {vegetationReach}=await import('/src/scene/meadow-geometry.ts');
+      const {flowerReach,seedReach}=await import('/src/scene/meadow.ts');
+      const {createGroundSampler}=await import('/src/scene/ground-sampler.ts');
+      const {sceneConfig}=await import('/src/config.ts');
+      const mobile=document.querySelector('#scene').dataset.quality==='mobile';
+      const preset=sceneConfig.quality[mobile?'mobile':'desktop'];
+      for(const plant of plants) if(plant.count!==preset[plant.userData.meadowKind]) throw new Error(`植被预算错误：${plant.name} ${plant.count}`);
       const rocks = terrain.group.getObjectByName('terrain-rocks');
       let flowers=0, centralRocks=0;
-      terrain.group.traverse(object=>{if(object.name.startsWith('flower-')||object.name==='terrain-flowers')flowers++;});
+      flowers=terrain.group.getObjectByName('terrain-flowers').count;
       const ground=terrain.group.getObjectByName('terrain-ground'), image=ground.material.map.image;
       const tile=image.getContext('2d').getImageData(0,0,256,256).data;
       let textureEdgeDifference=0;
@@ -37,14 +45,19 @@ async (page) => {
       const matrix = new THREE.Matrix4(), p = new THREE.Vector3(), s = new THREE.Vector3(), q = new THREE.Quaternion();
       let clearanceViolations = 0, visibleGrassOutsideShadow = 0, openingBoundsOutsideShadow = 0;
       const lightPoint = new THREE.Vector3(), viewPoint = new THREE.Vector3();
-      for (const mesh of [grass,rocks]) for(let i=0;i<mesh.count;i++) {
+      let maximumRootError=0;
+      const sampleGround=createGroundSampler(ground.geometry);
+      for (const mesh of [...plants,rocks]) for(let i=0;i<mesh.count;i++) {
         mesh.getMatrixAt(i,matrix); matrix.decompose(p,q,s);
         let radius;
-        if(mesh === grass) radius=grassReach(s.x,new THREE.Euler().setFromQuaternion(q).z);
+        if(mesh !== rocks) {
+          radius=mesh.userData.meadowKind==='flowers'?flowerReach(s.y):mesh.userData.meadowKind==='seeds'?seedReach(s.y):vegetationReach(s.y,new THREE.Euler().setFromQuaternion(q).z,mesh.userData.windStrength);
+          maximumRootError=Math.max(maximumRootError,Math.abs(p.y+.004-sampleGround(p.x,p.z)));
+        }
         else radius=Math.max(...obstacleFootprint(mesh.geometry.attributes.position.array,matrix.elements).map(v=>Math.hypot(v.x-p.x,v.z-p.z)));
         if(mesh===rocks && isCenterMeadowRock(p.x,p.z))centralRocks++;
         if(overlapsChestScenery(p.x,p.z,radius,placement)) clearanceViolations++;
-        if(mesh===grass) {
+        if(mesh!==rocks) {
           viewPoint.copy(p).project(camera);
           lightPoint.copy(p).project(moonLight.shadow.camera);
           if(Math.abs(viewPoint.x)<1 && Math.abs(viewPoint.y)<1 && Math.abs(viewPoint.z)<1 &&
@@ -97,13 +110,13 @@ async (page) => {
       for(const [material,state] of materials)Object.assign(material,state);
       grass.castShadow=true;rocks.castShadow=true;
       renderer.shadowMap.needsUpdate=true; renderer.render(scene,camera);
-      return {grass:grass.count,rocks:rocks.count,flowers,centralRocks,textureEdgeDifference,
+      return {grass:grass.count,rocks:rocks.count,flowers,centralRocks,textureEdgeDifference,maximumRootError,
         visibleGrassOutsideShadow,openingBoundsOutsideShadow,chestShadowGainPixels,
         clearanceViolations,shadowPixels,leftShadowPixels,maximumDarkening,
         fallback:document.querySelector('#app').classList.contains('fallback')};
     });
     if(result.fallback || result.clearanceViolations || result.visibleGrassOutsideShadow || result.openingBoundsOutsideShadow ||
-      result.shadowPixels<30 || (width>=1440 && result.leftShadowPixels<30) || result.flowers || result.centralRocks ||
+      result.shadowPixels<30 || (width>=1440 && result.leftShadowPixels<30) || !result.flowers || result.maximumRootError>1e-5 || result.centralRocks ||
       result.textureEdgeDifference || result.chestShadowGainPixels<30)
       throw new Error(JSON.stringify({name,...result}));
     await page.screenshot({path:`output/playwright/vegetation-${name}.png`});

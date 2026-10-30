@@ -61,18 +61,26 @@ export const sceneConfig = {
   quality: {
     desktop: {
       pixelRatio: 1.75,
-      shadowSize: 1024,
-      // 草叶集中成簇，降低总量，让簇间裸地在近景中清晰可见。
-      grass: 6000,
+      shadowSize: 2048,
+      // 参考自然草甸：细草连成底层，中长叶交叠，少量高草、细穗和野花打破轮廓。
+      turf: 48000,
+      grass: 24000,
+      long: 6500,
+      seeds: 520,
+      flowers: 26,
       clouds: 30,
       stars: 2000,
       rocks: 90,
     },
     mobile: {
       pixelRatio: 1.5,
-      shadowSize: 512,
-      // 手机保留完整草簇，以更少的簇覆盖相同地形。
-      grass: 2400,
+      shadowSize: 1024,
+      // 手机单独缓存同一组种子的稀疏版本，保留三层高度及完整花株。
+      turf: 16000,
+      grass: 8000,
+      long: 2200,
+      seeds: 160,
+      flowers: 10,
       clouds: 10,
       stars: 700,
       rocks: 40,

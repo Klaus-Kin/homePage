@@ -6,7 +6,7 @@ import { createGrassMaterials } from "../src/scene/grass-material.ts";
 // 主通道和深度通道必须共用顶点变形与时间，避免风吹草动时投影仍停在原处。
 test("grass depth pass shares wind deformation and refreshes shadows at a bounded rate", () => {
   const grass = createGrassMaterials();
-  const main = { uniforms: {}, vertexShader: '#include <begin_vertex>' } as THREE.WebGLProgramParametersWithUniforms;
+  const main = { uniforms: {}, vertexShader: '#include <begin_vertex>', fragmentShader: '#include <lights_fragment_end>' } as THREE.WebGLProgramParametersWithUniforms;
   const depth = { uniforms: {}, vertexShader: '#include <begin_vertex>' } as THREE.WebGLProgramParametersWithUniforms;
   grass.material.onBeforeCompile(main, {} as THREE.WebGLRenderer);
   grass.depth.onBeforeCompile(depth, {} as THREE.WebGLRenderer);

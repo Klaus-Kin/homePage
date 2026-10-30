@@ -2,7 +2,7 @@
 async (page) => {
   const origin = new URL(page.url()).origin, results = [];
   for (const event of ["moon-boot-failed", "pagehide"]) {
-    for (const phase of ["mountain-0", "vegetation", "wood-spell"]) {
+    for (const phase of ["mountain-0", "vegetation", "meadow-turf-desktop", "meadow-flowers-mobile", "wood-spell"]) {
       const context = await page.context().browser().newContext();
       try {
         const target = await context.newPage();
@@ -70,8 +70,8 @@ async (page) => {
       const { Initialization } = await import("/src/scene/initialization.ts");
       const { createTerrain } = await import("/src/scene/terrain.ts");
       const init = new Initialization(), terrain = await createTerrain(init);
-      const meshes = terrain.group.children.filter((item) => item.isInstancedMesh);
-      // 先串行取得各模式的稳定数量：完整草簇截断与 PC 避让会让实例数小于配置预算。
+      const meshes=[]; terrain.group.traverse(item=>{ if(item.isInstancedMesh) meshes.push(item); });
+      // 先串行取得各模式的稳定数量：各层植被独立预算，PC 岩石避让也可能减少实例数。
       // 基线与并发检查复用同一地形，避免硬编码数量后随生成规则变化再次产生误报。
       const baseline = new Map();
       for (const mobile of [true, false]) {

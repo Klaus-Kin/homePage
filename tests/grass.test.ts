@@ -45,10 +45,10 @@ test("grass patches leave scattered clearings without cutting the meadow in two"
   assert.deepEqual(sampleGrassTuft(seededRandom(91)), sampleGrassTuft(seededRandom(91)));
 });
 
-// 降档只能在整簇边界处截断；桌面和手机同时减少叶片预算。
+// 旧的整簇截断助手保持边界行为；新的连片草甸在手机端同步减少各层预算。
 test("quality budgets reduce density and preserve complete tufts", () => {
-  assert.ok(sceneConfig.quality.desktop.grass <= 6500);
-  assert.ok(sceneConfig.quality.mobile.grass <= 2500);
+  for (const kind of ["turf", "grass", "long", "seeds", "flowers"] as const)
+    assert.ok(sceneConfig.quality.mobile[kind] < sceneConfig.quality.desktop[kind]);
   const ends = [14, 30, 43, 61];
   assert.equal(grassCountForBudget(ends, 42), 30);
   assert.equal(grassCountForBudget(ends, 43), 43);

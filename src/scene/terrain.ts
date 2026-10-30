@@ -7,9 +7,8 @@ import { sceneConfig } from "../config";
 import { fbm, groundHeight, seededRandom } from "./terrain-math";
 import { surfaceTexture } from "./textures";
 import { createMountains } from "./mountains";
-import { obstacleFootprint, overlapsFootprint, grassReach, overlapsChestScenery, isForegroundRock, isCenterMeadowRock } from "./terrain-clearance";
-import { sampleGrassTuft, grassCountForBudget } from "./grass-distribution";
-import { createGrassMaterials } from "./grass-material";
+import { obstacleFootprint, overlapsChestScenery, isForegroundRock, isCenterMeadowRock } from "./terrain-clearance";
+import { createMeadow } from "./meadow";
 import { desktopChestPlacement } from "./chest-placement";
 
 /** 连续山坡、山谷和植被共享世界坐标；相机看到的是一整片地形。 */
@@ -113,91 +112,15 @@ export async function createTerrain(init: Initialization) {
   rocks.castShadow = rocks.receiveShadow = true;
   group.add(rocks);
 
-  // 每片草只有三个三角形；顶点摆动在 GPU 内完成，CPU 不逐帧更新实例矩阵。
-  const blade = new THREE.BufferGeometry();
-  blade.setAttribute(
-    "position",
-    new THREE.Float32BufferAttribute(
-      [
-        -0.035, 0, 0, 0.035, 0, 0, -0.018, 0.28, 0.025, 0.018, 0.28, 0.025,
-        0.03, 0.54, 0.08,
-      ],
-      3,
-    ),
-  );
-  blade.setIndex([0, 1, 2, 1, 3, 2, 2, 3, 4]);
-  blade.computeVertexNormals();
-  const grassMaterials = createGrassMaterials();
-  const grass = new THREE.InstancedMesh(blade, grassMaterials.material, quality.grass);
-  // 深度通道复用风动变形，且独立登记释放；打开投影后草簇才会在地面留下真实阴影。
-  grass.customDepthMaterial = init.track(grassMaterials.depth);
-  group.add(grass);
-  const color = new THREE.Color();
-  const tuftEnds: number[] = [];
-  const tuftCenters: { x: number; z: number }[] = [];
-  let grassCount = 0;
-  for (let i = 0; grassCount < quality.grass && i < quality.grass * 8; i++) {
-    // 避让检查会遍历岩石轮廓，按尝试次数切批，包含未成功放置的草叶。
-    if (i % 16 === 0) { const pause = init.checkpoint(); if (pause) await pause; }
-    // 成簇散布，远处草叶自动缩小；盒体内不生成草，但边缘可自然遮挡脚部。
-    const tuft = sampleGrassTuft(random);
-    if (!tuft) continue;
-    // 簇间保留距离，防止多个紧凑根部重叠后又连成均匀草海。
-    if (tuftCenters.some(center => Math.hypot(center.x - tuft.x, center.z - tuft.z) < 0.4)) continue;
-    if (grassCount + tuft.blades.length > quality.grass) break;
-    // 按整簇检查每片草的完整摆动包络；靠近石头或盒盖时整簇跳过，避免剩下零散几片。
-    if (tuft.blades.some(({ x, z, size, lean }) => {
-      const reach = grassReach(size, lean);
-      return overlapsChestScenery(x, z, reach) ||
-        rockFootprints.some(footprint => overlapsFootprint(x, z, reach, footprint));
-    })) continue;
-    for (const { x, z, size, yaw, lean } of tuft.blades) {
-      dummy.position.set(x, groundHeight(x, z) - 0.015, z);
-      dummy.rotation.set(0, yaw, lean);
-      dummy.scale.setScalar(size);
-      dummy.updateMatrix();
-      grass.setMatrixAt(grassCount, dummy.matrix);
-      // 簇内轻微明暗差保留层次，色相统一，避免黄绿叶片交错产生杂乱感。
-      color.setHSL(tuft.hue, 0.42, tuft.lightness + random() * 0.035);
-      grass.setColorAt(grassCount++, color);
-    }
-    tuftEnds.push(grassCount);
-    tuftCenters.push({ x: tuft.x, z: tuft.z });
-  }
-  grass.name = "terrain-grass";
-  grass.castShadow = grass.receiveShadow = true;
-  group.add(grass);
-
-  // 达到尝试上限时不绘制未初始化实例；轻量模式仍沿用同一批通过避让的对象。
-  grass.count = grassCount; rocks.count = rockCount;
-  // 手机保留既有实例顺序、颜色和数量；PC 仅筛去新位置周围的实例，并让其余对象继续贴地。
-  const phoneGrass = grass.instanceMatrix.array.slice(), phoneColors = grass.instanceColor!.array.slice();
+  // 草甸使用独立随机种子，不消耗岩石序列；各层均参与取消、贴地、避让和阴影范围。
+  const meadow = await createMeadow(init, geometry, desktopGround, rockFootprints);
+  group.add(meadow.group);
+  rocks.count = rockCount;
   const phoneRocks = rocks.instanceMatrix.array.slice();
-  const pcGrass = new Float32Array(phoneGrass.length), pcColors = new Float32Array(phoneColors.length);
-  const pcRocks = new Float32Array(phoneRocks.length), pcTuftEnds: number[] = [];
-  let pcGrassCount = 0, pcRockCount = 0, tuftStart = 0;
+  const pcRocks = new Float32Array(phoneRocks.length);
+  let pcRockCount = 0;
   const instanceMatrix = new THREE.Matrix4(), instancePosition = new THREE.Vector3(),
     instanceScale = new THREE.Vector3(), instanceRotation = new THREE.Quaternion();
-  for (const end of tuftEnds) {
-    const pause = init.checkpoint(); if (pause) await pause;
-    let blocked = false;
-    for (let i = tuftStart; i < end; i++) {
-      instanceMatrix.fromArray(phoneGrass, i * 16).decompose(instancePosition, instanceRotation, instanceScale);
-      const lean = new THREE.Euler().setFromQuaternion(instanceRotation).z;
-      if (overlapsChestScenery(instancePosition.x, instancePosition.z, grassReach(instanceScale.x, lean), desktopChestPlacement)) blocked = true;
-    }
-    if (!blocked) {
-      for (let i = tuftStart; i < end; i++) {
-        pcGrass.set(phoneGrass.subarray(i * 16, i * 16 + 16), pcGrassCount * 16);
-        const offset = pcGrassCount * 16;
-        pcGrass[offset + 13] = groundHeight(pcGrass[offset + 12], pcGrass[offset + 14], desktopChestPlacement) - 0.015;
-        pcColors.set(phoneColors.subarray(i * 3, i * 3 + 3), pcGrassCount * 3);
-        pcGrassCount++;
-      }
-      pcTuftEnds.push(pcGrassCount);
-    }
-    tuftStart = end;
-  }
   for (let i = 0; i < rockCount; i++) {
     const pause = init.checkpoint(); if (pause) await pause;
     instanceMatrix.fromArray(phoneRocks, i * 16).decompose(instancePosition, instanceRotation, instanceScale);
@@ -210,15 +133,13 @@ export async function createTerrain(init: Initialization) {
     pcRockCount++;
   }
   // 在首次画质截断前计算全部实例的包围盒；超宽屏、手机旋转和完整开盖共用稳定覆盖范围。
-  grass.computeBoundingBox(); rocks.computeBoundingBox();
-  const shadowBounds = grass.boundingBox!.clone().union(rocks.boundingBox!).expandByScalar(0.8);
+  rocks.computeBoundingBox();
+  const shadowBounds = meadow.shadowBounds.clone().union(rocks.boundingBox!).expandByScalar(.8);
   let qualityRevision = 0, lastMobile: boolean | undefined;
   return {
     group,
     shadowBounds,
-    update(time: number, reduced: boolean) {
-      return grassMaterials.update(time, reduced);
-    },
+    update(time: number, reduced: boolean) { return meadow.update(time, reduced); },
     async setQuality(mobile: boolean) {
       // 山体等待期间可能再次旋转屏幕，旧请求不能覆盖最新的植被数量。
       const request = ++qualityRevision;
@@ -226,22 +147,16 @@ export async function createTerrain(init: Initialization) {
       const preset = sceneConfig.quality[mobile ? "mobile" : "desktop"];
       if (lastMobile !== mobile) {
         ground.geometry = mobile ? geometry : desktopGround;
-        grass.instanceMatrix.array.set(mobile ? phoneGrass : pcGrass);
-        grass.instanceColor!.array.set(mobile ? phoneColors : pcColors);
+        meadow.setQuality(mobile);
         rocks.instanceMatrix.array.set(mobile ? phoneRocks : pcRocks);
-        grass.instanceMatrix.needsUpdate = grass.instanceColor!.needsUpdate = rocks.instanceMatrix.needsUpdate = true;
-        // 完整缓存覆盖两种构图，重算包围体后再截断轻量实例，避免沿用旧位置的裁剪范围。
-        grass.count = mobile ? grassCount : pcGrassCount;
+        rocks.instanceMatrix.needsUpdate = true;
         rocks.count = mobile ? rockCount : pcRockCount;
-        grass.computeBoundingBox(); grass.computeBoundingSphere();
         rocks.computeBoundingBox(); rocks.computeBoundingSphere();
         lastMobile = mobile;
       }
       rocks.count = Math.min(preset.rocks, mobile ? backgroundRocks.length : pcRockCount);
-      grass.count = grassCountForBudget(mobile ? tuftEnds : pcTuftEnds, preset.grass);
       await mountains.setQuality(mobile);
       if (request !== qualityRevision || init.controller.signal.aborted) return;
-      grass.count = grassCountForBudget(mobile ? tuftEnds : pcTuftEnds, preset.grass);
     },
   };
 }
