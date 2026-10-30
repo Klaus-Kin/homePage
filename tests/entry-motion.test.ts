@@ -101,7 +101,11 @@ test("plumes taper from a substantial root into a hanging elastic tip", () => {
 // 丝线从外眼角出发，任何相位都不能越过耳上缘所留的模型范围。
 test("silk is rooted at the outer eye, tapered and bounded near its ear", () => {
   for (const side of [-1, 1]) for (let strand = 0; strand < 3; strand++) {
-    assert.deepEqual(silkPoint(0, 1000, side, strand, 1), { x: side * 12, y: 0, z: 8, width: .28, alpha: 1 });
+    assert.deepEqual(silkPoint(0, 1000, side, strand, 1), { x: side * 12.4, y: .6, z: 8.6, width: .28, alpha: 1 });
+    // 展开、退出和长时间飘动共享同一外眼角，根部不能跟随伸长系数滑动。
+    for(const extension of [0,.15,.5,1]) for(const time of [0,137,15999]) {
+      assert.deepEqual(silkPoint(0,time,side,strand,extension),silkPoint(0,1000,side,strand,1));
+    }
     for (let time=0; time<16000; time+=103) for(let i=0;i<=30;i++) {
       const p=silkPoint(i/30,time,side,strand,1);
       assert.ok(Math.abs(p.x)<=26.01 && p.y<=13.01 && p.y>=-.01);

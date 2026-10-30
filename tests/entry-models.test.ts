@@ -55,8 +55,8 @@ test("monkey silk is bounded, batched and disposed exactly once", () => {
   assert.equal(model.root.children.length,0);
 });
 
-// 从最终合批网格测量耳宽和发顶轮廓，约束小尺寸剪影而不是仅检查创建参数。
-test("monkey has a rounded swept hair outline and restrained ears", () => {
+// 从合批后的实体测量宽短比例与耳朵外伸，避免造型参数正确而实际剪影仍然细长。
+test("monkey has a broad short silhouette, rounded tufts and small ears", () => {
   const model=createMonkey();
   const points: THREE.Vector3[]=[];
   model.root.traverse(object=>{
@@ -64,17 +64,24 @@ test("monkey has a rounded swept hair outline and restrained ears", () => {
     const position=object.geometry.getAttribute("position");
     for(let i=0;i<position.count;i++) points.push(new THREE.Vector3().fromBufferAttribute(position,i));
   });
-  assert.ok(Math.max(...points.map(p=>Math.abs(p.x)))<24,"耳朵应收进头部轮廓两侧");
+  const bounds=new THREE.Box3().setFromPoints(points);
+  const width=bounds.max.x-bounds.min.x,height=bounds.max.y-bounds.min.y;
+  assert.ok(width/height>.87 && width/height<.95,"整头宽高比应接近 0.9");
+  const hair=model.root.children.find(object=>object instanceof THREE.Mesh && !Array.isArray(object.material)
+    && object.material.name==="monkey-hair") as THREE.Mesh;
+  const hairBox=new THREE.Box3().setFromBufferAttribute(hair.geometry.getAttribute("position") as THREE.BufferAttribute);
+  assert.ok((width-(hairBox.max.x-hairBox.min.x))/2/width<.08,"每侧耳轮突出不超过头宽的 8%");
   const crown=points.filter(p=>p.y>20);
   const top=Math.max(...crown.map(p=>p.y));
   const broadTop=crown.filter(p=>Math.abs(p.x)>6 && p.y>top-3);
-  assert.ok(broadTop.length>30,"发顶应是连续饱满曲面，而不是中央尖刺");
+  assert.ok(broadTop.length>30,"中央主束两侧必须保留圆润宽发束");
   assert.ok(top<27,"发顶不能继续保留高耸尖刺");
+  assert.ok(hair.geometry.getAttribute("position").count<40000,"毛发与眉毛合批必须遵守静态网格预算");
   disposeModel(model.root);
 });
 
-// 连续脸面避免分离的额头球；直接检查中轴、凹进的眼窝以及低垂额前的发尖。
-test("monkey has a continuous face, recessed eyes and a low framed hairline", () => {
+// 连续桃形脸面直接约束低额头、宽下巴与短鼻；眉眼的实际体积必须在小图标中可读。
+test("monkey has a low peach frame, broad jaw and large eyes under sloped brows", () => {
   const model=createMonkey();
   const mesh=(name: string)=>model.root.children.find(object=>object instanceof THREE.Mesh
     && !Array.isArray(object.material) && object.material.name===name) as THREE.Mesh;
@@ -87,12 +94,34 @@ test("monkey has a continuous face, recessed eyes and a low framed hairline", ()
       candidates.push(position.getZ(i));
     return Math.max(...candidates);
   };
+  const faceBox=new THREE.Box3().setFromBufferAttribute(position as THREE.BufferAttribute);
+  assert.ok(faceBox.max.x-faceBox.min.x>30,"面部应拓宽到饱满的短脸");
+  assert.ok(faceBox.max.y<13 && faceBox.min.y< -20,"桃形面框应压低额头并保留宽圆下巴");
+  const span=(y: number)=>{
+    const xs=[];
+    for(let i=0;i<position.count;i++) if(Math.abs(position.getY(i)-y)<.6) xs.push(Math.abs(position.getX(i)));
+    return Math.max(...xs);
+  };
+  assert.ok(span(-15)>span(-2)*.77,"下半脸不能再收成狭长尖下巴");
   assert.ok(near(0,7)>4,"额头中轴必须连续，不能形成两块独立凸球");
   assert.ok(near(7,0)<near(7,-5),"眼窝应低于颧骨，眉眼靠真实凹凸呈现");
   const hair=mesh("monkey-hair").geometry.getAttribute("position");
   let lowForelock=false;
-  for(let i=0;i<hair.count;i++) if(Math.abs(hair.getX(i))<1 && hair.getY(i)>8 && hair.getY(i)<12 && hair.getZ(i)>5)
+  for(let i=0;i<hair.count;i++) if(Math.abs(hair.getX(i))<1 && hair.getY(i)>6 && hair.getY(i)<9 && hair.getZ(i)>5)
     lowForelock=true;
   assert.ok(lowForelock,"中央发尖应压低到额前，避免后移发际线");
+  const eyes=mesh("monkey-eye");
+  assert.ok(eyes,"大眼面应保留独立可变色材质");
+  const eyeBox=new THREE.Box3().setFromBufferAttribute(eyes.geometry.getAttribute("position") as THREE.BufferAttribute);
+  assert.ok(eyeBox.max.y-eyeBox.min.y>5,"眼面必须为大眼形，不能退回细长眯眼");
+  assert.ok(Math.abs(model.root.rotation.y)<=.1,"保持接近正面的阅读方向");
+  // 每条实体边恰好由两片三角面共用，防止细分回归为有裂口的独立三角面。
+  const indices=face.geometry.index!.array,edges=new Map<string,number>();
+  for(let i=0;i<indices.length;i+=3) for(let j=0;j<3;j++) {
+    const a=indices[i+j],b=indices[i+(j+1)%3],key=a<b?`${a}:${b}`:`${b}:${a}`;
+    edges.set(key,(edges.get(key)??0)+1);
+  }
+  assert.ok([...edges.values()].every(count=>count===2),"连续脸面必须为闭合实体，不能留下 T 形边界");
+  assert.ok(Array.from(face.geometry.getAttribute("normal").array).every(Number.isFinite),"脸面法线必须有效");
   disposeModel(model.root);
 });

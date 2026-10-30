@@ -99,9 +99,10 @@ export function silkPoint(t: number, time: number, side: number, strand: number,
   const phase = time / 1000 * Math.PI * 2 / (3.3 + strand * .27) + strand * 1.9 + side * .8;
   const flutter = Math.sin(Math.PI * u) * Math.sin(phase + u * 3.2);
   return {
-    x: side * (12 + u * (13 - strand * 1.2)),
-    y: u * (11.5 - strand * 3.6) + flutter * 1.15,
-    z: 8 + Math.sin(Math.PI * u) * Math.sin(phase * .73) * .5,
+    // 新的大眼外角略高于瞳孔；长度相应缩短，仍然止于同侧耳上方的透明区。
+    x: side * (12.4 + u * (12.6 - strand * 1.2)),
+    y: .6 + u * (10.9 - strand * 3.6) + flutter * 1.15,
+    z: 8.6 + Math.sin(Math.PI * u) * Math.sin(phase * .73) * .5,
     width: .28 * (1 - t) ** .7,
     alpha: (1 - t) ** .6,
   };

@@ -33,6 +33,9 @@ async (page) => {
         canvas:link.querySelector('canvas').width,
       })));
       assert(baseline.every(b=>b.width===size && b.canvas<=Math.ceil(size*1.6)*2),'占位尺寸或 DPR 上限错误');
+      // 同一入口分别保留静止和红眼截图，便于核对大眼瞳孔、发际线和红丝固定根点。
+      await target.screenshot({path:`output/playwright/monkey-${size}px-rest.png`});
+      await target.locator('[data-entrance=world] .entry-icon').screenshot({path:`output/playwright/monkey-${size}px-rest-detail.png`});
       await target.keyboard.press('Tab');
       await target.locator('[data-entrance=world]').focus();
       await target.locator('[data-entrance=blog]').hover();
@@ -40,6 +43,7 @@ async (page) => {
       const gpu=await target.evaluate(()=>window.__entryGPU.map(s=>({...s})));
       await target.screenshot({path:`output/playwright/entry-icons-${size}px.png`});
       await target.locator('#journey-choices').screenshot({path:`output/playwright/entry-icons-${size}px-detail.png`});
+      await target.locator('[data-entrance=world] .entry-icon').screenshot({path:`output/playwright/monkey-${size}px-active-detail.png`});
       // 采样持续十五秒，包含多个 2.8/3–5 秒周期；同一父容器承载中英文，子层无动画。
       const samples=await target.evaluate(()=>new Promise(resolve=>{
         const start=performance.now(),samples=[];
