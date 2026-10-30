@@ -9,6 +9,8 @@ import { chestPose } from "./chest-motion";
 import { chestLightFrame } from "./chest-light";
 import { glowTexture } from "./textures";
 import { engravingGlint, engravingReflectionProfile, engravingReflectionFrame } from "./engraving-light";
+import type { ChoiceFrame } from "../choice-prompt";
+import { createChoiceLight } from "./choice-light";
 
 /** 灰黑旧木的颜色与高度分别生成；纵向木纹、细裂、划伤和磨边都参与实际光照。 */
 async function makeWood(face: "plain" | "spell" | "name" | "return", init: Initialization) {
@@ -110,7 +112,7 @@ export async function createChest(init = new Initialization()) {
     bumpScale: 0.012, color: 0xb0a18c, roughness: 0.98,
     emissive: 0xffd786, emissiveIntensity: 0 });
   const box = ownTree(init, new THREE.Group()), openingPivot = new THREE.Group();
-  // 为上翻后落到左侧的双倍长度预留空间；底盒在整个动画中保持落地且不平移。
+  // 为正式旅程上翻后落到左侧的双倍长度预留空间；该阶段底盒保持落地且不平移。
   // 长边左右摆放，局部右端铰链转到画面左侧；上半盒真正抬离地面。
   box.rotation.y = Math.PI;
   box.position.set(chestPlacement.x, 0, chestPlacement.z);
@@ -173,6 +175,9 @@ export async function createChest(init = new Initialization()) {
   }
   const fixedHalf = await half(-1, nameWood, box);
   const movingHalf = await half(1, returnWood, openingPivot);
+  // 提示光效只绑定上盖铰链，既不使用正式旅程光束，也不改变内腔灯光通道。
+  const choiceLight = createChoiceLight();
+  openingPivot.add(choiceLight.group);
   // 水平销轴贯穿短端厚度，实体铰链与上翻轴重合。
   // 暖金色保留少量漫反射，在无环境贴图的冷月光下也能辨色；中等粗糙度形成柔和金属高光。
   const hingeMaterial = new THREE.MeshStandardMaterial({ color: 0xd7a44a,
@@ -234,7 +239,7 @@ export async function createChest(init = new Initialization()) {
   }
   box.add(beams);
   const bounds = new THREE.Box3();
-  function update(lidProgress: number, glowProgress: number, reduced: boolean, time = 0) {
+  function update(lidProgress: number, glowProgress: number, reduced: boolean, time = 0, hint?: ChoiceFrame) {
     // 使用场景已有的可暂停时钟；减少动态时光带立即离场，不启动额外计时器。
     sweep.value = engravingSweep(time, reduced);
     const reflection = engravingReflectionFrame(sweep.value, reflectionProfile);
@@ -245,14 +250,15 @@ export async function createChest(init = new Initialization()) {
     engravingLight.target.position.set(reflection.x, -.03, -.65);
     engravingLight.intensity = reflection.intensity;
     engravingLight.visible = reflection.intensity > 0;
-    const pose = chestPose(lidProgress), moved = openingPivot.rotation.z !== -pose.angle;
+    const pose = chestPose(hint ? hint.lid / Math.PI : lidProgress), moved = openingPivot.rotation.z !== -pose.angle;
     openingPivot.rotation.z = -pose.angle;
     const b = pose.bounds;
     bounds.min.set(b.minX, b.minY, b.minZ); bounds.max.set(b.maxX, b.maxY, b.maxZ);
     // 小型销轴和磨圆边缘也纳入保守边界。
     bounds.expandByScalar(0.03);
     // 内腔离点光很近，降低激活增益，给暖黄反射留下色彩余量，而非靠提高曝光制造白斑。
-    const lightFrame = chestLightFrame(lidProgress, glowProgress, reduced);
+    const lightFrame = chestLightFrame(hint ? 0 : lidProgress, hint ? 0 : glowProgress, reduced);
+    choiceLight.update(hint ?? { lid: 0, yaw: 0, pitch: 0, roll: 0, lift: 0, orbit: 0, pull: 0, light: 0, framing: 0 });
     cavityLights.forEach((light) => { light.intensity = lightFrame.intensity; light.visible = light.intensity > 0; });
     inner.emissiveIntensity = lightFrame.innerEmission;
     glowMaterial.opacity = lightFrame.glowOpacity;

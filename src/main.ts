@@ -5,7 +5,7 @@ import { INSCRIPTION_TEXT } from "./inscription-strokes";
 import { InscriptionTimeline, VisibleTime } from "./inscription-timeline";
 import { InkTimeline, BlackPresentationGate } from "./ink-timeline";
 import { InkTransition } from "./ink-transition";
-import { CHOICE_DURATION, choiceKeyframes } from "./choice-prompt";
+import { CHOICE_DURATION, PROMPT_DURATION, choiceKeyframes } from "./choice-prompt";
 import {
   JourneyState,
   isActivation,
@@ -52,6 +52,9 @@ let renderedBlack = false;
 let gesture: { x: number; y: number; time: number; id: number } | null = null;
 // Web Animations 的完成事件维护提示门禁；盒体仍由场景既有循环绘制，不新增 RAF 或定时器。
 let choiceAnimation: Animation | undefined;
+// 正常场景延长静止尾段；减少动态或 WebGL 降级仍沿用原来的 720ms 提示。
+let choiceDuration = CHOICE_DURATION;
+let choiceStatic = false;
 
 // 文案只从配置写入文本节点，避免配置内容经由 HTML 注入页面。
 document.title = pageConfig.title;
@@ -80,6 +83,13 @@ function showFallback(error: unknown) {
   scene?.dispose();
   scene = undefined;
   app.classList.add("fallback");
+  // 播放中失去 WebGL 也退回原文字窗口，保留绝对播放时间，不等待已经销毁的盒体动作。
+  if (choiceAnimation) {
+    choiceDuration = CHOICE_DURATION;
+    const effect = choiceAnimation.effect as KeyframeEffect;
+    effect.setKeyframes(choiceKeyframes(choiceStatic, choiceDuration));
+    effect.updateTiming({ duration: choiceDuration });
+  }
   button.removeAttribute("style");
   state.ready();
   app.dataset.state = state.phase;
@@ -172,8 +182,10 @@ function promptChoice(keyboard = false) {
   if (!state.promptChoice()) return;
   choices.dataset.prompt = "true";
   scene?.promptChoice();
-  choiceAnimation = choiceMotion.animate(choiceKeyframes(motionPreference.matches), {
-    duration: CHOICE_DURATION, easing: "linear", fill: "both",
+  choiceStatic = motionPreference.matches;
+  choiceDuration = scene && !choiceStatic ? PROMPT_DURATION : CHOICE_DURATION;
+  choiceAnimation = choiceMotion.animate(choiceKeyframes(choiceStatic, choiceDuration), {
+    duration: choiceDuration, easing: "linear", fill: "both",
   });
   choiceAnimation.onfinish = cancelChoicePrompt;
   if (document.hidden) choiceAnimation.pause();
@@ -274,7 +286,8 @@ window.addEventListener(
 /** 偏好切换只替换关键帧，保留已播放时间，绝不重播提示或重置旅程。 */
 function onMotionChange() {
   if (choiceAnimation) {
-    (choiceAnimation.effect as KeyframeEffect).setKeyframes(choiceKeyframes(motionPreference.matches));
+    choiceStatic ||= motionPreference.matches;
+    (choiceAnimation.effect as KeyframeEffect).setKeyframes(choiceKeyframes(choiceStatic, choiceDuration));
   }
   scene?.setReducedMotion(motionPreference.matches);
 }

@@ -114,3 +114,35 @@ export function openingCameraPosition(start: THREE.Vector3, end: THREE.Vector3,
   const ease = p * p * p * (p * (p * 6 - 15) + 10);
   return result.copy(start).lerp(end, ease);
 }
+
+/** 仅在短小屏的微开扫掠区与入口相交时，预先计算能避开入口的最近取景端点。
+ * 相机朝向、模型比例及实体位置保持不变；沿视线退让并垂直平移，播放时不逐帧追边。
+ */
+export function fitChoiceCamera(bounds: THREE.Box3, matrix: THREE.Matrix4,
+  camera: THREE.PerspectiveCamera, width: number, height: number,
+  choices: { left: number; right: number; bottom: number }) {
+  const initial = projectBounds(bounds, matrix, camera, width, height);
+  if (selectSceneLayout(width, height) === "desktop" || initial.top >= choices.bottom + 14 ||
+    initial.left >= choices.right + 16 || initial.right <= choices.left - 16) return false;
+  const safeTop = choices.bottom + 14, safeBottom = height - 18;
+  const available = Math.max(32, safeBottom - safeTop);
+  const center = bounds.getCenter(new THREE.Vector3()).applyMatrix4(matrix);
+  const forward = camera.getWorldDirection(new THREE.Vector3());
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+  const point = new THREE.Vector3();
+  for (let pass = 0; pass < 10; pass++) {
+    camera.updateMatrixWorld();
+    const b = projectBounds(bounds, matrix, camera, width, height);
+    const depth = -point.copy(center).applyMatrix4(camera.matrixWorldInverse).z;
+    if (b.bottom - b.top > available) {
+      camera.position.addScaledVector(forward, -depth * ((b.bottom - b.top) / available - 1) * 1.02);
+      continue;
+    }
+    const overflow = b.top < safeTop ? b.top - safeTop : b.bottom > safeBottom ? b.bottom - safeBottom : 0;
+    if (Math.abs(overflow) < .05) break;
+    const worldPerPixel = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * depth / height;
+    camera.position.addScaledVector(up, -overflow * worldPerPixel);
+  }
+  camera.updateMatrixWorld();
+  return true;
+}

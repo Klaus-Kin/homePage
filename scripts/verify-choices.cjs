@@ -41,12 +41,14 @@ async (page) => {
         samples.push({elapsed:performance.now()-start,yaw:+host.dataset.choiceYaw,lid:+host.dataset.lidAngle,
           beams:host.dataset.beamsVisible,spread:+(document.querySelector('#whiteout').dataset.spread||0),state:app.dataset.state,
           axis:Math.abs(icons[0].x+icons[0].width/2-icons[1].x-icons[1].width/2),x:new DOMMatrix(getComputedStyle(group).transform).m41});
-        if(performance.now()-start<820) requestAnimationFrame(sample); else resolve(samples);
+        if(performance.now()-start<1900) requestAnimationFrame(sample); else resolve(samples);
       };
       // 原生指针释放后伴随的 click 不得导致二次提示；播放中的按钮激活也不得重开或排队。
       document.querySelector('#box-button').click(); sample();
     }));
-    assert(captured.every(s=>s.state==='idle' && s.lid===0 && s.beams==='false' && s.spread===0 && s.axis<=1 && Math.abs(s.x)<=6.01 && Math.abs(s.yaw)<=1.2*Math.PI/180),'提示改变盒盖、灯光、旅程或图标轴线');
+    // 宝盒采用独立的完整动作，文字仍在原 720ms 内完成，正式旅程灯光始终关闭。
+    assert(captured.every(s=>s.state==='idle' && s.lid>=0 && s.lid<=26.001 && s.beams==='false' && s.spread===0 && s.axis<=1 && Math.abs(s.x)<=6.01 && Math.abs(s.yaw)<=4*Math.PI/180),'提示改变旅程灯光、超出动作幅度或图标轴线');
+    assert(captured.some(s=>s.lid>25.9),'宝盒未微开到 26 度');
     assert(captured.some(s=>Math.abs(s.yaw)>.002),'宝盒未轻颤');
     assert(captured.some(s=>Math.abs(s.x)>4),'两个选项未明显抖动');
     assert(captured.at(-1).yaw===0 && captured.at(-1).x===0,'提示未精确归位');

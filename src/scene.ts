@@ -1,10 +1,10 @@
 import * as THREE from "three";
 import { Initialization } from "./scene/initialization";
 import { ownTree } from "./scene/resources";
-import { fitCamera, projectBounds, keepBoundsInView, openingCameraPosition } from "./responsive";
+import { fitCamera, projectBounds, keepBoundsInView, openingCameraPosition, fitChoiceCamera } from "./responsive";
 import { sceneConfig, pageConfig } from "./config";
 import { transitionFrame } from "./transition";
-import { choiceYaw, CHOICE_DURATION } from "./choice-prompt";
+import { choiceFrame, choiceGroundOffset, PROMPT_DURATION } from "./choice-prompt";
 import { VisibleTime } from "./inscription-timeline";
 import { createChest } from "./scene/chest";
 import { chestPlacement, selectChestPlacement } from "./scene/chest-placement";
@@ -76,9 +76,14 @@ export async function createScene(
   const pointer = new THREE.Vector2(),
     currentPointer = new THREE.Vector2();
   const baseCamera = new THREE.Vector3(), openCamera = new THREE.Vector3();
+  const choiceCamera = new THREE.Vector3();
+  let choiceFraming = 0;
+  let choiceLightActive = false;
   let lidProgress = 0;
   // 提示时钟只累计前台可见时间，角度始终叠加在固定基准姿态上，避免累计漂移。
   let promptClock: VisibleTime | null = null;
+  // 一次提示内只要启用过减少动态，余下时间始终保持静态，切回偏好不会重播。
+  let promptStatic = false;
   let baseYaw = Math.PI;
   // 预先计算待机近景与完整展开两个端点；播放中只插值，不触发边缘阈值修正。
   const motion = chestMotionBounds();
@@ -91,6 +96,7 @@ export async function createScene(
   function dispose() {
     if (disposed) return;
     disposed = true;
+    promptClock = null;
     renderer.setAnimationLoop(null);
     document.removeEventListener("visibilitychange", updateLoop);
     renderer.domElement.removeEventListener("webglcontextlost", contextLost);
@@ -152,13 +158,17 @@ export async function createScene(
   function syncTargets() {
     // 点击初始帧沿用近景，随着开盖平滑退让；触屏没有额外鼠标视差。
     openingCameraPosition(baseCamera, openCamera, reduced ? 0 : lidProgress, camera.position);
+    // 正常尺寸端点与基准完全相同；只有已确认的短小屏会使用最小幅度的提示退让。
+    if (choiceFraming > 0) camera.position.lerp(choiceCamera, choiceFraming);
+    // 短屏退让只为宝盒腾出空间；天空同步相机位移，月球与月云继续保持原来的屏幕构图。
+    sky.group.position.copy(choiceCamera).sub(baseCamera).multiplyScalar(choiceFraming);
     if (!reduced) {
       camera.position.x += currentPointer.x * 0.1;
       camera.position.y += currentPointer.y * 0.06;
     }
     chest.box.updateMatrixWorld();
     camera.updateMatrixWorld();
-    sky.moon.updateMatrixWorld();
+    sky.group.updateMatrixWorld(true);
     const b = projectBounds(
       chest.bounds,
       chest.box.matrixWorld,
@@ -211,18 +221,32 @@ export async function createScene(
       : pageConfig.transition.charge + pageConfig.transition.fade;
     const frame = transitionFrame(transition * duration, reduced, pageConfig.transition);
     lidProgress = frame.lid;
-    const promptElapsed = promptClock?.sample(performance.now()) ?? CHOICE_DURATION;
-    if (promptElapsed >= CHOICE_DURATION) promptClock = null;
-    const yaw = baseYaw + choiceYaw(promptElapsed, reduced);
-    const yawChanged = chest.box.rotation.y !== yaw;
-    chest.box.rotation.y = yaw;
-    const lidChanged = chest.update(frame.lid, frame.glow, reduced, time);
-    if (lidChanged || yawChanged) {
+    const promptElapsed = promptClock?.sample(performance.now()) ?? PROMPT_DURATION;
+    if (promptElapsed >= PROMPT_DURATION) promptClock = null;
+    const hint = choiceFrame(promptElapsed, reduced || promptStatic);
+    if (choiceLightActive !== (hint.light > 0)) {
+      choiceLightActive = hint.light > 0;
+      recordResources = true;
+    }
+    const framingChanged = choiceFraming !== hint.framing;
+    choiceFraming = hint.framing;
+    const yaw = baseYaw + hint.yaw;
+    const groundedY = (choiceGroundOffset(hint.pitch, yaw, hint.roll) + hint.lift) * chest.box.scale.y;
+    const poseChanged = chest.box.rotation.y !== yaw || chest.box.rotation.x !== hint.pitch ||
+      chest.box.rotation.z !== hint.roll || chest.box.position.y !== groundedY;
+    chest.box.rotation.set(hint.pitch, yaw, hint.roll);
+    chest.box.position.y = groundedY;
+    const lidChanged = chest.update(frame.lid, frame.glow, reduced, time, promptClock ? hint : undefined);
+    if (lidChanged || poseChanged || framingChanged) {
       renderer.shadowMap.needsUpdate = true;
       syncTargets();
     }
     // 验收读数只记录真实盒体姿态，不暴露可写场景接口。
     host.dataset.choiceYaw = String(chest.box.rotation.y - baseYaw);
+    // 只读采样与实际姿态共帧提交，便于验证接地、光效隔离和偏好切换后的精确归位。
+    host.dataset.choicePose = JSON.stringify({ elapsed: promptElapsed, ...hint, groundedY,
+      rotation: chest.box.rotation.toArray().slice(0, 3), exposure: 1.05 + frame.glow * .35,
+      camera: camera.position.toArray() });
     // 补光只保留暗面木纹，方向性明暗由月光主导；激活后的暖光仍由盒内光源负责。
     warmLight.intensity = 2 + (hovered ? 0.2 : 0) + frame.glow;
     renderer.toneMappingExposure = 1.05 + frame.glow * 0.35;
@@ -232,7 +256,7 @@ export async function createScene(
     host.dataset.openingRotation = JSON.stringify(chest.openingPivot.rotation.toArray().slice(0, 3));
     host.dataset.chestHeight = JSON.stringify([chest.bounds.min.y, chest.bounds.max.y]);
     host.dataset.lightSource = JSON.stringify(getLightScreenPosition());
-    host.dataset.shadowMoving = String(frame.lid > 0 && frame.lid < 1);
+    host.dataset.shadowMoving = String((frame.lid > 0 && frame.lid < 1) || (promptClock && !promptStatic && !reduced));
     host.dataset.beamsVisible = String(!reduced && frame.glow > 0);
     // 草簇投影按风场节奏刷新；静止、减少动态与后台状态仍沿用按需渲染。
     if (terrain.update(time, reduced)) renderer.shadowMap.needsUpdate = true;
@@ -272,8 +296,7 @@ export async function createScene(
     if (disposed) return;
     size = fitCamera(camera, renderer, host);
     // 取景只依据基准闭合姿态，尺寸变化不能把瞬时颤动写入相机端点。
-    const currentYaw = chest.box.rotation.y;
-    chest.box.rotation.y = baseYaw;
+    chest.box.rotation.set(0, baseYaw, 0);
     // 只让 PC 模式移动盒体；手机位置、模型比例及取景预设继续沿用已确认的参数。
     const placement = selectChestPlacement(size.mobile);
     chest.box.position.set(placement.x, 0, placement.z);
@@ -295,13 +318,31 @@ export async function createScene(
     camera.position.copy(presetCamera);
     keepBoundsInView(closedBounds, chest.box.matrixWorld, camera, size.width, size.height);
     baseCamera.copy(camera.position);
-    chest.box.rotation.y = currentYaw;
+    // 尺寸变化时读取入口边界，并为原有文字抖动和图标外沿保留固定余量。
+    const entries = [...document.querySelectorAll<HTMLElement>("[data-entrance] .journey-copy")];
+    const choicesRect = entries.map(entry => entry.getBoundingClientRect());
+    if (choicesRect.length) {
+      const peak = chestPose(26 / 180).bounds;
+      const hintBounds = new THREE.Box3(new THREE.Vector3(peak.minX, peak.minY, peak.minZ),
+        new THREE.Vector3(peak.maxX, peak.maxY, peak.maxZ)).expandByScalar(.16);
+      fitChoiceCamera(hintBounds, chest.box.matrixWorld, camera, size.width, size.height, {
+        left: Math.min(...choicesRect.map(r => r.left)) - 6,
+        right: Math.max(...choicesRect.map(r => r.right)) + 6,
+        bottom: Math.max(...choicesRect.map(r => r.bottom)) + 10,
+      });
+    }
+    choiceCamera.copy(camera.position);
+    camera.position.copy(baseCamera);
+    // screenPoint 使用 matrixWorld 反投影；恢复坐标后同步矩阵，不能把提示端点误当成天空基准。
+    camera.updateMatrixWorld();
+    // render 按原可见时间重新采样并恢复当前姿态，不把瞬时倾斜或支撑高度纳入构图基准。
     currentPointer.set(0, 0);
     pointer.set(0, 0);
     // 画质切换也分批生成；完成后才提交新几何，取消后的续体不再渲染。
     void terrain.setQuality(size.mobile).then(() => {
       if (!disposed) { renderer.shadowMap.needsUpdate = true; recordResources = true; render(); }
     }).catch((error) => { if (!disposed) { dispose(); onFailure(error); } });
+    sky.group.position.set(0, 0, 0);
     sky.resize(camera, size.preset, size.mobile);
     const shadowSize =
       sceneConfig.quality[size.mobile ? "mobile" : "desktop"].shadowSize;
@@ -364,18 +405,16 @@ export async function createScene(
   return {
     promptChoice() {
       if (disposed || promptClock) return;
+      promptStatic = reduced;
       promptClock = new VisibleTime();
       promptClock.sample(performance.now());
+      recordResources = true;
     },
     cancelChoicePrompt() {
       promptClock = null;
-      if (chest.box.rotation.y !== baseYaw) {
-        chest.box.rotation.y = baseYaw;
-        renderer.shadowMap.needsUpdate = true;
-        syncTargets();
-        // 立即归位后才交给转场，正常循环继续负责后续帧。
-        render();
-      }
+      recordResources = true;
+      // 无条件提交闭合基准和熄光；即使取消恰好落在偏航为零的一帧，也不能遗留开盖或光环。
+      render();
     },
     // 正常模式由唯一渲染循环提交，避免过渡回调与动画回调在同一帧重复绘制。
     setHover(value) {
@@ -388,6 +427,7 @@ export async function createScene(
     },
     getLightScreenPosition,
     setReducedMotion(value) {
+      if (value && promptClock) promptStatic = true;
       reduced = value;
       resize();
       updateLoop();
