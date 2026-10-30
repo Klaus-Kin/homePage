@@ -347,7 +347,10 @@ export function createMonkey(): EntryModel {
   const resting=new THREE.Color(0xb99b65),red=new THREE.Color(0xa90603);
   batchRelief(root);
   root.rotation.y=-.04;
-  return {root,update(time,_amount,eyes,threads) {
+  return {root,update(time,amount,eyes,threads) {
+    // 与文案共用 1.8 秒余弦往返和激活包络；只向右转约 26°，移出、重入及减少动态沿用原调度。
+    // 整个实体绕 Y 轴旋转，右耳和右眼自然退后并由深度缓冲遮挡，红丝根点也保持在外眼角。
+    root.rotation.y=-.04+.23*(1-Math.cos(time/1000*Math.PI*2/1.8))*amount;
     eye.color.copy(resting).lerp(red,eyes);
     eye.emissiveIntensity=eyes*1.1;
     silk.forEach(update=>update(time,threads));

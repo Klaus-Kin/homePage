@@ -2,6 +2,46 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
 import { createCrown, createMonkey, disposeModel } from "../src/entry-models.ts";
+import { EntryMotion } from "../src/entry-motion.ts";
+
+// 用真实根节点和运动包络验证转头方向、周期及中断归位；所有部件必须保留同一空间变换。
+test("monkey turns toward its copy in a continuous shared cycle and settles on exit", () => {
+  const model=createMonkey(),motion=new EntryMotion();
+  const rest=model.root.rotation.y;
+  const meshes=model.root.children.filter(object=>object instanceof THREE.Mesh);
+  const buffers=meshes.map(mesh=>mesh.geometry.getAttribute("position").array);
+  const update=()=>model.update(motion.time,motion.reduced?0:motion.amount,motion.eye,motion.silk);
+  motion.setActive(true);
+  motion.advance(900);update();
+  const turned=model.root.rotation.y;
+  assert.ok(turned-rest>.4 && turned-rest<.5,"转向右侧文案应有清晰且克制的角度");
+  model.root.updateMatrixWorld(true);
+  const nearEar=model.root.localToWorld(new THREE.Vector3(-20.2,-.9,.8));
+  const farEar=model.root.localToWorld(new THREE.Vector3(20.2,-.9,.8));
+  const nearEye=model.root.localToWorld(new THREE.Vector3(-7.6,-.15,9.05));
+  const farEye=model.root.localToWorld(new THREE.Vector3(7.6,-.15,9.05));
+  assert.ok(farEar.z<nearEar.z && farEye.z<nearEye.z,"右耳和右眼必须随转头远离相机");
+  assert.ok(farEar.x-nearEar.x<40.4 && farEye.x-nearEye.x<15.2,"横向间距必须随真实转动缩短");
+  motion.advance(900);update();
+  assert.ok(Math.abs(model.root.rotation.y-rest)<1e-8,"一个周期后精确回到原姿态");
+  motion.advance(900);update();
+  assert.ok(Math.abs(model.root.rotation.y-turned)<1e-8,"持续悬停必须重复转头");
+  motion.setActive(false);update();
+  assert.ok(Math.abs(model.root.rotation.y-turned)<1e-8,"移出不能跳回原姿态");
+  motion.advance(75);update();
+  const fading=model.root.rotation.y;
+  motion.setActive(true);update();
+  assert.equal(model.root.rotation.y,fading,"快速重入不能重置相位");
+  motion.advance(16000);update();
+  assert.ok(model.root.rotation.y>=rest && model.root.rotation.y<=turned);
+  motion.reduced=true;update();
+  assert.equal(model.root.rotation.y,rest,"减少动态沿用现有包络停在正面");
+  motion.reduced=false;
+  motion.setActive(false);motion.advance(450);update();
+  assert.equal(model.root.rotation.y,rest);
+  meshes.forEach((mesh,i)=>assert.equal(mesh.geometry.getAttribute("position").array,buffers[i],"转头不能重建网格或红丝缓冲"));
+  disposeModel(model.root);
+});
 
 // 实际模型验证缓冲身份和羽根，防止纯时间函数正确、渲染网格却重建或整体摇摆。
 test("model animation reuses geometry and fixes every feather root", () => {
