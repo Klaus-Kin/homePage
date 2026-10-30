@@ -18,10 +18,11 @@
       <stop offset="1" stop-color="#8f6b39"/>
     </linearGradient>
     <g id="crown-plume">
-      <path d="M29 49C27 34 24 19 14 12C8 8 5 9 5 14C2 8 6 4 12 6C26 11 31 32 32 47Z" fill="url(#plume-gold)"/>
-      <path d="M30.5 48C28 29 23 13 10 8" stroke="#f1dca6" stroke-width=".9" stroke-linecap="round"/>
+      <!-- 静态后备也保留粗根、细梢和自然回垂的轮廓，加载与降级时不再出现直硬尖角。 -->
+      <path d="M26.5 49C23 34 15 15 9 6C4.6 0 1.8 3 2.2 12C2.3 15 2.8 18 3.4 20.2C3.1 11 4.3 5.4 7.2 6C12 7.5 22.6 32 32 48Z" fill="url(#plume-gold)"/>
+      <path d="M29 48C23 30 12 7 7 4.7C3.6 3.3 2.6 8 3.1 14" stroke="#f1dca6" stroke-width=".65" stroke-linecap="round"/>
       <!-- 羽片沿着弯曲羽轴展开，避免把两根长翎画成普通皇冠的尖角。 -->
-      <path d="M26 28L29 26M23.5 22L26 20M20 17L22 14.5M15 12L16 8M28 35L30.5 33" stroke="#644a2d" stroke-width=".8" stroke-linecap="round"/>
+      <path d="M24 34L26 32M21 27L23 25M18 20L20 19M14 13L15.5 12M26.5 40L28.5 38" stroke="#644a2d" stroke-width=".55" stroke-linecap="round"/>
     </g>
   </defs>
   <use href="#crown-plume"/>

@@ -141,7 +141,8 @@ async (page) => {
     await target.keyboard.press('Tab');
     await target.locator('[data-entrance=world]').focus();await target.waitForTimeout(350);
     assert(await target.locator('.monkey-eye').evaluate((el,color)=>getComputedStyle(el).fill!==color,eye),'聚焦未点亮猴眼');
-    assert(await target.locator('.journey-copy').evaluate(el=>getComputedStyle(el).animationName==='world-curiosity'),'文字未使用独立悬停层');
+    // 三维图标与文字共用按需调度，降级时文字仍由同一个独立容器平滑位移。
+    assert(await target.locator('.journey-copy').evaluate(el=>getComputedStyle(el).animationName==='none'&&new DOMMatrix(getComputedStyle(el).transform).m41>0),'文字未使用独立悬停层');
     assert(await target.locator('.monkey-face').evaluate(el=>getComputedStyle(el).animationName==='none'&&getComputedStyle(el).transform==='none'),'猴头参与了文字位移');
     results.push({scenario:'fallback and eye focus',passed:true});
   } finally {await fallback.context.close();}

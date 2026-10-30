@@ -122,23 +122,27 @@
           <div class="choice-motion">
             <a class="journey-link" href="__MOON_BLOG_URL__" data-entrance="blog">
               <!-- 装饰冠沿用链接本身的可访问名称，空替代文本避免屏幕阅读器重复朗读。 -->
-              <img class="phoenix-crown" src="/assets/phoenix-crown.svg" width="44" height="44" alt="" aria-hidden="true" draggable="false" />
-              <span
+              <span class="entry-icon" aria-hidden="true"><img class="phoenix-crown entry-fallback" src="/assets/phoenix-crown.svg" width="44" height="44" alt="" aria-hidden="true" draggable="false" /></span>
+              <span class="entry-copy"
                 >__MOON_ENTRANCE__<small>LET THE JOURNEY BEGIN</small></span
               >
             </a>
             <a class="journey-link world-link" href="__MOON_WORLD_URL__" data-entrance="world">
               <!-- 无金箍猴王面容以中轴对称雕刻；双眼只响应此链接的悬停或键盘聚焦。 -->
-              <svg class="monkey-face" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false">
-                <path d="M17 23C8 16 4 25 8 35L15 39M47 23C56 16 60 25 56 35L49 39" fill="#71502c" stroke="#a7874c" stroke-width="1.4"/>
-                <path d="M14 28L12 20L21 21L19 13L28 16L32 7L36 16L45 13L43 21L52 20L50 29L52 40L45 51L39 54L32 60L25 54L19 51L12 40Z" fill="#584127" stroke="#a7874c" stroke-width="1.3" stroke-linejoin="round"/>
+              <span class="entry-icon" aria-hidden="true">
+              <svg class="monkey-face entry-fallback" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false">
+                <!-- 后备图同步采用顺毛圆弧和收小耳轮，避免 WebGL 降级时退回尖刺造型。 -->
+                <path d="M14 27C8 23 7 30 11 36L15 37M50 27C56 23 57 30 53 36L49 37" fill="#71502c" stroke="#a7874c" stroke-width="1.1"/>
+                <path d="M32 6C21 6 13 11 13 24C12 34 15 47 24 55Q32 61 40 55C49 47 52 34 51 24C51 11 43 6 32 6Z" fill="#51412e" stroke="#927449" stroke-width="1.1"/>
+                <path d="M31 9C23 8 17 15 16 22M26 9C20 10 17 15 16 21M33 9C41 8 47 15 48 22M38 9C44 10 47 15 48 21" stroke="#a7874c" stroke-opacity=".45" stroke-width=".7"/>
                 <path d="M32 25C26 12 16 22 18 32C19 39 21 43 24 46C21 52 27 55 32 54C37 55 43 52 40 46C43 43 45 39 46 32C48 22 38 12 32 25Z" fill="#aa8751"/>
                 <path d="M17 27L28 30L26 34L19 33M47 27L36 30L38 34L45 33" fill="#392c20" stroke="#624626" stroke-width="1.2" stroke-linejoin="round"/>
                 <path class="monkey-eye" d="M20 31L26 32L23 33ZM44 31L38 32L41 33Z" fill="#c1a36c"/>
                 <path d="M32 30L29 40L32 42L35 40ZM27 47Q32 50 37 47M25 52L22 56M39 52L42 56" stroke="#543d25" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                 <path d="M19 38L23 41M45 38L41 41M27 20L30 26M37 20L34 26" stroke="#d1b379" stroke-opacity=".55" stroke-width="1.1"/>
               </svg>
-              <span class="journey-copy">__MOON_WORLD__<small>BEYOND THE CODE</small></span>
+              </span>
+              <span class="journey-copy entry-copy">__MOON_WORLD__<small>BEYOND THE CODE</small></span>
             </a>
           </div>
         </nav>

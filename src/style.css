@@ -214,11 +214,9 @@ h1 > strong {
   display: block;
   object-fit: contain;
 }
-/* 冠饰与整块文字共用过渡，只作用于直接子元素，避免英文小字再次叠加位移。 */
+/* 图标亮度只作用于直接子元素；文字的位移由整体容器承载，避免英文再次叠加。 */
 .journey-link > * {
-  transition:
-    filter 0.25s,
-    transform 0.25s;
+  transition: filter 0.3s;
 }
 .journey-link small {
   display: block;
@@ -232,7 +230,6 @@ h1 > strong {
 .journey-link:hover > *,
 .journey-link:focus-visible > * {
   filter: brightness(1.15);
-  transform: translateY(-2px);
 }
 
 #scene {
@@ -683,9 +680,9 @@ h1 > strong {
 .monkey-face { display: block; width: 44px; height: 44px; }
 .world-line { display: inline-block; max-width: 100%; }
 .journey-link small { display: block; }
-/* 提示作用于外层，悬停只动画猴头入口的整块文字，两个 transform 互不覆盖。 */
+/* 提示作用于外层，悬停只动画各入口的整块文字，两个 transform 互不覆盖。 */
 .world-link:hover > *, .world-link:focus-visible > * { transform: none; filter: none; }
-.world-link:hover .journey-copy, .world-link:focus-visible .journey-copy {
+.world-link:not(.entry-enhanced):hover .journey-copy, .world-link:not(.entry-enhanced):focus-visible .journey-copy {
   animation: world-curiosity 1.8s ease-in-out infinite;
 }
 .monkey-eye { transition: fill .3s, filter .3s; }
@@ -694,6 +691,24 @@ h1 > strong {
   filter: drop-shadow(0 0 2px #b8413690);
 }
 @keyframes world-curiosity { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+/* 原图始终占据固定图标格；透明画布扩大绘制范围但不改变布局或拦截点击。 */
+.entry-icon { position: relative; display: block; width: 44px; height: 44px; justify-self: center; pointer-events: none; }
+.entry-icon .entry-fallback { width: 100%; height: 100%; }
+.entry-canvas { position: absolute; width: 160%; height: 160%; left: -30%; top: -30%; pointer-events: none; }
+.entry-icon[data-model-ready="true"] .entry-fallback { visibility: hidden; }
+.journey-link:hover > .entry-icon, .journey-link:focus-visible > .entry-icon { transform: none; filter: none; }
+.entry-copy { display: block; }
+/* 无脚本或模块加载失败时仍提供整体浮动；正常运行用可平滑反向的共享调度器。 */
+.journey-link:not(.world-link):not(.entry-enhanced):hover .entry-copy,
+.journey-link:not(.world-link):not(.entry-enhanced):focus-visible .entry-copy { animation: moon-entry-float 2.8s ease-in-out infinite; }
+@keyframes moon-entry-float { 0%,100% { transform: translateY(0); } 25% { transform: translateY(-2px); } 75% { transform: translateY(2px); } }
+@media (max-width: 767px) { .entry-icon { width: 36px; height: 36px; } }
+@media (max-height: 600px) { .entry-icon { width: 30px; height: 30px; } }
+@media (prefers-reduced-motion: reduce) { .journey-link .entry-copy { animation: none !important; } }
+@media (forced-colors: active) {
+  .entry-canvas { display: none; }
+  .entry-icon[data-model-ready="true"] .entry-fallback { visibility: visible; }
+}
 @media (max-width: 767px) {
   .journey-link { grid-template-columns: 36px minmax(0, 1fr); }
   .monkey-face { width: 36px; height: 36px; }

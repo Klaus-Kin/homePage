@@ -37,6 +37,8 @@ const state = new JourneyState();
 let scene: MoonScene | undefined;
 // 离页时动态导入可能仍在等待，后续回调必须保持终止状态。
 let leaving = false;
+// 图标有独立失败边界；不影响主场景、静态入口或旅程导航的既有启动门禁。
+let disposeEntryIcons: (() => void) | undefined;
 // 入口超时后才抵达的模块直接沿用静态入口，禁止再次初始化和覆盖已显示的页面。
 let fallback = window.__moonBoot?.failed ?? false;
 let transitionRaf = 0;
@@ -318,6 +320,7 @@ window.addEventListener("pagehide", () => {
   motionPreference.removeEventListener("change", onMotionChange);
   document.removeEventListener("visibilitychange", onVisibilityChange);
   disposeStaffCursor();
+  disposeEntryIcons?.();
   inkTransition.dispose();
   cancelAnimationFrame(transitionRaf);
   scene?.dispose();
@@ -347,4 +350,14 @@ async function initialize() {
     if (!leaving) showFallback(error);
   }
 }
-void initialize();
+// 主场景首帧与加载收尾之后再创建两个小画布，避免竞争启动阶段的 GPU 编译。
+void initialize().then(async () => {
+  if (leaving || window.__moonBoot?.failed) return;
+  try {
+    const { installEntryIcons } = await import("./entry-icons");
+    // 超时守卫已经锁定静态页面时，迟到的图标模块也不能重新创建 WebGL 内容。
+    if (!leaving && !window.__moonBoot?.failed) disposeEntryIcons = installEntryIcons(entrances);
+  } catch (error) {
+    console.warn("入口图标模块不可用，保留静态入口：", error);
+  }
+});
