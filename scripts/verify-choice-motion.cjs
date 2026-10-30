@@ -23,7 +23,11 @@ async (page) => {
       prompt:document.querySelector('#journey-choices').dataset.prompt,
       resources:JSON.parse(host.dataset.resources), frames:+host.dataset.frames };
   });
-  const wait = (target, ms) => target.waitForFunction(ms => JSON.parse(document.querySelector('#scene').dataset.choicePose).elapsed >= ms, ms);
+  // 点击后首个 RAF 之前仍可能读到待机的 1800ms；等待必须排除这个旧帧。
+  const wait = (target, ms) => target.waitForFunction(ms => {
+    const elapsed=JSON.parse(document.querySelector('#scene').dataset.choicePose).elapsed;
+    return elapsed>=ms && elapsed<1800;
+  }, ms);
   const freeze = target => target.evaluate(() => {
     Object.defineProperty(document,'hidden',{configurable:true,get:()=>true}); document.dispatchEvent(new Event('visibilitychange'));
   });
@@ -42,6 +46,9 @@ async (page) => {
         else await wait(s.target, ms);
         await freeze(s.target);
         const f = await sample(s.target);
+        // 不能让着色器冷启动跨过整个阶段，再把结束帧误记成背面或返回阶段通过验收。
+        if(name!=='rest') assert(f.elapsed>=ms && f.elapsed<ms+100,
+          `${width}x${height}/${name}: 未命中真实阶段 ${f.elapsed}ms`);
         assert(f.beams==='false' && f.spread===0 && f.exposure===1.05, `${width}x${height}/${name}: 提示泄漏到正式光效`);
         assert(Math.abs(f.moon.top-baseline.moon.top)<3 && Math.abs(f.moon.left-baseline.moon.left)<3,
           `${width}x${height}/${name}: 提示退让改变了月球构图`);

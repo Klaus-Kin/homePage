@@ -9,7 +9,7 @@ import { chestPose } from "./chest-motion";
 import { chestLightFrame } from "./chest-light";
 import { glowTexture } from "./textures";
 import { engravingGlint, engravingReflectionProfile, engravingReflectionFrame } from "./engraving-light";
-import type { ChoiceFrame } from "../choice-prompt";
+import { choiceFrame, type ChoiceFrame } from "../choice-prompt";
 import { createChoiceLight } from "./choice-light";
 
 /** 灰黑旧木的颜色与高度分别生成；纵向木纹、细裂、划伤和磨边都参与实际光照。 */
@@ -175,9 +175,9 @@ export async function createChest(init = new Initialization()) {
   }
   const fixedHalf = await half(-1, nameWood, box);
   const movingHalf = await half(1, returnWood, openingPivot);
-  // 提示光效只绑定上盖铰链，既不使用正式旅程光束，也不改变内腔灯光通道。
+  // 提示光效位于整体局部坐标；下盒起终点固定，上盖段读取本帧真实铰链角度。
   const choiceLight = createChoiceLight();
-  openingPivot.add(choiceLight.group);
+  box.add(choiceLight.group);
   // 水平销轴贯穿短端厚度，实体铰链与上翻轴重合。
   // 暖金色保留少量漫反射，在无环境贴图的冷月光下也能辨色；中等粗糙度形成柔和金属高光。
   const hingeMaterial = new THREE.MeshStandardMaterial({ color: 0xd7a44a,
@@ -258,7 +258,7 @@ export async function createChest(init = new Initialization()) {
     bounds.expandByScalar(0.03);
     // 内腔离点光很近，降低激活增益，给暖黄反射留下色彩余量，而非靠提高曝光制造白斑。
     const lightFrame = chestLightFrame(hint ? 0 : lidProgress, hint ? 0 : glowProgress, reduced);
-    choiceLight.update(hint ?? { lid: 0, yaw: 0, pitch: 0, roll: 0, lift: 0, orbit: 0, pull: 0, light: 0, framing: 0 });
+    const choiceChanged = choiceLight.update(hint ? { ...hint, lid: pose.angle } : choiceFrame(1800));
     cavityLights.forEach((light) => { light.intensity = lightFrame.intensity; light.visible = light.intensity > 0; });
     inner.emissiveIntensity = lightFrame.innerEmission;
     glowMaterial.opacity = lightFrame.glowOpacity;
@@ -269,8 +269,26 @@ export async function createChest(init = new Initialization()) {
     beams.visible = !reduced && lightFrame.beamStrength > 0;
     box.updateMatrixWorld(true);
     // 短促扫光期间也刷新真实遮挡投影；扫光结束与减少动态时均恢复原来的按需更新。
-    return moved || reflectionChanged;
+    return moved || reflectionChanged || choiceChanged;
   }
   update(0, 0, false);
-  return { box, fixedHalf, movingHalf, openingPivot, lightAnchor, bounds, glowMaterial, update };
+  /**
+   * 新增三灯会改变木面及地形着色器；加载期间预编译金线和既有扫光的两种组合。
+   * 只切换编译可见性、不提交画面；异常和初始化取消也必须恢复对象状态。
+   */
+  async function prepareChoice(compile: () => Promise<unknown>) {
+    const strands = choiceLight.group.children.filter(object => object instanceof THREE.Group);
+    const visibility = strands.map(object => object.visible), engravingVisible = engravingLight.visible;
+    try {
+      strands.forEach(object => { object.visible = true; });
+      engravingLight.visible = true;
+      await compile();
+      engravingLight.visible = false;
+      await compile();
+    } finally {
+      strands.forEach((object, i) => { object.visible = visibility[i]; });
+      engravingLight.visible = engravingVisible;
+    }
+  }
+  return { box, fixedHalf, movingHalf, openingPivot, lightAnchor, bounds, glowMaterial, update, prepareChoice };
 }

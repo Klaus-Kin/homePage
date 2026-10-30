@@ -244,7 +244,7 @@ export async function createScene(
     // 验收读数只记录真实盒体姿态，不暴露可写场景接口。
     host.dataset.choiceYaw = String(chest.box.rotation.y - baseYaw);
     // 只读采样与实际姿态共帧提交，便于验证接地、光效隔离和偏好切换后的精确归位。
-    host.dataset.choicePose = JSON.stringify({ elapsed: promptElapsed, ...hint, groundedY,
+    host.dataset.choicePose = JSON.stringify({ ...hint, groundedY,
       rotation: chest.box.rotation.toArray().slice(0, 3), exposure: 1.05 + frame.glow * .35,
       camera: camera.position.toArray() });
     // 补光只保留暗面木纹，方向性明暗由月光主导；激活后的暖光仍由盒内光源负责。
@@ -389,6 +389,11 @@ export async function createScene(
     renderer.debug.onShaderError = () => {
       throw new Error("月光场景着色器编译失败");
     };
+    // 三路提示首次播放也必须保留完整返回/冲击阶段；在加载门禁内编译所有提示材质与扫光组合。
+    await chest.prepareChoice(async () => {
+      await renderer.compileAsync(scene, camera);
+      init.check();
+    });
     const firstSubmit = performance.now();
     resize();
     if (!frameCount) render(true);

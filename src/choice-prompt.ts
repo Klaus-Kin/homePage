@@ -4,7 +4,7 @@ export const PROMPT_DURATION = 1800;
 
 /** 平滑开盖、完整绕行、加速收盖和闭合冲击共用纯时间采样，不读取场景或浏览器状态。 */
 export function choiceFrame(elapsed: number, reduced = false) {
-  const rest = { lid: 0, yaw: 0, pitch: 0, roll: 0, lift: 0, orbit: 0, pull: 0, light: 0, framing: 0 };
+  const rest = { elapsed, lid: 0, yaw: 0, pitch: 0, roll: 0, lift: 0, orbit: 0, pull: 0, light: 0, framing: 0 };
   if (reduced || elapsed <= 0 || elapsed >= PROMPT_DURATION) return rest;
   // 仅供确实受入口遮挡的短小屏使用：提前退让，闭合后的尾段平滑回到原取景。
   const smooth = (t: number) => t * t * (3 - 2 * t);
@@ -35,13 +35,84 @@ export function choiceGroundOffset(pitch: number, yaw: number, roll: number): nu
   return Math.abs(rowX) * 1.93 + Math.abs(rowZ) * .22;
 }
 
-/** 远端截面采用圆角矩形环线；收紧时仍包住木壁四角，避免椭圆光环切入板材。 */
-export function choiceLightPoint(turn: number, pull: number, target: { x: number; y: number; z: number }) {
-  const angle = turn * Math.PI * 2, tight = 1 - pull * .04;
-  const cos = Math.cos(angle), sin = Math.sin(angle);
-  target.x = -3.62 + .065 * Math.sin(angle * 2);
-  target.y = .305 - pull * .02 - .40 * tight * Math.sign(cos) * Math.sqrt(Math.abs(cos));
-  target.z = .34 * tight * Math.sign(sin) * Math.sqrt(Math.abs(sin));
+/** 宝盒朝向为 Y 轴半圈，局部正 X 对应画面左侧；出场顺序与实际画面一致。 */
+export const CHOICE_LINES = [
+  { side: "center", x: 0, start: 300 },
+  { side: "left", x: 1.1, start: 360 },
+  { side: "right", x: -1.1, start: 420 },
+] as const;
+export type ChoiceLine = typeof CHOICE_LINES[number];
+/** 光头提前入腔，最后一段拖尾在 1350ms 接触帧之前沿同一路径全部收净。 */
+export const CHOICE_TRAIL_MS = 95;
+const RETURN_END = 1350 - CHOICE_TRAIL_MS;
+const clamp = (t: number) => Math.max(0, Math.min(1, t));
+
+/** 独立时间包含上升、两圈和单向返回三段；distance 始终递增，返回段使用凸函数加速。 */
+export function choiceLineFrame(elapsed: number, line: ChoiceLine, reduced = false) {
+  const rise = clamp((elapsed - line.start) / 90);
+  const turn = 2 * clamp((elapsed - line.start - 90) / (1050 - line.start - 90));
+  const returnTime = clamp((elapsed - 1050) / (RETURN_END - 1050));
+  const pull = .3 * returnTime + .7 * returnTime ** 3;
+  return { rise, turn, pull, distance: rise + turn + pull,
+    strength: reduced ? 0 : clamp((elapsed - line.start) / 70) * clamp((1350 - elapsed) / CHOICE_TRAIL_MS),
+    spread: rise ** 3 * (1 - pull) ** 3 };
+}
+
+/**
+ * 沿上盖的圆角矩形截面匀速顺行：下方中心→背面→咒文顶面→时光倒流面→下方中心。
+ * 圆角半径 .10，木板外留 .16 净空，容纳既有光头、光带和粒子散布，所有连接切线连续。
+ */
+function lidOrbit(turn: number, target: { x: number; y: number; z: number }) {
+  const radius = .10, bottom = -.16, top = .77, side = .38;
+  const vertical = top - bottom - radius * 2, horizontal = side * 2 - radius * 2;
+  const arc = Math.PI * radius / 2, perimeter = 2 * (vertical + horizontal) + 4 * arc;
+  let d = ((turn % 1) + 1) % 1 * perimeter;
+  // 首尾各保留半条底边，因此整圈恰好在内侧正下方闭合，且切线始终朝向背面。
+  const lengths = [horizontal / 2, arc, vertical, arc, horizontal, arc, vertical, arc, horizontal / 2];
+  let section = 0;
+  while (section < lengths.length - 1 && d > lengths[section]) d -= lengths[section++];
+  const t = d / lengths[section];
+  switch (section) {
+    case 0: target.y = bottom; target.z = d; break;
+    case 1: target.y = bottom + radius - radius * Math.cos(t * Math.PI / 2); target.z = side - radius + radius * Math.sin(t * Math.PI / 2); break;
+    case 2: target.y = bottom + radius + d; target.z = side; break;
+    case 3: target.y = top - radius + radius * Math.sin(t * Math.PI / 2); target.z = side - radius + radius * Math.cos(t * Math.PI / 2); break;
+    case 4: target.y = top; target.z = side - radius - d; break;
+    case 5: target.y = top - radius + radius * Math.cos(t * Math.PI / 2); target.z = -side + radius - radius * Math.sin(t * Math.PI / 2); break;
+    case 6: target.y = top - radius - d; target.z = -side; break;
+    case 7: target.y = bottom + radius - radius * Math.sin(t * Math.PI / 2); target.z = -side + radius - radius * Math.cos(t * Math.PI / 2); break;
+    default: target.y = bottom; target.z = -side + radius + d;
+  }
+}
+
+/**
+ * 输出宝盒整体局部坐标。绕行点先按当前铰链变换旋转，上升/返回再与固定下盒内腔平滑连接。
+ * 拖尾采样自己的时间、使用当前盒盖角度，防止历史轨迹在合盖时停留在木板内部。
+ */
+export function choiceLightPoint(elapsed: number, line: ChoiceLine, lid: number,
+  target: { x: number; y: number; z: number }) {
+  if (elapsed <= line.start || elapsed >= RETURN_END) {
+    target.x = line.x; target.y = .36; target.z = 0;
+    return target;
+  }
+  const f = choiceLineFrame(elapsed, line);
+  const c = Math.cos(lid), s = Math.sin(lid), x = line.x - 1.93;
+  lidOrbit(f.turn, target);
+  const lidX = 1.93 + x * c + target.y * s, lidY = .61 - x * s + target.y * c;
+  target.x = lidX; target.y = lidY;
+  if (f.rise < 1) {
+    const t = f.rise, smooth = t * t * (3 - 2 * t);
+    target.x = line.x + (lidX - line.x) * smooth;
+    target.y = .36 + (lidY - .36) * smooth;
+    // 入轨前从内侧上升，末端切线指向背面，与圆角环线的方向一致。
+    target.z = -.08 * 3 * (1 - t) * t * t;
+  } else if (elapsed >= 1050) {
+    const t = f.pull, smooth = t * t * (3 - 2 * t);
+    target.x = lidX + (line.x - lidX) * smooth;
+    target.y = lidY + (.36 - lidY) * smooth;
+    // 接着背面方向向内弯回，不逆放绕行；加速发生在时间采样，端点严格停在原内腔。
+    target.z = .11 * 3 * t * (1 - t);
+  }
   return target;
 }
 
