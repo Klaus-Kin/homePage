@@ -11,6 +11,7 @@ import { obstacleFootprint, overlapsChestScenery, isForegroundRock, isCenterMead
 import { createMeadow } from "./meadow";
 import { desktopChestPlacement } from "./chest-placement";
 import { createRockSurface, createWeatheredRockGeometry } from "./rock-surface";
+import { createRockContacts } from "./rock-contact";
 
 /** 连续山坡、山谷和植被共享世界坐标；相机看到的是一整片地形。 */
 export async function createTerrain(init: Initialization) {
@@ -129,14 +130,25 @@ export async function createTerrain(init: Initialization) {
       - groundHeight(instancePosition.x, instancePosition.z);
     pcRockCount++;
   }
+  // 石边草使用独立缓存与种子，既有岩石和草甸矩阵不变；根部采样各构图实际绘制的地面。
+  const rockContacts = await createRockContacts(init, rockGeometry, [
+    { matrices: pcRocks, count: pcRockCount, ground: desktopGround },
+    { matrices: phoneRocks, count: Math.min(sceneConfig.quality.mobile.rocks, backgroundRocks.length), ground: geometry },
+  ]);
+  group.add(rockContacts.mesh);
+  earth.userData.rockContacts = { mask: rockContacts.shadowMask, bounds: { value: rockContacts.maskBounds } };
   // 在首次画质截断前计算全部实例的包围盒；超宽屏、手机旋转和完整开盖共用稳定覆盖范围。
   rocks.computeBoundingBox();
-  const shadowBounds = meadow.shadowBounds.clone().union(rocks.boundingBox!).expandByScalar(.8);
+  const shadowBounds = meadow.shadowBounds.clone().union(rocks.boundingBox!).union(rockContacts.shadowBounds).expandByScalar(.8);
   let qualityRevision = 0, lastMobile: boolean | undefined;
   return {
     group,
     shadowBounds,
-    update(time: number, reduced: boolean) { return meadow.update(time, reduced); },
+    update(time: number, reduced: boolean) {
+      // 两层共享主渲染循环与阴影刷新节奏，不能用短路表达式漏掉第二层风场更新。
+      const meadowChanged = meadow.update(time, reduced);
+      return rockContacts.update(time, reduced) || meadowChanged;
+    },
     async setQuality(mobile: boolean) {
       // 山体等待期间可能再次旋转屏幕，旧请求不能覆盖最新的植被数量。
       const request = ++qualityRevision;
@@ -145,6 +157,7 @@ export async function createTerrain(init: Initialization) {
       if (lastMobile !== mobile) {
         ground.geometry = mobile ? geometry : desktopGround;
         meadow.setQuality(mobile);
+        rockContacts.setQuality(mobile);
         rocks.instanceMatrix.array.set(mobile ? phoneRocks : pcRocks);
         rocks.instanceMatrix.needsUpdate = true;
         rocks.count = mobile ? rockCount : pcRockCount;

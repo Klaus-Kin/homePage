@@ -98,14 +98,22 @@ export function preserveLandscapeLight(group: THREE.Object3D) {
         if (material.name === "meadow-ground") {
           // 同一张真实阴影贴图在宝盒附近保持深度，远处草影柔和减淡；不会另画假阴影贴片。
           shader.uniforms.uChestShadowArea = shadowArea;
+          // 仅石边恢复较深的真实月光投影，避免为修复岩块而加深整片草甸的细碎草影。
+          const rockContacts = material.userData.rockContacts;
+          if (rockContacts) {
+            shader.uniforms.uRockShadowMask = rockContacts.mask;
+            shader.uniforms.uRockShadowBounds = rockContacts.bounds;
+          }
           shader.vertexShader = "varying vec3 vMeadowWorld;\n" + shader.vertexShader;
           shader.vertexShader = shader.vertexShader.replace("#include <worldpos_vertex>",
             "#include <worldpos_vertex>\n vMeadowWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;");
           shader.fragmentShader = `varying vec3 vMeadowWorld;
             uniform vec4 uChestShadowArea;
+            ${rockContacts ? "uniform sampler2D uRockShadowMask; uniform vec4 uRockShadowBounds;" : ""}
             float meadowShadowStrength(float maximum) {
               vec2 gap = max(abs(vMeadowWorld.xz - uChestShadowArea.xy) - uChestShadowArea.zw, vec2(0.0));
               float focus = 1.0 - smoothstep(0.0, 2.3, length(gap));
+              ${rockContacts ? "focus = max(focus, texture2D(uRockShadowMask, (vMeadowWorld.xz - uRockShadowBounds.xy) / uRockShadowBounds.zw).r);" : ""}
               return mix(min(maximum, 0.48), maximum, focus);
             }\n` + shader.fragmentShader;
           landscapeLights = landscapeLights.replaceAll("directionalLightShadow.shadowIntensity",
@@ -113,7 +121,7 @@ export function preserveLandscapeLight(group: THREE.Object3D) {
         }
         shader.fragmentShader = shader.fragmentShader.replace("#include <lights_fragment_begin>", landscapeLights);
       };
-      material.customProgramCacheKey = () => `${cacheKey}:landscape-light-v2:${material.name}`;
+      material.customProgramCacheKey = () => `${cacheKey}:landscape-light-v3:${material.name}`;
     }
   });
   // 灯光计算发生在观察空间；视差和开盖镜头改变后同步方向，不把光固定在屏幕上。
