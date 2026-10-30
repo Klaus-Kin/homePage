@@ -11,6 +11,10 @@ class Envelope {
   private elapsed = 0;
   private duration = 0;
   private delay = 0;
+  constructor(initial = 0) {
+    // 允许从后备图当前可见的眼色接续；初始目标也同步，避免无交互时误报运动。
+    this.value = this.from = this.target = Math.max(0, Math.min(1, initial));
+  }
   to(target: number, duration: number, delay = 0) {
     this.from = this.value;
     this.target = target;
@@ -32,8 +36,13 @@ export class EntryMotion {
   reduced = false;
   time = 0;
   private intensity = new Envelope();
-  private eyes = new Envelope();
+  private eyes: Envelope;
   private threads = new Envelope();
+  constructor(initialEye = 0) {
+    // 首帧保留后备红眼；若加载结束前已经移出，则继续平滑退出，其他动画仍从静止开始。
+    this.eyes = new Envelope(initialEye);
+    this.eyes.to(0, 450);
+  }
   get amount() { return this.intensity.value; }
   get eye() { return this.eyes.value; }
   get silk() { return this.reduced ? Math.min(.3, this.threads.value) : this.threads.value; }

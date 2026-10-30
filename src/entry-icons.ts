@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { EntryMotion } from "./entry-motion.ts";
 import { createCrown, createMonkey, disposeModel } from "./entry-models.ts";
 import type { EntryModel } from "./entry-models.ts";
+import { createEntryRenderer, createEntryScene, resizeEntryRenderer } from "./entry-rendering.ts";
 
 /** 两个透明画布共用一个按需 RAF；交互文本独立于 WebGL，失败时仍可使用静态入口。 */
 export function installEntryIcons(links: HTMLAnchorElement[]) {
@@ -9,14 +10,19 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
   const motionQuery=matchMedia("(prefers-reduced-motion: reduce)");
   const contrastQuery=matchMedia("(forced-colors: active)");
   let disposed=false, raf=0, previous: number | undefined;
-  const items=links.map(link=>({
+  const items=links.map(link=>{
+    // 延迟加载时后备图可能已被悬停或键盘聚焦点亮，接管首帧必须继承当前红眼强度。
+    const fallbackEye=link.querySelector<HTMLElement>(".monkey-eye");
+    const initialEye=fallbackEye?Number(getComputedStyle(fallbackEye).opacity):0;
+    return {
     link,slot:link.querySelector<HTMLElement>(".entry-icon")!,copy:link.querySelector<HTMLElement>(".entry-copy")!,
-    motion:new EntryMotion(),hover:false,focus:false,dirty:true,frames:0,
+    motion:new EntryMotion(initialEye),hover:false,focus:false,dirty:true,frames:0,
     renderer:undefined as THREE.WebGLRenderer | undefined,
     scene:undefined as THREE.Scene | undefined,
     camera:undefined as THREE.OrthographicCamera | undefined,
     model:undefined as EntryModel | undefined,
-  }));
+    };
+  });
   type Item=typeof items[number];
 
   function release(item: Item) {
@@ -46,8 +52,7 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
     if(!item.renderer) return;
     // 四周额外留 30% 透明区，固定占位仍是 44/36/30px；羽梢不会被画布裁切。
     const size=item.slot.getBoundingClientRect().width;
-    item.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1,2));
-    item.renderer.setSize(size*1.6,size*1.6,false);
+    resizeEntryRenderer(item.renderer,size,window.devicePixelRatio || 1);
     item.dirty=true;
   }
   function create(item: Item) {
@@ -56,22 +61,12 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
       canvas.className="entry-canvas";
       canvas.setAttribute("aria-hidden","true");
       // 构造失败时保留原图；构造成功后立即纳入生命周期，后续任一步失败也可完整清理。
-      const renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:"low-power"});
+      const renderer=createEntryRenderer(canvas);
       item.renderer=renderer;
-      renderer.setClearColor(0,0);
-      renderer.outputColorSpace=THREE.SRGBColorSpace;
-      renderer.toneMapping=THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure=1.15;
-      item.scene=new THREE.Scene();
-      item.camera=new THREE.OrthographicCamera(-51.2,51.2,51.2,-51.2,.1,300);
-      item.camera.position.set(0,0,100);
       item.model=item.link.dataset.entrance==="world"?createMonkey():createCrown();
-      item.scene.add(item.model.root,new THREE.HemisphereLight(0xd9e3ff,0x332516,2));
-      const key=new THREE.DirectionalLight(0xffe4b1,4);
-      key.position.set(-25,40,60);
-      const fill=new THREE.DirectionalLight(0xa2b6db,1.7);
-      fill.position.set(35,5,30);
-      item.scene.add(key,fill);
+      const presentation=createEntryScene(item.model);
+      item.scene=presentation.scene;
+      item.camera=presentation.camera;
       canvas.addEventListener("webglcontextlost",event=>{
         event.preventDefault();
         // 上下文失效立即恢复静态图；不自动创建新上下文，避免故障时反复占用 GPU。

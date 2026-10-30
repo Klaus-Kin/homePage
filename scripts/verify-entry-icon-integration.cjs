@@ -48,7 +48,9 @@ async (page) => {
       await target.waitForTimeout(200);
       assert(await target.evaluate(()=>document.querySelector('#journey-choices').dataset.prompt==='true'&&
         document.querySelector('.choice-motion').getAnimations().length===1&&document.querySelector('.journey-copy').style.transform!=='none'),'内层悬停覆盖外层提示');
-      assert(await target.locator('canvas.entry-canvas').evaluateAll(canvases=>canvases.every(canvas=>canvas.width/canvas.getBoundingClientRect().width<=2)),'实际画布 DPR 超过 2');
+      const densities=await target.locator('canvas.entry-canvas').evaluateAll(canvases=>canvases.map(canvas=>({buffer:canvas.width,display:canvas.getBoundingClientRect().width})));
+      // 提示位移会使 48px 的边界读成 47.999996px；仅容忍这一级浮点误差，仍检查实际缓冲密度。
+      assert(densities.every(({buffer,display})=>buffer/display<=2+1e-6),`实际画布 DPR 超过 2：${JSON.stringify({size,cpu,densities})}`);
       assert(errors.length===0,JSON.stringify(errors));
       results.push({viewport:[width,height],size,cpu,timing,rapidReentry:true,prompt:true,errors});
     } finally {await context.close();}

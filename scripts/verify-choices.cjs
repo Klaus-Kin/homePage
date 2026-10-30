@@ -133,14 +133,14 @@ async (page) => {
   const fallback=await setup('fallback',{fallback:true});
   try {
     const {target}=fallback;
-    const eye=await target.locator('.monkey-eye').evaluate(el=>getComputedStyle(el).fill);
+    const eye=await target.locator('.monkey-eye').evaluate(el=>getComputedStyle(el).opacity);
     await target.locator('#box-button').click();
-    assert(await target.locator('.monkey-eye').evaluate((el,color)=>getComputedStyle(el).fill===color,eye),'提示自动点亮猴眼');
+    assert(await target.locator('.monkey-eye').evaluate((el,opacity)=>getComputedStyle(el).opacity===opacity,eye),'提示自动点亮猴眼');
     assert(await target.locator('.scene-fallback').evaluate(el=>el.getAnimations().length===0&&getComputedStyle(el).transform==='none'),'降级提示移动了整张风景');
     await target.waitForSelector('#journey-choices:not([data-prompt])');
     await target.keyboard.press('Tab');
     await target.locator('[data-entrance=world]').focus();await target.waitForTimeout(350);
-    assert(await target.locator('.monkey-eye').evaluate((el,color)=>getComputedStyle(el).fill!==color,eye),'聚焦未点亮猴眼');
+    assert(await target.locator('.monkey-eye').evaluate(el=>+getComputedStyle(el).opacity>.95),'聚焦未点亮猴眼');
     // 三维图标与文字共用按需调度，降级时文字仍由同一个独立容器平滑位移。
     assert(await target.locator('.journey-copy').evaluate(el=>getComputedStyle(el).animationName==='none'&&new DOMMatrix(getComputedStyle(el).transform).m41>0),'文字未使用独立悬停层');
     assert(await target.locator('.monkey-face').evaluate(el=>getComputedStyle(el).animationName==='none'&&getComputedStyle(el).transform==='none'),'猴头参与了文字位移');

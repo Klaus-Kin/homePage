@@ -2,6 +2,30 @@
 import assert from "node:assert/strict";
 import { EntryMotion, featherPose, featherSection, silkPoint } from "../src/entry-motion.ts";
 
+// 延迟加载期间已显示的红眼必须延续到首帧；失焦后仍按原有退出时长归零，不提前启动丝线。
+test("entry handoff preserves visible eyes and settles an inactive seed", () => {
+  const focused = new EntryMotion(1);
+  focused.setActive(true);
+  focused.advance(0);
+  assert.equal(focused.eye, 1);
+  assert.equal(focused.time, 0);
+  assert.equal(focused.silk, 0);
+  const fading = new EntryMotion(.6);
+  assert.equal(fading.eye, .6);
+  assert.equal(fading.running, true);
+  fading.advance(225);
+  assert.ok(Math.abs(fading.eye - .3) < 1e-8);
+  assert.equal(fading.time, 0);
+  fading.setActive(true);
+  assert.ok(Math.abs(fading.eye - .3) < 1e-8);
+  fading.advance(350);
+  assert.equal(fading.eye, 1);
+  const inactive = new EntryMotion(1);
+  inactive.advance(450);
+  assert.equal(inactive.eye, 0);
+  assert.equal(inactive.running, false);
+});
+
 // 先约束持续激活与收尾边界，避免把一次性过渡误做成悬停循环。
 test("entry stays active for long hover and settles in 450ms", () => {
   const motion = new EntryMotion();
