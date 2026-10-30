@@ -59,9 +59,9 @@ function ridge(root: THREE.Group, material: THREE.Material, points: number[][], 
 }
 
 /** 连续贝塞尔轮廓用于顺滑毛发和眉弓，保留倒角厚度而不产生三角刺状剪影。 */
-function smoothRelief(shape: THREE.Shape, depth: number, material: THREE.Material, z: number) {
+function smoothRelief(shape: THREE.Shape, depth: number, material: THREE.Material, z: number, bevel = .55) {
   const geometry=new THREE.ExtrudeGeometry(shape,{
-    depth,curveSegments:24,bevelEnabled:true,bevelSegments:3,steps:1,bevelSize:.55,bevelThickness:.55,
+    depth,curveSegments:24,bevelEnabled:true,bevelSegments:3,steps:1,bevelSize:bevel,bevelThickness:bevel,
   });
   const mesh=new THREE.Mesh(geometry,material);
   mesh.position.z=z;
@@ -185,63 +185,107 @@ function redSilk(root: THREE.Group, side: number, strand: number) {
   };
 }
 
+/** 连续面部雕出鼻梁、眼窝与颧骨，避免拼球造成两块肿胀额头。 */
+function monkeyFace(material: THREE.Material) {
+  const geometry=new THREE.SphereGeometry(1,64,56);
+  const position=geometry.getAttribute("position");
+  const bump=(x: number,y: number,cx: number,cy: number,wx: number,wy: number)=>
+    Math.exp(-(((x-cx)/wx)**2)-((y-cy)/wy)**2);
+  for(let i=0;i<position.count;i++) {
+    const sy=position.getY(i),sz=position.getZ(i),y=sy*22;
+    const jaw=1-.22*Math.max(0,Math.min(1,(-y-5)/15));
+    const x=position.getX(i)*15.3*jaw;
+    let z=sz*5.8;
+    if(sz>0) {
+      // 额头保持平整；细鼻梁自然抬起，眼窝凹进颧骨，口部只保留克制的体积。
+      z+=Math.min(1,sz*5)*(3.5*bump(x,y,0,-4,2.1,8)
+        +2*bump(x,y,0,-7,3,2.2)+.8*bump(x,y,0,-12,5,3.5)
+        +.8*bump(x,y,0,8,9,9)
+        +.9*(bump(x,y,8,-5,4,3)+bump(x,y,-8,-5,4,3))
+        -1.4*(bump(x,y,7,0,4.6,2.6)+bump(x,y,-7,0,4.6,2.6)));
+    }
+    position.setXYZ(i,x,y,z);
+  }
+  geometry.computeVertexNormals();
+  return new THREE.Mesh(geometry,material);
+}
+
+/** 毛发整圈弧面：中央低发尖与两侧鬓毛框住脸，前后曲面共同保留实体厚度。 */
+function monkeyHair(material: THREE.Material) {
+  const outer=[[0,25.5],[9,25],[16.5,20],[19,10],[18.5,-1],[16,-12],[9,-22],[0,-25],
+    [-9,-22],[-16,-12],[-18.5,-1],[-19,10],[-16.5,20],[-9,25]];
+  const inner=[[0,10.5],[6,15],[10.8,12.5],[12.7,6],[11,-2],[7.8,-9],[6.8,-17],[0,-20.7],
+    [-6.8,-17],[-7.8,-9],[-11,-2],[-12.7,6],[-10.8,12.5],[-6,15]];
+  const curve=(points: number[][])=>new THREE.CatmullRomCurve3(points.map(([x,y])=>new THREE.Vector3(x,y,0)),true,"centripetal");
+  // 小尺寸使用固定细分预算；顺毛细节只在初始化创建，交互不更新这部分几何体。
+  const outside=curve(outer),inside=curve(inner),steps=360,rings=20;
+  const positions=[],indices=[];
+  for(let i=0;i<=steps;i++) {
+    // 两颊发束向外下方梳，避免环形横纹像头套；顶端与下巴的接缝保持连续。
+    const u=i/steps,shift=Math.sin(u*Math.PI*2)*.045;
+    const a=inside.getPoint(u),b=outside.getPoint((u+shift+1)%1);
+    for(let j=0;j<=rings;j++) {
+      const t=j/rings,x=THREE.MathUtils.lerp(a.x,b.x,t),y=THREE.MathUtils.lerp(a.y,b.y,t);
+      // 毛流直接雕进表面，并沿弧面轻微偏转；不叠加悬空黑线，也不把剪影做成尖刺。
+      const flow=i/steps*Math.PI*2*72+t*2.4;
+      const strands=(Math.cos(flow)*.13+Math.cos(flow*2+.3)*.025)*Math.sin(Math.PI*t)**.45;
+      positions.push(x,y,5.5+Math.sin(Math.PI*t)*1.5-4.7*t*t+strands);
+      if(i<steps && j<rings) {
+        const k=i*(rings+1)+j;
+        indices.push(k,k+1,k+rings+1,k+1,k+rings+2,k+rings+1);
+      }
+    }
+  }
+  const geometry=new THREE.BufferGeometry();
+  geometry.setAttribute("position",new THREE.Float32BufferAttribute(positions,3));
+  // 与后脑球面的属性保持一致，静态合批后仍只需一个毛发绘制调用。
+  geometry.setAttribute("uv",new THREE.Float32BufferAttribute(new Float32Array(positions.length/3*2),2));
+  geometry.setIndex(indices);geometry.computeVertexNormals();
+  return new THREE.Mesh(geometry,material);
+}
+
 export function createMonkey(): EntryModel {
   const root=new THREE.Group();
   const bronze=new THREE.MeshStandardMaterial({color:0x57422c,metalness:.5,roughness:.52});
-  const hairMetal=new THREE.MeshStandardMaterial({color:0x30291f,metalness:.42,roughness:.56});
-  const face=new THREE.MeshStandardMaterial({color:0x997b50,metalness:.45,roughness:.48});
+  const hairMetal=new THREE.MeshStandardMaterial({color:0x665039,metalness:.42,roughness:.64,side:THREE.DoubleSide});
+  const face=new THREE.MeshStandardMaterial({color:0x98784f,metalness:.4,roughness:.53});
   const highlight=new THREE.MeshStandardMaterial({color:0xad9162,metalness:.48,roughness:.4});
   const shadow=new THREE.MeshStandardMaterial({color:0x211a14,metalness:.3,roughness:.65});
   const eye=new THREE.MeshStandardMaterial({color:0x927346,metalness:.4,roughness:.3,emissive:0xff0802,emissiveIntensity:0});
-  // 无金箍轮廓：圆润发顶和顺着颞部下梳的鬃毛形成连续曲面，不再用尖刺表达毛发。
-  const hair=new THREE.Shape();
-  hair.moveTo(0,25.5);
-  hair.bezierCurveTo(-10,25.8,-18,22,-19.2,13);
-  hair.bezierCurveTo(-20.5,6,-18.8,1,-18.4,-5);
-  hair.bezierCurveTo(-18.4,-13,-13.5,-19.5,-7,-23);
-  hair.bezierCurveTo(-4,-25.5,-2,-26,0,-26);
-  hair.bezierCurveTo(2,-26,4,-25.5,7,-23);
-  hair.bezierCurveTo(13.5,-19.5,18.4,-13,18.4,-5);
-  hair.bezierCurveTo(18.8,1,20.5,6,19.2,13);
-  hair.bezierCurveTo(18,22,10,25.8,0,25.5);
-  root.add(smoothRelief(hair,3.5,hairMetal,-1));
-  oval(root,hairMetal,[0,1,1],[17,23,5]);
+  // 参考影视角色的桃形面框与向后梳的额毛；保留暗金雕塑语言，不添加金箍。
+  face.name="monkey-face";hairMetal.name="monkey-hair";
+  root.add(monkeyFace(face),monkeyHair(hairMetal));
+  oval(root,hairMetal,[0,1,-1.5],[17.5,23.5,4]);
   for(const side of [-1,1]) {
     // 小耳轮藏在颞部后侧，减少黑色耳洞的面积，给外眼角的红丝留出清晰背景。
-    oval(root,bronze,[side*19.7,.5,.7],[3.6,5.7,2.6]);
-    oval(root,shadow,[side*20.8,.4,3],[1.4,3.4,.65]);
-    oval(root,face,[side*20.5,-.3,3.6],[.8,2.3,.6]);
-    oval(root,face,[side*7.3,0,4],[7.1,16.5,4]);
+    oval(root,bronze,[side*18.4,-1,0],[2.7,4.5,2]);
+    oval(root,shadow,[side*19.1,-1,1.8],[.8,2.4,.5]);
     // 眼窝位于眉骨下面；深色沟槽及窄眼面让暗金小尺寸也能读出凝视方向。
     const socket=new THREE.Shape();
-    socket.moveTo(side*3,.2);
-    socket.bezierCurveTo(side*6,1.2,side*10,3,side*13.5,2.4);
-    socket.quadraticCurveTo(side*14,-.6,side*11,-2.5);
-    socket.quadraticCurveTo(side*7,-4,side*3,.2);
-    root.add(smoothRelief(socket,.6,shadow,7.5));
+    socket.moveTo(side*3.3,-.4);
+    socket.bezierCurveTo(side*6,1,side*9.5,1.4,side*12.4,.4);
+    socket.quadraticCurveTo(side*10,-2.6,side*7.2,-2.1);
+    socket.quadraticCurveTo(side*5,-1.8,side*3.3,-.4);
+    root.add(smoothRelief(socket,.25,shadow,5.8,.18));
     const lens=new THREE.Shape();
-    lens.moveTo(side*4.3,-.4);
-    lens.quadraticCurveTo(side*8,.4,side*12.2,1.1);
-    lens.quadraticCurveTo(side*10,-1.5,side*7.2,-1.9);
-    lens.quadraticCurveTo(side*5.4,-1.8,side*4.3,-.4);
-    root.add(smoothRelief(lens,.25,eye,8.5));
-    ridge(root,bronze,[[side*2.5,2.3,8],[side*7,4.5,8.7],[side*13,4.2,7.3]],1.05);
-    ridge(root,highlight,[[side*4,3.6,8.7],[side*8,5.1,8.2],[side*12.5,4.8,7]],.3);
-    ridge(root,bronze,[[side*15,-6,5],[side*12,-10,7],[side*10,-15,6]],.7);
-    // 细长的毛流沿发顶后梳，再顺着两颊落下；低对比细脊只提供方向，不切碎轮廓。
-    for(let i=0;i<4;i++) {
-      ridge(root,bronze,[[side*(2+i*2.3),23-i*.65,3.2],[side*(8+i*1.6),20-i,4.2],
-        [side*(13+i*.9),14-i*1.5,4.5],[side*(15+i*.65),7-i*2,3.7]],.22);
-    }
-    for(let i=0;i<3;i++) ridge(root,face,[[side*(15+i*.8),-7,3.6],
-      [side*(14+i*.7),-13,4.2],[side*(9+i),-20,3.9]],.18);
+    lens.moveTo(side*4.2,-.5);
+    lens.quadraticCurveTo(side*7.7,.65,side*11.5,.15);
+    lens.quadraticCurveTo(side*8.4,-1.9,side*6.5,-1.15);
+    lens.quadraticCurveTo(side*5,-1,side*4.2,-.5);
+    root.add(smoothRelief(lens,.12,eye,6.2,.08));
+    oval(root,shadow,[side*7.6,-.5,7],[.62,.8,.22]);
+    // 薄弧面形成上扬眉峰，避免粗圆管眉毛像护目镜；眉头收拢以保留英气。
+    const brow=new THREE.Shape();
+    brow.moveTo(side*2.9,2.1);
+    brow.quadraticCurveTo(side*7.6,5.2,side*12.7,3.5);
+    brow.quadraticCurveTo(side*10.2,3.1,side*7.4,3.1);
+    brow.quadraticCurveTo(side*4.6,2,side*2.9,2.1);
+    root.add(smoothRelief(brow,.28,bronze,6.5,.12));
   }
-  oval(root,face,[0,-12.8,6],[7.2,5.3,2.6]);
-  oval(root,face,[0,-3,7.5],[2.1,6.7,2.4]);
-  oval(root,bronze,[0,-9.2,8.7],[3.3,2.1,1.6]);
-  for(const side of [-1,1]) oval(root,shadow,[side*1.5,-9.8,10],[.7,.5,.3]);
-  ridge(root,shadow,[[-5,-15.3,8],[0,-15.7,8.5],[5,-15.3,8]],.32);
-  ridge(root,highlight,[[-4,-19.2,6],[0,-20.7,6.7],[4,-19.2,6]],.35);
+  // 鼻翼和唇缝只刻少量细节，嘴角轻扬；去掉旧版外突的口鼻球与下巴饰线。
+  for(const side of [-1,1]) oval(root,shadow,[side*1.45,-8.1,9.2],[.55,.3,.2]);
+  ridge(root,shadow,[[-4.8,-12.4,5.9],[-2,-13.3,6.5],[0,-13,6.7],[2,-13.3,6.5],[4.8,-12.4,5.9]],.18);
+  ridge(root,highlight,[[-2.8,-14.6,6],[0,-14.9,6.4],[2.8,-14.6,6]],.16);
   const silk=[-1,1].flatMap(side=>[0,1,2].map(strand=>redSilk(root,side,strand)));
   const resting=new THREE.Color(0x927346),red=new THREE.Color(0xa90603);
   batchRelief(root);

@@ -131,15 +131,21 @@
               <!-- 无金箍猴王面容以中轴对称雕刻；双眼只响应此链接的悬停或键盘聚焦。 -->
               <span class="entry-icon" aria-hidden="true">
               <svg class="monkey-face entry-fallback" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false">
-                <!-- 后备图同步采用顺毛圆弧和收小耳轮，避免 WebGL 降级时退回尖刺造型。 -->
-                <path d="M14 27C8 23 7 30 11 36L15 37M50 27C56 23 57 30 53 36L49 37" fill="#71502c" stroke="#a7874c" stroke-width="1.1"/>
-                <path d="M32 6C21 6 13 11 13 24C12 34 15 47 24 55Q32 61 40 55C49 47 52 34 51 24C51 11 43 6 32 6Z" fill="#51412e" stroke="#927449" stroke-width="1.1"/>
-                <path d="M31 9C23 8 17 15 16 22M26 9C20 10 17 15 16 21M33 9C41 8 47 15 48 22M38 9C44 10 47 15 48 21" stroke="#a7874c" stroke-opacity=".45" stroke-width=".7"/>
-                <path d="M32 25C26 12 16 22 18 32C19 39 21 43 24 46C21 52 27 55 32 54C37 55 43 52 40 46C43 43 45 39 46 32C48 22 38 12 32 25Z" fill="#aa8751"/>
-                <path d="M17 27L28 30L26 34L19 33M47 27L36 30L38 34L45 33" fill="#392c20" stroke="#624626" stroke-width="1.2" stroke-linejoin="round"/>
-                <path class="monkey-eye" d="M20 31L26 32L23 33ZM44 31L38 32L41 33Z" fill="#c1a36c"/>
-                <path d="M32 30L29 40L32 42L35 40ZM27 47Q32 50 37 47M25 52L22 56M39 52L42 56" stroke="#543d25" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M19 38L23 41M45 38L41 41M27 20L30 26M37 20L34 26" stroke="#d1b379" stroke-opacity=".55" stroke-width="1.1"/>
+                <!-- 后备图同步使用低额前发尖、连贯青年脸面和小耳轮；无脚本时保持同样的面部识别。 -->
+                <defs>
+                  <linearGradient id="monkey-hair-gold" x1="16" y1="10" x2="47" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#a58b58"/><stop offset=".5" stop-color="#655039"/><stop offset="1" stop-color="#3d3024"/></linearGradient>
+                  <linearGradient id="monkey-face-gold" x1="20" y1="22" x2="45" y2="47" gradientUnits="userSpaceOnUse"><stop stop-color="#c4a970"/><stop offset=".55" stop-color="#a08453"/><stop offset="1" stop-color="#765737"/></linearGradient>
+                </defs>
+                <path d="M14 29C8 25 8 37 14 37M50 29C56 25 56 37 50 37" fill="#785c39" stroke="#b0925b" stroke-width=".8"/>
+                <path d="M32 6C23 5 15 8 13 18C11 31 13 45 22 54Q32 62 42 54C51 45 53 31 51 18C49 8 41 5 32 6Z" fill="url(#monkey-hair-gold)"/>
+                <path d="M32 23C29 23 28 16 24 17C18 17 18 24 19 31L20 42Q22 51 32 55Q42 51 44 42L45 31C46 24 46 17 40 17C36 16 35 23 32 23Z" fill="url(#monkey-face-gold)"/>
+                <path d="M30 19Q26 6 18 13M27 19Q23 8 16 17M24 19Q21 12 15 22M34 19Q38 6 46 13M37 19Q41 8 48 17M40 19Q43 12 49 22M17 32Q16 45 26 53M47 32Q48 45 38 53" stroke="#c1a573" stroke-opacity=".4" stroke-width=".65" stroke-linecap="round"/>
+                <path d="M20 29Q24 25 29 29L28 30Q24 28 20 29ZM44 29Q40 25 35 29L36 30Q40 28 44 29Z" fill="#4f3926"/>
+                <path d="M20 32Q24 30 29 32Q25 36 20 32ZM44 32Q40 30 35 32Q39 36 44 32Z" fill="#362a20"/>
+                <path class="monkey-eye" d="M21 32Q25 31 28 32Q25 34 21 32ZM43 32Q39 31 36 32Q39 34 43 32Z" fill="#c7aa73"/>
+                <path d="M31 30L29 40Q32 42 35 40L33 30" stroke="#7b5a35" stroke-width=".8"/>
+                <path d="M27 46Q30 48 32 47Q34 48 37 45.8" stroke="#4f3725" stroke-width=".9" stroke-linecap="round"/>
+                <path d="M30 49Q32 50 34 49" stroke="#c6a570" stroke-width=".7" stroke-linecap="round"/>
               </svg>
               </span>
               <span class="journey-copy entry-copy">__MOON_WORLD__<small>BEYOND THE CODE</small></span>

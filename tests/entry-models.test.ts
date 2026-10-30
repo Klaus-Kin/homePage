@@ -72,3 +72,27 @@ test("monkey has a rounded swept hair outline and restrained ears", () => {
   assert.ok(top<27,"发顶不能继续保留高耸尖刺");
   disposeModel(model.root);
 });
+
+// 连续脸面避免分离的额头球；直接检查中轴、凹进的眼窝以及低垂额前的发尖。
+test("monkey has a continuous face, recessed eyes and a low framed hairline", () => {
+  const model=createMonkey();
+  const mesh=(name: string)=>model.root.children.find(object=>object instanceof THREE.Mesh
+    && !Array.isArray(object.material) && object.material.name===name) as THREE.Mesh;
+  const face=mesh("monkey-face");
+  assert.ok(face,"面部应采用独立的连续雕塑曲面");
+  const position=face.geometry.getAttribute("position");
+  const near=(x: number,y: number)=>{
+    const candidates=[];
+    for(let i=0;i<position.count;i++) if(Math.abs(position.getX(i)-x)<1.1 && Math.abs(position.getY(i)-y)<1.1)
+      candidates.push(position.getZ(i));
+    return Math.max(...candidates);
+  };
+  assert.ok(near(0,7)>4,"额头中轴必须连续，不能形成两块独立凸球");
+  assert.ok(near(7,0)<near(7,-5),"眼窝应低于颧骨，眉眼靠真实凹凸呈现");
+  const hair=mesh("monkey-hair").geometry.getAttribute("position");
+  let lowForelock=false;
+  for(let i=0;i<hair.count;i++) if(Math.abs(hair.getX(i))<1 && hair.getY(i)>8 && hair.getY(i)<12 && hair.getZ(i)>5)
+    lowForelock=true;
+  assert.ok(lowForelock,"中央发尖应压低到额前，避免后移发际线");
+  disposeModel(model.root);
+});
