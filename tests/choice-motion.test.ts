@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { choiceFrame, choiceGroundOffset, choiceLightPoint, choiceLineFrame, CHOICE_LINES, CHOICE_TRAIL_MS, CHOICE_DURATION, PROMPT_DURATION, choiceKeyframes } from "../src/choice-prompt.ts";
+import { choiceFrame, choiceGroundOffset, choiceLightPoint, choiceLineFrame, choiceTrailTime, choiceTrailPoint, CHOICE_LINES, CHOICE_TRAIL_MS, CHOICE_DURATION, PROMPT_DURATION, choiceKeyframes } from "../src/choice-prompt.ts";
 import { Vector3, Euler } from "three";
 
 // 真实绝对时间锁定四段动作；绕行完成后才下拉，盖子接触之后才开始冲击。
@@ -74,8 +74,8 @@ test("all heads tails and particle envelopes clear both halves and finish at the
     assert.equal(first.x, line.x);
     assert.ok(first.y > .2 && first.y < .5 && Math.abs(first.z) < .1);
     for (let ms = line.start; ms <= 1350; ms++) for (const age of [0,.25,.5,.75,1]) {
-      const time = Math.max(line.start,ms-age*CHOICE_TRAIL_MS), lid = choiceFrame(ms).lid;
-      choiceLightPoint(time,line,lid,point);
+      const time = choiceTrailTime(ms,age,line), lid = choiceFrame(ms).lid;
+      choiceTrailPoint(ms,age,line,lid,point);
       const c=Math.cos(lid), s=Math.sin(lid), dx=point.x-1.93, dy=point.y-.61;
       const local = {x:dx*c-dy*s,y:dx*s+dy*c,z:point.z};
       // 包络在盒内起终点收束；其他时间包含原散粒的最大偏移及光头半径。
@@ -100,6 +100,28 @@ test("all heads tails and particle envelopes clear both halves and finish at the
       previous={...point};
     }
     assert.deepEqual(choiceLightPoint(1350-CHOICE_TRAIL_MS,line,0,{x:0,y:0,z:0}),first);
+  }
+});
+
+// 绕行时保留足够长的轨迹；合盖时缩短拖尾而不改光头时间，尾部仍顺向流入同一内腔。
+test("long fluttering trails advance continuously and drain before the lid closes", () => {
+  for(const line of CHOICE_LINES) {
+    assert.ok(900-choiceTrailTime(900,1,line)>=220, "绕行拖影至少保留 220ms");
+    for(const age of [0,.25,.5,.75,1]) {
+      let previous=line.start;
+      for(let ms=line.start;ms<=1350;ms++) {
+        const time=choiceTrailTime(ms,age,line);
+        assert.ok(time>=previous && time<=ms, "拖影不能倒退或跑到光头前面");
+        previous=time;
+      }
+      assert.deepEqual(choiceTrailPoint(1350,age,line,0,{x:0,y:0,z:0}),{x:line.x,y:.36,z:0});
+    }
+    const lid=choiceFrame(850).lid;
+    assert.deepEqual(choiceTrailPoint(850,0,line,lid,{x:0,y:0,z:0}),choiceLightPoint(850,line,lid,{x:0,y:0,z:0}));
+    const time=choiceTrailTime(850,.5,line), base=choiceLightPoint(time,line,lid,{x:0,y:0,z:0});
+    const flutter=choiceTrailPoint(850,.5,line,lid,{x:0,y:0,z:0});
+    const movement=Math.hypot(flutter.x-base.x,flutter.y-base.y,flutter.z-base.z);
+    assert.ok(movement>.001 && movement<.05, "尾部应有受约束的柔和摆动");
   }
 });
 

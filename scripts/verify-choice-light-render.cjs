@@ -4,7 +4,7 @@ async (page) => {
   const metrics=await page.evaluate(async()=>{
     Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});
     document.dispatchEvent(new Event('visibilitychange'));
-    const THREE=await import('/node_modules/three/build/three.module.js');
+    const THREE=await import('/node_modules/.vite/deps/three.js');
     const {createChest}=await import('/src/scene/chest.ts');
     const {choiceFrame,CHOICE_LINES}=await import('/src/choice-prompt.ts');
     const chest=await createChest(), scene=new THREE.Scene();
@@ -49,6 +49,17 @@ async (page) => {
     const bright=frames.filter(f=>f.count>30 && f.energy>500);
     if(bright.length<3 || Math.max(...bright.map(f=>Math.hypot(f.centroid[0]-bright[0].centroid[0],f.centroid[1]-bright[0].centroid[1])))<40)
       throw new Error(`木面亮斑没有随光头移动: ${JSON.stringify(frames)}`);
+    // 保持灯光和木面相同，只切换发光几何，单独统计真正可见的拖影像素；闭合帧必须为零。
+    const trailFrames=[];
+    for(const ms of [560,650,850,1140,1220,1320,1350]){
+      chest.update(0,0,false,0,choiceFrame(ms));
+      const visibility=strands.map(o=>o.visible);
+      strands.forEach(o=>o.visible=false);const before=pixels();
+      strands.forEach((o,i)=>o.visible=visibility[i]);const after=pixels();
+      trailFrames.push({ms,...difference(before,after)});
+    }
+    if(trailFrames.find(f=>f.ms===650).count<300 || trailFrames.at(-1).count!==0)
+      throw new Error(`拖影不可见或闭合后残留: ${JSON.stringify(trailFrames)}`);
     // 确认画面中左/中/右起点和点光源位置，灯光必须始终与自己光头重合。
     const projected=CHOICE_LINES.map(line=>new THREE.Vector3(line.x,.36,0).applyMatrix4(chest.box.matrixWorld).project(camera).x);
     if(!(projected[1]<projected[0] && projected[0]<projected[2])) throw new Error('实际画面左右次序错误');
@@ -91,7 +102,7 @@ async (page) => {
     // 保留临时夹具只为后续截图，页面关闭时释放，不进入应用代码。
     window.__choiceRenderCapture=ms=>{chest.update(0,0,false,0,choiceFrame(ms));renderer.render(scene,camera);};
     window.__choiceRenderCapture(650);
-    return {frames,projected,shadow:{probePixels,blockedEnergy,leakingEnergy,ratio},exposure:renderer.toneMappingExposure};
+    return {frames,trailFrames,projected,shadow:{probePixels,blockedEnergy,leakingEnergy,ratio},exposure:renderer.toneMappingExposure};
   });
   for(const ms of [470,560,650,850,1140,1220,1350]){
     await page.evaluate(ms=>window.__choiceRenderCapture(ms),ms);

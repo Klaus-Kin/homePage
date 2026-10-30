@@ -116,6 +116,31 @@ export function choiceLightPoint(elapsed: number, line: ChoiceLine, lid: number,
   return target;
 }
 
+/** 绕行保留 230ms 拖影；收回的前 140ms 平滑缩回原有 95ms，让尾端加速跟进入腔。 */
+export function choiceTrailTime(elapsed: number, age: number, line: ChoiceLine) {
+  const t = clamp((elapsed - 1050) / 140), smooth = t * t * (3 - 2 * t);
+  const history = 230 + (CHOICE_TRAIL_MS - 230) * smooth;
+  return Math.max(line.start, elapsed - history * clamp(age));
+}
+
+/**
+ * 拖尾仅在光头后方轻摆；以可暂停的提示时间驱动，重复采样不会累计漂移。
+ * 摆动主要沿长边展开，垂直木板的偏移限制在 .004 内；头端和入腔端点均严格归零。
+ */
+export function choiceTrailPoint(elapsed: number, age: number, line: ChoiceLine, lid: number,
+  target: { x: number; y: number; z: number }) {
+  const time = choiceTrailTime(elapsed, age, line);
+  choiceLightPoint(time, line, lid, target);
+  const wave = Math.sin(Math.PI * clamp(age)) * choiceLineFrame(time, line).spread;
+  const phase = elapsed * .018 + age * 13 + line.start * .025;
+  const dx = wave * .045 * Math.sin(phase), dy = wave * .003 * Math.cos(phase * .83);
+  // 沿盖子的长边方向摆动，不能用世界 X 摆动而把尾部推入倾斜的木板。
+  target.x += dx * Math.cos(lid) + dy * Math.sin(lid);
+  target.y += -dx * Math.sin(lid) + dy * Math.cos(lid);
+  target.z += wave * .003 * Math.sin(phase * .71);
+  return target;
+}
+
 /** 仅返回竖直轴角度偏移；不改变盒盖、位置、相机或盒内灯光。 */
 export function choiceYaw(elapsed: number, reduced: boolean): number {
   if (reduced || elapsed <= 0 || elapsed >= 260) return 0;
