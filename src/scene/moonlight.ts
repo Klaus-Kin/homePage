@@ -77,6 +77,8 @@ export function preserveLandscapeLight(group: THREE.Object3D) {
     if (!(object instanceof THREE.Mesh)) return;
     for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
       if (!(material instanceof THREE.MeshStandardMaterial) || materials.has(material)) continue;
+      // 新岩面直接接受月球主光，确保断面亮部与落地投影同向；其他景物沿用既有漫反射构图。
+      if (material.name === "weathered-rock") continue;
       materials.add(material);
       // 包装既有编译回调，草叶风动等顶点变形仍沿用原实现。
       const compile = material.onBeforeCompile;

@@ -26,7 +26,7 @@ async (page) => {
         ".fade-content, #box-button, .scene-fallback { visibility: hidden !important; }",
     });
     await page
-      .locator("canvas")
+      .locator("#scene canvas")
       .screenshot({ path: `output/playwright/scene-${name}.png` });
     await style.evaluate((el) => el.remove());
     // 随最终静态图保存独立的投影证据，CSS 热点与恢复测试都使用同一轮导出的范围。

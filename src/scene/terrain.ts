@@ -10,14 +10,14 @@ import { createMountains } from "./mountains";
 import { obstacleFootprint, overlapsChestScenery, isForegroundRock, isCenterMeadowRock } from "./terrain-clearance";
 import { createMeadow } from "./meadow";
 import { desktopChestPlacement } from "./chest-placement";
+import { createRockSurface, createWeatheredRockGeometry } from "./rock-surface";
 
 /** 连续山坡、山谷和植被共享世界坐标；相机看到的是一整片地形。 */
 export async function createTerrain(init: Initialization) {
   const group = ownTree(init, new THREE.Group());
   const random = seededRandom(842);
   const quality = sceneConfig.quality.desktop;
-  const groundMap = await surfaceTexture("ground", init),
-    rockMap = await surfaceTexture("rock", init);
+  const groundMap = await surfaceTexture("ground", init);
   const earth = init.track(new THREE.MeshStandardMaterial({
     map: groundMap,
     bumpMap: groundMap,
@@ -26,12 +26,7 @@ export async function createTerrain(init: Initialization) {
     roughness: 1,
   }));
   earth.name = "meadow-ground";
-  const stone = init.track(new THREE.MeshStandardMaterial({
-    map: rockMap,
-    bumpMap: rockMap,
-    bumpScale: 0.035,
-    roughness: 0.96,
-  }));
+  const stone = await createRockSurface(init);
   init.phase = "ground";
   const geometry = await createPlane(130, 130, 180, 180, init);
   geometry.rotateX(-Math.PI / 2);
@@ -71,11 +66,13 @@ export async function createTerrain(init: Initialization) {
     sourcePositions.setXYZ(i, x * k, y * k, z * k);
   }
   rockSource.deleteAttribute("normal");
-  const rockGeometry = mergeVertices(rockSource);
+  const placementGeometry = init.track(mergeVertices(rockSource));
   rockSource.dispose();
-  const rp = rockGeometry.attributes.position;
-  rockGeometry.computeVertexNormals();
-  const rocks = new THREE.InstancedMesh(rockGeometry, stone, quality.rocks);
+  // 旧几何仅作为布局包络，避免新轮廓改变筛选结果，导致后续石头和草丛重新洗牌。
+  const rp = placementGeometry.attributes.position;
+  const rockGeometry = init.track(await createWeatheredRockGeometry(placementGeometry, init));
+  const rocks = new THREE.InstancedMesh(rockGeometry, stone.material, quality.rocks);
+  rocks.customDepthMaterial = stone.depth;
   group.add(rocks);
   const dummy = new THREE.Object3D();
   const rockFootprints: ReturnType<typeof obstacleFootprint>[] = [];
