@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { Initialization } from "./initialization";
 import { ownTree } from "./resources";
-import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { addChestWear, wornWoodGeometry } from "./chest-wear";
 import { seededRandom } from "./terrain-math";
 import { engrave, engravingSweep, spellEngraving } from "./chest-engraving";
 import { chestPlacement } from "./chest-placement";
@@ -105,6 +105,8 @@ export async function createChest(init = new Initialization()) {
         totalEmissiveRadiance *= glint * ${engravingGlint.gain};`);
     };
   }
+  // 先组合刻字扫光，再叠加窄范围旧化；上下半盒共用材质与既有资源回收。
+  for (const material of [wood, spellWood, nameWood, returnWood]) addChestWear(material);
   // 最后一张刻字贴图与实体几何分开提交，避免两段短工作叠成同一个长任务。
   await init.checkpoint(true);
   init.phase = "chest-geometry";
@@ -139,8 +141,9 @@ export async function createChest(init = new Initialization()) {
   openingPivot.position.set(1.93, 0.61, 0);
   box.add(openingPivot);
   function cuboid(w: number, h: number, d: number, x: number, y: number, z: number,
-    material: THREE.Material | THREE.Material[], parent: THREE.Group = box, rounded = false) {
-    const mesh = new THREE.Mesh(rounded ? new RoundedBoxGeometry(w, h, d, 3, 0.014)
+    material: THREE.Material | THREE.Material[], parent: THREE.Group = box, rounded = false, weathered = true) {
+    // 外板与端头只磨去极薄一层锐角；内槽压边保持原尺寸，避免改变闭合缝和内腔。
+    const mesh = new THREE.Mesh(weathered ? wornWoodGeometry(w, h, d, rounded ? 0.014 : 0.009)
       : new THREE.BoxGeometry(w, h, d), material);
     mesh.position.set(x, y, z); mesh.castShadow = mesh.receiveShadow = true;
     parent.add(mesh); return mesh;
@@ -168,9 +171,9 @@ export async function createChest(init = new Initialization()) {
       cuboid(0.065, 0.33, 0.604, x, 0.22, sign * 0.308, wood, group);
     // 内槽的窄边沿来自第二张参考图；不封住槽口，旋开后可直接看到真实凹腔。
     for (const y of [0.064, 0.376])
-      cuboid(3.72, 0.018, 0.025, 0, y, sign * 0.025, rim, group);
+      cuboid(3.72, 0.018, 0.025, 0, y, sign * 0.025, rim, group, false, false);
     for (const x of [-1.85, 1.85])
-      cuboid(0.018, 0.312, 0.025, x, 0.22, sign * 0.025, rim, group);
+      cuboid(0.018, 0.312, 0.025, x, 0.22, sign * 0.025, rim, group, false, false);
     return group;
   }
   const fixedHalf = await half(-1, nameWood, box);
