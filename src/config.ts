@@ -8,8 +8,8 @@ export const pageConfig = {
   // 第二入口复用同一行书字形；三个英文句点同时作为手机端的固定分行位置。
   worldLabel: "你说...现在服务器的情况怎么样了",
   loadingLabel: "月色正好,欢迎来访",
-  blogUrl: "https://example.com/blog",
-  worldUrl: "https://example.org/",
+  blogUrl: "https://blog.jinsc.icu/",
+  worldUrl: "https://kk.jinsc.de5.net/",
   // 光幕铺满后开始题词；完成实际帧立即落墨，导航等待实际全黑呈现。
   transition: { charge: 800, fade: 2000, reducedFade: 600, inscriptionDelay: 120, write: 3000, reducedWrite: 180 },
 } as const;
