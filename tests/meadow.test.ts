@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
 import { createMeadowBlade, createWildflower, createSeedHead, vegetationReach } from "../src/scene/meadow-geometry.ts";
-import { sampleMeadowBlade } from "../src/scene/meadow-distribution.ts";
+import { sampleMeadowBlade, sampleLeftMeadowBlade } from "../src/scene/meadow-distribution.ts";
 import { createGroundSampler } from "../src/scene/ground-sampler.ts";
 import { seededRandom } from "../src/scene/terrain-math.ts";
 import { createGrassMaterials } from "../src/scene/grass-material.ts";
@@ -44,6 +44,30 @@ test("meadow layers vary height and density while covering the foreground", () =
     assert.deepEqual(sampleMeadowBlade(seededRandom(91), layer), sampleMeadowBlade(seededRandom(91), layer));
   }
   assert.ok(heights[1] > heights[0] * 1.5 && heights[2] > heights[1] * 1.3);
+});
+
+// 轻量横屏也要覆盖 x<-6.72 的可见左坡；三层高度、独立朝向和疏密仍按原有规则变化。
+test("supplemental meadow reaches the exposed left slope with reproducible layered clumps", () => {
+  for (const mobile of [false, true]) {
+    const means = [];
+    for (const layer of ["turf", "grass", "long"] as const) {
+      const random = seededRandom(59137), samples = [];
+      for (let i = 0; i < 5000; i++) {
+        const sample = sampleLeftMeadowBlade(random, layer, mobile);
+        if (sample) samples.push(sample);
+      }
+      assert.ok(samples.length > 400 && samples.length < 4900);
+      assert.ok(samples.some(p => p.x < -18));
+      assert.ok(samples.some(p => p.x > (mobile ? -9 : -15)));
+      assert.ok(samples.some(p => p.z < 0) && samples.some(p => p.z > 8));
+      assert.ok(samples.some(p => p.lean < 0) && samples.some(p => p.lean > .2));
+      assert.ok(samples.some(p => p.yaw < 1) && samples.some(p => p.yaw > 5));
+      means.push(samples.reduce((sum, p) => sum + p.height, 0) / samples.length);
+      assert.deepEqual(sampleLeftMeadowBlade(seededRandom(91), layer, mobile),
+        sampleLeftMeadowBlade(seededRandom(91), layer, mobile));
+    }
+    assert.ok(means[1] > means[0] * 1.5 && means[2] > means[1] * 1.3);
+  }
 });
 
 // 花瓣和穗粒必须依附完整茎叶，花株着色及阴影使用同一组风场对象。

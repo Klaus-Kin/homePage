@@ -2,11 +2,30 @@ import { fbm } from "./terrain-math.ts";
 
 export type MeadowLayer = "turf" | "grass" | "long";
 
+/** 左坡补充实例独立于原有预算与种子；花穗、野花不加密，避免改变既有点缀。 */
+export const leftMeadowBudget = {
+  desktop: { turf: 8000, grass: 4000, long: 800, seeds: 0, flowers: 0 },
+  mobile: { turf: 6500, grass: 3250, long: 650, seeds: 0, flowers: 0 },
+} as const;
+
 /** 连片细草承托疏密不同的长叶；中频斑块控制丛生位置，低频斑块留下浅浅草径。 */
 export function sampleMeadowBlade(random: () => number, layer: MeadowLayer) {
-  let x = (random() - .5) * 32;
+  const x = (random() - .5) * 32;
   // 近景分配更多叶片，远处用更矮的草和透视叠加自然融入坡面。
-  let z = -8 + Math.pow(random(), .72) * 26;
+  const z = -8 + Math.pow(random(), .72) * 26;
+  return sampleBladeAt(random, layer, x, z, false);
+}
+
+/** 横向相机能看见竖屏分布之外的左坡；以独立随机源补齐，并在交接处自然变稀。 */
+export function sampleLeftMeadowBlade(random: () => number, layer: MeadowLayer, mobile: boolean) {
+  const right = mobile ? -5.2 : -12.5;
+  const x = -22 + random() * (right + 22), z = -4 + random() * 16;
+  if (random() > Math.min(1, (right - x) / 1.4)) return;
+  return sampleBladeAt(random, layer, x, z, true);
+}
+
+/** 补草复用原有噪声、丛生、叶形比例和色彩分布；原分布调用顺序保持不变。 */
+function sampleBladeAt(random: () => number, layer: MeadowLayer, x: number, z: number, left: boolean) {
   const field = fbm(x * .31 + 12, z * .31 + 7);
   const clump = fbm(x * 1.75 + 19, z * 1.75 + 3);
   const density = layer === "turf" ? .8 + field * .2
@@ -14,7 +33,9 @@ export function sampleMeadowBlade(random: () => number, layer: MeadowLayer) {
     : Math.max(.01, (clump - .47) * 4.8) * (.4 + field);
   if (random() > density) return;
   // 坡顶以短草为主，长叶集中在近景；高度随距离连续变化，避免远处也竖起一整堵草墙。
-  const perspective = .38 + .62 * Math.max(0, Math.min(1, (z + 1) / 11));
+  const distance = Math.max(0, Math.min(1, (z + 1) / 11));
+  // 左坡地势低但属于近景，保留叶片高度，避免按纵深缩成难以辨认的远景细线。
+  const perspective = left ? .7 + .3 * distance : .38 + .62 * distance;
   const height = (layer === "turf" ? .09 + random() * .19
     : layer === "grass" ? .24 + random() * .3
     : .52 + random() * .48) * perspective;

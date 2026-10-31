@@ -149,14 +149,15 @@ export async function createTerrain(init: Initialization) {
       const meadowChanged = meadow.update(time, reduced);
       return rockContacts.update(time, reduced) || meadowChanged;
     },
-    async setQuality(mobile: boolean) {
+    async setQuality(mobile: boolean, wideMeadow = !mobile) {
       // 山体等待期间可能再次旋转屏幕，旧请求不能覆盖最新的植被数量。
       const request = ++qualityRevision;
       // 在第一个 await 前清除手机前景，避免第一帧先显示石头、山体切换后才消失。
       const preset = sceneConfig.quality[mobile ? "mobile" : "desktop"];
+      // 同属轻量画质的手机横竖屏也要更新草的覆盖，不能只由画质是否改变来判断。
+      meadow.setQuality(mobile, wideMeadow);
       if (lastMobile !== mobile) {
         ground.geometry = mobile ? geometry : desktopGround;
-        meadow.setQuality(mobile);
         rockContacts.setQuality(mobile);
         rocks.instanceMatrix.array.set(mobile ? phoneRocks : pcRocks);
         rocks.instanceMatrix.needsUpdate = true;

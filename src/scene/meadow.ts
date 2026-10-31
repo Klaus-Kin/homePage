@@ -7,12 +7,12 @@ import { seededRandom } from "./terrain-math.ts";
 import { overlapsChestScenery, overlapsFootprint } from "./terrain-clearance.ts";
 import { selectChestPlacement } from "./chest-placement.ts";
 import { createGroundSampler } from "./ground-sampler.ts";
-import { sampleMeadowBlade } from "./meadow-distribution.ts";
+import { sampleMeadowBlade, sampleLeftMeadowBlade, leftMeadowBudget } from "./meadow-distribution.ts";
 import { createMeadowBlade, createWildflower, createSeedHead, vegetationReach } from "./meadow-geometry.ts";
 import { createGrassMaterials } from "./grass-material.ts";
 
 type Footprint = readonly { x: number; z: number }[];
-type Cache = { matrices: Float32Array; colors: Float32Array; count: number; bounds: THREE.Box3 };
+type Cache = { matrices: Float32Array; colors: Float32Array; count: number; baseCount: number; bounds: THREE.Box3 };
 
 /** 花株的花瓣、弯茎及两个风摆端点统一进入避让包络。 */
 export const flowerReach = (scale: number) => scale * (.12 + .65 ** 2 * .24 * 1.3) + .008;
@@ -49,7 +49,7 @@ export async function createMeadow(init: Initialization, ground: THREE.BufferGeo
   const shadowBounds = new THREE.Box3();
   for (const definition of definitions) {
     const { kind, strength } = definition;
-    const capacity = sceneConfig.quality.desktop[kind];
+    const capacity = sceneConfig.quality.desktop[kind] + leftMeadowBudget.desktop[kind];
     const wind = createGrassMaterials({ strength, flower: kind === "flowers" });
     const mesh = new THREE.InstancedMesh(definition.geometry, init.track(wind.material), capacity);
     mesh.name = definition.name;
@@ -62,8 +62,11 @@ export async function createMeadow(init: Initialization, ground: THREE.BufferGeo
     for (const mobile of [false, true]) {
       init.phase = `meadow-${kind}-${mobile ? "mobile" : "desktop"}`;
       const preset = sceneConfig.quality[mobile ? "mobile" : "desktop"];
-      const budget = preset[kind], placement = selectChestPlacement(mobile);
-      const sampleGround = samplers[mobile ? 1 : 0], random = seededRandom(definition.seed);
+      const baseBudget = preset[kind], budget = baseBudget + leftMeadowBudget[mobile ? "mobile" : "desktop"][kind];
+      const placement = selectChestPlacement(mobile);
+      // 原实例先生成完整前缀，补草只消耗独立序列；既有草叶、花株与岩石不会重新洗牌。
+      const sampleGround = samplers[mobile ? 1 : 0], baseRandom = seededRandom(definition.seed),
+        leftRandom = seededRandom(definition.seed + 59021);
       const matrices = new Float32Array(capacity * 16), colors = new Float32Array(capacity * 3);
       const bounds = new THREE.Box3();
       const points: { x: number; z: number }[] = [];
@@ -71,6 +74,7 @@ export async function createMeadow(init: Initialization, ground: THREE.BufferGeo
       for (let attempt = 0; count < budget && attempt < budget * 35; attempt++) {
         // 每八次尝试让初始化器检查预算；碰撞未通过时也能及时取消和交还主线程。
         if (attempt % 8 === 0) { const pause = init.checkpoint(); if (pause) await pause; }
+        const supplemental = count >= baseBudget, random = supplemental ? leftRandom : baseRandom;
         let x: number, z: number, scale: number, yaw: number, lean: number, width: number;
         let hue = .26, lightness = .2;
         if (kind === "flowers" || kind === "seeds") {
@@ -81,12 +85,12 @@ export async function createMeadow(init: Initialization, ground: THREE.BufferGeo
           // 小花散在草面之间，避免扎堆；草穗可以自然聚散。
           if (kind === "flowers" && points.some(p => Math.hypot(p.x - x, p.z - z) < .85)) continue;
         } else {
-          const sample = sampleMeadowBlade(random, kind);
+          const sample = supplemental ? sampleLeftMeadowBlade(random, kind, mobile) : sampleMeadowBlade(random, kind);
           if (!sample) continue;
           ({ x, z, yaw, lean, width, hue, lightness } = sample);
           scale = sample.height / .6;
         }
-        if (mobile) {
+        if (mobile && !supplemental) {
           // 竖屏只看得到中央窄幅地形，把预算集中到真正可见的草坡；不能把桌面密度平均摊到屏外。
           x *= .42;
           if (kind !== "flowers" && kind !== "seeds") z = -2 + (z + 8) * 18 / 26;
@@ -111,25 +115,30 @@ export async function createMeadow(init: Initialization, ground: THREE.BufferGeo
         count++;
       }
       if (count < budget) throw new Error(`草甸 ${kind} ${mobile ? "手机" : "桌面"} 放置不足：${count}/${budget}`);
-      caches.push({ matrices, colors, count, bounds });
+      caches.push({ matrices, colors, count, baseCount: baseBudget, bounds });
       shadowBounds.union(bounds);
     }
     entries.push({ mesh, caches, wind });
   }
-  let previousMobile: boolean | undefined;
-  function setQuality(mobile: boolean) {
-    if (previousMobile === mobile) return;
+  let previousMobile: boolean | undefined, previousWide: boolean | undefined;
+  function setQuality(mobile: boolean, wide = !mobile) {
+    if (previousMobile === mobile && previousWide === wide) return;
     for (const { mesh, caches } of entries) {
       const cache = caches[mobile ? 1 : 0];
       mesh.instanceMatrix.array.set(cache.matrices);
       if (!mesh.instanceColor) mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cache.colors.length), 3);
       mesh.instanceColor.array.set(cache.colors);
-      mesh.count = cache.count;
+      // 轻量画质与相机横向覆盖分开：竖屏沿用原实例数，矮屏及横屏启用追加的左坡实例。
+      const baseCount = cache.baseCount;
+      mesh.count = mobile && !wide ? baseCount : cache.count;
+      mesh.userData.baseCount = baseCount;
+      mesh.userData.leftCount = mesh.count - baseCount;
       mesh.instanceMatrix.needsUpdate = mesh.instanceColor.needsUpdate = true;
       mesh.boundingBox = cache.bounds.clone();
       mesh.boundingSphere = cache.bounds.getBoundingSphere(new THREE.Sphere());
     }
     previousMobile = mobile;
+    previousWide = wide;
   }
   setQuality(false);
   return { group, shadowBounds, setQuality,

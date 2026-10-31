@@ -68,6 +68,8 @@ async (page) => {
   for (const viewport of [
     { width: 1366, height: 768 },
     { width: 390, height: 844 },
+    // 矮屏的左坡补草也必须出现在静态降级图中，避免失去 WebGL 后重新露出整块裸地。
+    { width: 844, height: 390 },
   ]) {
     const context = await browser.newContext({
       viewport,
@@ -111,7 +113,8 @@ async (page) => {
         !staticPage.decoded ||
         staticPage.width !== viewport.width ||
         staticPage.height !== viewport.height ||
-        staticPage.overflow
+        staticPage.overflow ||
+        (viewport.height < 500 && !staticPage.background.includes("scene-short.webp"))
       )
         throw new Error(
           `禁用脚本后静态场景或样式未正确加载：${JSON.stringify(staticPage)}`,

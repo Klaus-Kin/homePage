@@ -339,7 +339,8 @@ export async function createScene(
     currentPointer.set(0, 0);
     pointer.set(0, 0);
     // 画质切换也分批生成；完成后才提交新几何，取消后的续体不再渲染。
-    void terrain.setQuality(size.mobile).then(() => {
+    // 矮屏和触控横屏继续采用轻量画质，但草的横向覆盖必须跟随实际相机构图。
+    void terrain.setQuality(size.mobile, size.width >= size.height || size.name !== "mobile").then(() => {
       if (!disposed) { renderer.shadowMap.needsUpdate = true; recordResources = true; render(); }
     }).catch((error) => { if (!disposed) { dispose(); onFailure(error); } });
     sky.group.position.set(0, 0, 0);

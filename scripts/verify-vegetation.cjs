@@ -27,10 +27,17 @@ async (page) => {
       const {vegetationReach}=await import('/src/scene/meadow-geometry.ts');
       const {flowerReach,seedReach}=await import('/src/scene/meadow.ts');
       const {createGroundSampler}=await import('/src/scene/ground-sampler.ts');
-      const {sceneConfig}=await import('/src/config.ts');
+      const {sceneConfig,selectSceneLayout}=await import('/src/config.ts');
+      const {leftMeadowBudget}=await import('/src/scene/meadow-distribution.ts');
       const mobile=document.querySelector('#scene').dataset.quality==='mobile';
       const preset=sceneConfig.quality[mobile?'mobile':'desktop'];
-      for(const plant of plants) if(plant.count!==preset[plant.userData.meadowKind]) throw new Error(`植被预算错误：${plant.name} ${plant.count}`);
+      // 左坡补充使用原实例之后的独立前缀，验收同时核对基础预算与启用的追加数量。
+      const wide=!mobile || innerWidth>=innerHeight || selectSceneLayout(innerWidth,innerHeight)!=='mobile';
+      for(const plant of plants) {
+        const kind=plant.userData.meadowKind;
+        const expected=preset[kind]+(wide?leftMeadowBudget[mobile?'mobile':'desktop'][kind]:0);
+        if(plant.count!==expected) throw new Error(`植被预算错误：${plant.name} ${plant.count}/${expected}`);
+      }
       const rocks = terrain.group.getObjectByName('terrain-rocks');
       let flowers=0, centralRocks=0;
       flowers=terrain.group.getObjectByName('terrain-flowers').count;
