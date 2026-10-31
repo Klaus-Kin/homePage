@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { Initialization } from "./scene/initialization";
+import { initializeTextures, warmScene } from "./scene/gpu-initialization";
 import { ownTree } from "./scene/resources";
 import { fitCamera, projectBounds, keepBoundsInView, openingCameraPosition, fitChoiceCamera } from "./responsive";
 import { sceneConfig, pageConfig } from "./config";
@@ -30,9 +31,10 @@ export async function createScene(
   host: HTMLElement,
   hitTarget: HTMLElement,
   onFailure: (error: unknown) => void,
+  onProgress: (phase: string) => void = () => {},
 ): Promise<MoonScene> {
   // 超时守卫与离页共用取消信号，下载或生成中的迟到任务都不能恢复场景。
-  const init = new Initialization();
+  const init = new Initialization(undefined, undefined, onProgress);
   const cancelInitialization = () => init.dispose();
   window.addEventListener("moon-boot-failed", cancelInitialization);
   window.addEventListener("pagehide", cancelInitialization);
@@ -44,16 +46,19 @@ export async function createScene(
   // 月面解码完成后才创建和展示场景，避免白色占位球切换真实纹理造成第二次闪动。
   // 影像署名：NASA's Scientific Visualization Studio；LRO / LROC 月面颜色图。
   // 原始素材及使用信息：https://svs.gsfc.nasa.gov/4720/
+  onProgress("moon-texture");
   const lunarMap = await init.wait(new THREE.TextureLoader().loadAsync(
     "/assets/moon-lroc.jpg",
   ));
   lunarMap.colorSpace = THREE.SRGBColorSpace;
   lunarMap.anisotropy = 4;
+  const contextStart = performance.now();
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
     alpha: false,
     powerPreference: "high-performance",
   });
+  performance.measure("moon-webgl-context", { start: contextStart, end: performance.now() });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
@@ -98,7 +103,7 @@ export async function createScene(
     disposed = true;
     promptClock = null;
     renderer.setAnimationLoop(null);
-    document.removeEventListener("visibilitychange", updateLoop);
+    document.removeEventListener("visibilitychange", onVisibility);
     renderer.domElement.removeEventListener("webglcontextlost", contextLost);
     init.dispose();
     renderer.dispose();
@@ -111,14 +116,15 @@ export async function createScene(
     dispose();
     onFailure(new Error("WebGL context lost"));
   }
-  function updateLoop() {
+  function updateLoop(draw = true) {
     if (disposed) return;
     lastTime = performance.now();
     if (document.hidden) promptClock?.pause();
     else promptClock?.sample(lastTime);
     renderer.setAnimationLoop(!reduced && !document.hidden ? animate : null);
-    render();
+    if (draw) render();
   }
+  function onVisibility() { updateLoop(); }
   let chest: Awaited<ReturnType<typeof createChest>>,
     terrain: Awaited<ReturnType<typeof createTerrain>>,
     sky: Awaited<ReturnType<typeof createSky>>;
@@ -292,9 +298,11 @@ export async function createScene(
     }
     render();
   }
-  function resize() {
+  function resize(draw = true) {
     if (disposed) return;
+    const layoutStart = performance.now();
     size = fitCamera(camera, renderer, host);
+    if (!draw) performance.measure("moon-layout-camera", { start: layoutStart, end: performance.now() });
     // 取景只依据基准闭合姿态，尺寸变化不能把瞬时颤动写入相机端点。
     chest.box.rotation.set(0, baseYaw, 0);
     // 只让 PC 模式移动盒体；手机位置、模型比例及取景预设继续沿用已确认的参数。
@@ -340,8 +348,8 @@ export async function createScene(
     pointer.set(0, 0);
     // 画质切换也分批生成；完成后才提交新几何，取消后的续体不再渲染。
     // 矮屏和触控横屏继续采用轻量画质，但草的横向覆盖必须跟随实际相机构图。
-    void terrain.setQuality(size.mobile, size.width >= size.height || size.name !== "mobile").then(() => {
-      if (!disposed) { renderer.shadowMap.needsUpdate = true; recordResources = true; render(); }
+    const quality = terrain.setQuality(size.mobile, size.width >= size.height || size.name !== "mobile").then(() => {
+      if (!disposed && draw) { renderer.shadowMap.needsUpdate = true; recordResources = true; render(); }
     }).catch((error) => { if (!disposed) { dispose(); onFailure(error); } });
     sky.group.position.set(0, 0, 0);
     sky.resize(camera, size.preset, size.mobile);
@@ -357,9 +365,13 @@ export async function createScene(
     host.dataset.quality = size.mobile ? "mobile" : "desktop";
     host.dataset.layout = size.name;
     syncTargets();
-    render();
+    if (!draw) performance.measure("moon-layout", { start: layoutStart, end: performance.now() });
+    if (draw) render();
+    return quality;
   }
   try {
+    // 在大量二维纹理绘制之前确定绘图缓冲尺寸，避免末尾重置 WebGL 画布同步等待积压的栅格工作。
+    fitCamera(camera, renderer, host);
     // WebGL 上下文创建是浏览器同步操作，先让出任务，再开始记录可分批生成阶段。
     await init.checkpoint(true);
     performance.mark("moon-generation-start");
@@ -386,23 +398,45 @@ export async function createScene(
     await init.checkpoint(true);
     host.appendChild(renderer.domElement);
     renderer.domElement.addEventListener("webglcontextlost", contextLost);
-    document.addEventListener("visibilitychange", updateLoop);
     renderer.debug.onShaderError = () => {
       throw new Error("月光场景着色器编译失败");
     };
+    // 初始化取景和画质只计算布局，不提前提交整场景；预热使用最终相机与实际阴影范围。
+    await resize(false);
+    init.check();
+    terrain.update(time, reduced);
+    sky.update(time, reduced);
+    syncLighting();
+    await initializeTextures(renderer, scene, init);
     // 三路提示首次播放也必须保留完整返回/冲击阶段；在加载门禁内编译所有提示材质与扫光组合。
+    let compilePass = 0;
     await chest.prepareChoice(async () => {
-      await renderer.compileAsync(scene, camera);
+      // GPU 编译属于独立的真实等待阶段，慢手机不能沿用下载阶段已经消耗的超时预算。
+      onProgress(`gpu-compile-${++compilePass}`);
+      init.phase = `gpu-choice-${compilePass}`;
+      await warmScene(renderer, scene, camera, init);
       init.check();
     });
+    // 开盖光效独立于宝盒提示，必须预热实际旅程使用的材质和灯光组合。
+    await chest.prepareOpening(async () => {
+      onProgress(`opening-compile-${++compilePass}`);
+      init.phase = `gpu-opening-${compilePass}`;
+      await warmScene(renderer, scene, camera, init);
+      init.check();
+    });
+    onProgress("first-frame");
+    init.phase = "first-frame";
+    await init.checkpoint(true);
     const firstSubmit = performance.now();
-    resize();
-    if (!frameCount) render(true);
-    updateLoop();
+    render(true);
+    const firstSubmitMs = performance.now() - firstSubmit;
+    // 正式首帧只提交一次；随后接上既有循环，后台变化仍沿用原来的暂停行为。
+    document.addEventListener("visibilitychange", onVisibility);
+    updateLoop(false);
     // 首次 GPU 提交单独记录，不计入可分批的 CPU 生成耗时。
     host.dataset.initialization = JSON.stringify({ batches: init.batches,
       phases: init.phases,
-      firstSubmitMs: performance.now() - firstSubmit });
+      firstSubmitMs });
     await init.checkpoint(true);
   } catch (error) {
     dispose();

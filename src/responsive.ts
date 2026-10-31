@@ -20,13 +20,12 @@ export function fitCamera(
   camera.lookAt(preset.cameraX, preset.targetY, 0);
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
-  renderer.setPixelRatio(
-    Math.min(
-      window.devicePixelRatio || 1,
-      sceneConfig.quality[mobile ? "mobile" : "desktop"].pixelRatio,
-    ),
-  );
-  renderer.setSize(width, height, false);
+  const ratio = Math.min(window.devicePixelRatio || 1,
+    sceneConfig.quality[mobile ? "mobile" : "desktop"].pixelRatio);
+  const previous = renderer.getSize(new THREE.Vector2());
+  // 像素比和尺寸一次更新；相同尺寸不重复重置画布，避免驱动在后续布局时再次分配绘图缓冲。
+  if (previous.x !== width || previous.y !== height || renderer.getPixelRatio() !== ratio)
+    renderer.setDrawingBufferSize(width, height, ratio);
   return { width, height, mobile, preset, name };
 }
 

@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { EntryMotion } from "./entry-motion.ts";
-import { createCrown, createMonkey, disposeModel } from "./entry-models.ts";
+import { createEntryModel } from "./entry-models.ts";
+import { Initialization } from "./scene/initialization.ts";
+import { warmScene } from "./scene/gpu-initialization.ts";
 import type { EntryModel } from "./entry-models.ts";
 import { createEntryRenderer, createEntryScene, resizeEntryRenderer } from "./entry-rendering.ts";
 
@@ -17,6 +19,7 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
     return {
     link,slot:link.querySelector<HTMLElement>(".entry-icon")!,copy:link.querySelector<HTMLElement>(".entry-copy")!,
     motion:new EntryMotion(initialEye),hover:false,focus:false,dirty:true,frames:0,
+    init:new Initialization(),ready:false,
     renderer:undefined as THREE.WebGLRenderer | undefined,
     scene:undefined as THREE.Scene | undefined,
     camera:undefined as THREE.OrthographicCamera | undefined,
@@ -27,7 +30,10 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
 
   function release(item: Item) {
     delete item.slot.dataset.modelReady;
-    if(item.model) disposeModel(item.model.root);
+    // 构建期间尚未挂到根节点的几何与材质也归同一个资源域，取消与释放可重复调用。
+    item.ready=false;
+    item.init.dispose();
+    item.model?.root.clear();
     item.model=undefined;
     if(item.renderer) {
       item.renderer.domElement.remove();
@@ -55,15 +61,19 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
     resizeEntryRenderer(item.renderer,size,window.devicePixelRatio || 1);
     item.dirty=true;
   }
-  function create(item: Item) {
+  async function create(item: Item) {
     try {
+      item.init.phase="entry-model";
+      item.model=await createEntryModel(item.link.dataset.entrance==="world"?"monkey":"crown",item.init);
+      item.init.check();
+      await item.init.checkpoint(true);
       const canvas=document.createElement("canvas");
       canvas.className="entry-canvas";
       canvas.setAttribute("aria-hidden","true");
       // 构造失败时保留原图；构造成功后立即纳入生命周期，后续任一步失败也可完整清理。
       const renderer=createEntryRenderer(canvas);
       item.renderer=renderer;
-      item.model=item.link.dataset.entrance==="world"?createMonkey():createCrown();
+      renderer.debug.onShaderError=()=>{throw new Error("入口图标着色器编译失败");};
       const presentation=createEntryScene(item.model);
       item.scene=presentation.scene;
       item.camera=presentation.camera;
@@ -74,11 +84,24 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
         item.dirty=true;
         wake();
       },{signal:events.signal});
-      item.slot.append(canvas);
       resize(item);
+      // 先预热红眼、红丝与羽片的真实材质，等待期间由静态图片保持完整入口。
+      item.init.phase="entry-gpu";
+      item.model.update(937,1,1,1);
+      await warmScene(renderer,item.scene,item.camera,item.init);
+      item.init.check();
+      item.model.update(item.motion.time,item.motion.reduced?0:item.motion.amount,item.motion.eye,item.motion.silk);
+      renderer.render(item.scene,item.camera);
+      item.init.check();
+      // 最后一次取消检查之后没有异步间隙，迟到构建不能在旅程或离页后追加画布。
+      item.slot.append(canvas);
+      item.ready=true;
+      item.slot.dataset.modelReady="true";
+      item.dirty=true;
+      wake();
     } catch(error) {
       release(item);
-      console.warn("入口立体图标不可用，已保留静态图标：",error);
+      if(!(error instanceof DOMException && error.name==="AbortError")) console.warn("入口立体图标不可用，已保留静态图标：",error);
     }
   }
 
@@ -99,7 +122,7 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
       const offset=world?1.5*(1-Math.cos(phase/1.8))*amount:2*Math.sin(phase/2.8)*amount;
       item.copy.style.transform=amount>0?`translate${world?"X":"Y"}(${offset}px)`:"none";
       item.link.dataset.entryActive=String(motion.active);
-      if(item.renderer && item.scene && item.camera && item.model && !contrastQuery.matches) {
+      if(item.ready && item.renderer && item.scene && item.camera && item.model && !contrastQuery.matches) {
         try {
           item.model.update(motion.time,amount,motion.eye,motion.silk);
           item.renderer.render(item.scene,item.camera);
@@ -130,7 +153,6 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
     item.link.addEventListener("pointercancel",()=>{item.hover=false;activate(item);},{signal:events.signal});
     item.link.addEventListener("focus",()=>{item.focus=item.link.matches(":focus-visible");activate(item);},{signal:events.signal});
     item.link.addEventListener("blur",()=>{item.focus=false;activate(item);},{signal:events.signal});
-    create(item);
     activate(item);
   }
   const resizeObserver=new ResizeObserver(()=>{items.forEach(resize);wake();});
@@ -148,8 +170,19 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
     cancelAnimationFrame(raf);raf=0;previous=undefined;
     if(!document.hidden) {items.forEach(item=>{item.dirty=true;});wake();}
   },{signal:events.signal});
+  // 两个入口依次构建和预热，避免两个资源域同时争用主线程及 GPU。
+  void (async()=>{
+    for(const item of items) {
+      if(disposed || item.init.controller.signal.aborted) break;
+      await create(item);
+    }
+  })();
+  const cancelPending=()=>items.forEach(item=>{if(!item.ready) release(item);});
+  window.addEventListener("pagehide",cancelPending,{signal:events.signal});
+  window.addEventListener("moon-boot-failed",cancelPending,{signal:events.signal});
   wake();
-  return () => {
+  const dispose=() => {
+    if(disposed) return;
     disposed=true;
     events.abort();
     resizeObserver.disconnect();attributes.disconnect();
@@ -161,4 +194,5 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
       item.copy.style.removeProperty("transform");
     });
   };
+  return Object.assign(dispose,{cancelPending});
 }

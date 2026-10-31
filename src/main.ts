@@ -17,7 +17,7 @@ import type { MoonScene } from "./scene";
 // 启动守卫由 HTML 的无依赖脚本提供，类型声明不会引入新的运行时加载依赖。
 declare global {
   interface Window {
-    __moonBoot?: { readonly failed: boolean; ready(immediate?: boolean): Promise<boolean> };
+    __moonBoot?: { readonly failed: boolean; ready(): Promise<boolean>; progress(stage: string): void };
   }
 }
 
@@ -38,12 +38,13 @@ let scene: MoonScene | undefined;
 // 离页时动态导入可能仍在等待，后续回调必须保持终止状态。
 let leaving = false;
 // 图标有独立失败边界；不影响主场景、静态入口或旅程导航的既有启动门禁。
-let disposeEntryIcons: (() => void) | undefined;
+let disposeEntryIcons: ReturnType<typeof import("./entry-icons").installEntryIcons> | undefined;
 // 入口超时后才抵达的模块直接沿用静态入口，禁止再次初始化和覆盖已显示的页面。
 let fallback = window.__moonBoot?.failed ?? false;
 let transitionRaf = 0;
 // 题词与落墨复用转场 RAF；后台暂停，导航由实际提交的全黑画面门禁控制。
-const transitionClock = new VisibleTime();
+// 与场景自身的 50ms 单帧预算一致：卡顿延长演出，不以跳过开盖、落笔和墨滴追赶墙钟。
+const transitionClock = new VisibleTime(50);
 const inscriptionTimeline = new InscriptionTimeline(pageConfig.transition);
 const inscription = new Inscription(document.querySelector<HTMLElement>("#inscription")!, pageConfig.transition.write);
 const inkTimeline = new InkTimeline();
@@ -51,6 +52,8 @@ const blackGate = new BlackPresentationGate();
 const inkTransition = new InkTransition(document.querySelector<SVGSVGElement>('#inscription [data-character="界"]')!);
 let inscriptionLocked = false;
 let renderedBlack = false;
+// 守卫失败后，完整装载的主模块仍可提供题词和落墨；只在同步初始化尚未完成时保留原生链接。
+let journeyAvailable = false;
 let gesture: { x: number; y: number; time: number; id: number } | null = null;
 // Web Animations 的完成事件维护提示门禁；盒体仍由场景既有循环绘制，不新增 RAF 或定时器。
 let choiceAnimation: Animation | undefined;
@@ -81,6 +84,7 @@ function syncViewport() {
 function showFallback(error: unknown) {
   if (fallback) return;
   fallback = true;
+  disposeEntryIcons?.cancelPending();
   console.warn("月光场景不可用，已启用静态博客入口：", error);
   scene?.dispose();
   scene = undefined;
@@ -93,13 +97,9 @@ function showFallback(error: unknown) {
     effect.updateTiming({ duration: choiceDuration });
   }
   button.removeAttribute("style");
-  state.ready();
-  app.dataset.state = state.phase;
-  button.disabled = state.phase !== "idle";
-  status.textContent = "已启用静态场景，请选择文字入口开启旅程";
   // 正常的场景降级同样代表首屏就绪，应撤销 HTML 守卫的超时监听。
-  // 降级入口优先恢复可用性，不等待正常场景的拉幕动画。
-  void window.__moonBoot?.ready(true);
+  // 先准备幕后的静态画面，再经过同一段开幕；首开与超时降级都不允许直接拆掉幕布。
+  void finishStartup();
 }
 window.addEventListener("moon-boot-failed", () =>
   showFallback(new Error("入口守卫已锁定静态场景")),
@@ -197,6 +197,8 @@ function promptChoice(keyboard = false) {
 
 function beginJourney(destination: string) {
   if (!state.begin(destination)) return;
+  // 开始旅程立即终止未接管的装饰构建，让首次开盖和指针继续使用既有动画循环。
+  disposeEntryIcons?.cancelPending();
   cancelChoicePrompt();
   app.dataset.state = state.phase;
   button.disabled = true;
@@ -256,7 +258,7 @@ button.addEventListener("focus", () => scene?.setHover(true));
 button.addEventListener("blur", () => scene?.setHover(false));
 function onEntryClick(event: MouseEvent) {
   // 主模块只运行了一部分时也保留原生导航，不让已失效的状态机吞掉链接。
-  if (window.__moonBoot?.failed) return;
+  if (!journeyAvailable) return;
   // 接受首项后包括修饰键激活也不再执行，防止过渡期间另开目的地或改写地址。
   if (state.phase !== "idle") { event.preventDefault(); return; }
   // 保留链接的标准修饰键行为；普通点击在当前标签页走泛白过渡。
@@ -310,10 +312,7 @@ function onVisibilityChange() {
     transitionRaf = requestAnimationFrame(animateTransition);
 }
 document.addEventListener("visibilitychange", onVisibilityChange);
-// bfcache 返回时重新建立待机状态，避免用户看到上一次跳转遗留的淡黄光幕。
-window.addEventListener("pageshow", (event) => {
-  if (event.persisted) window.location.reload();
-});
+// bfcache 的最早遮挡与刷新由无依赖 HTML 守卫负责，主模块销毁后也不会露出旧题词。
 window.addEventListener("pagehide", () => {
   leaving = true;
   cancelChoicePrompt();
@@ -321,31 +320,39 @@ window.addEventListener("pagehide", () => {
   document.removeEventListener("visibilitychange", onVisibilityChange);
   disposeStaffCursor();
   disposeEntryIcons?.();
-  inkTransition.dispose();
+  inkTransition.dispose(renderedBlack);
   cancelAnimationFrame(transitionRaf);
   scene?.dispose();
 });
 syncViewport();
+journeyAvailable = true;
+
+/** 正常场景与静态场景共用开幕和输入门禁，重复就绪只等待同一个 Promise。 */
+async function finishStartup() {
+  await window.__moonBoot?.ready();
+  if (leaving) return;
+  state.ready();
+  app.dataset.state = state.phase;
+  button.disabled = state.phase !== "idle";
+  status.textContent = fallback ? "已启用静态场景，请选择文字入口开启旅程"
+    : "月光宝盒已就绪，请选择文字入口开启旅程";
+}
 
 async function initialize() {
-  if (fallback) return;
+  if (fallback) { await finishStartup(); return; }
   try {
     // 动态导入将 WebGL 初始化错误和模块资源失败纳入同一降级路径。
+    window.__moonBoot?.progress("scene-module");
     const { createScene } = await import("./scene");
     if (fallback || leaving) return;
-    scene = await createScene(sceneHost, button, showFallback);
+    scene = await createScene(sceneHost, button, showFallback, stage => window.__moonBoot?.progress(stage));
     if (fallback || leaving) {
       scene.dispose();
       scene = undefined;
       return;
     }
     // 首帧已绘制后才开始拉开加载幕布；动画完成前维持 loading 和禁用按钮。
-    await window.__moonBoot?.ready();
-    if (fallback || leaving) return;
-    state.ready();
-    app.dataset.state = state.phase;
-    button.disabled = false;
-    status.textContent = "月光宝盒已就绪，请选择文字入口开启旅程";
+    await finishStartup();
   } catch (error) {
     if (!leaving) showFallback(error);
   }
@@ -356,7 +363,8 @@ void initialize().then(async () => {
   try {
     const { installEntryIcons } = await import("./entry-icons");
     // 超时守卫已经锁定静态页面时，迟到的图标模块也不能重新创建 WebGL 内容。
-    if (!leaving && !window.__moonBoot?.failed) disposeEntryIcons = installEntryIcons(entrances);
+    // 用户已开始首个旅程时继续保留静态图标，避免装饰画布抢占首次开盖的 GPU 编译预算。
+    if (!leaving && state.phase === "idle" && !window.__moonBoot?.failed) disposeEntryIcons = installEntryIcons(entrances);
   } catch (error) {
     console.warn("入口图标模块不可用，保留静态入口：", error);
   }

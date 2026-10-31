@@ -3,7 +3,10 @@ import type { EntryModel } from "./entry-models.ts";
 
 /** 离线首帧与实时绘制共用全部色彩设置，防止后备图在接管时突然变亮或改变金属色。 */
 export function createEntryRenderer(canvas: HTMLCanvasElement) {
+  // 上下文创建由浏览器同步执行，单独计时，避免把驱动等待误判为可拆分的模型生成。
+  const contextStart=performance.now();
   const renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:"low-power"});
+  performance.measure("moon-webgl-context",{start:contextStart,end:performance.now()});
   try {
     renderer.setClearColor(0,0);
     renderer.outputColorSpace=THREE.SRGBColorSpace;

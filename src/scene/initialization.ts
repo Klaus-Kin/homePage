@@ -11,6 +11,8 @@ export class Initialization {
 
   private now: () => number;
   private schedule: () => Promise<void>;
+  private reportProgress: (phase: string) => void;
+  private reportedPhase = "";
 
   constructor(now = () => performance.now(),
     schedule: () => Promise<void> = async () => {
@@ -19,13 +21,20 @@ export class Initialization {
       }).scheduler;
       if (scheduler) await scheduler.yield();
       else await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    }) { this.now = now; this.schedule = schedule; this.started = now(); }
+    }, reportProgress: (phase: string) => void = () => {}) {
+    this.now = now; this.schedule = schedule; this.started = now(); this.reportProgress = reportProgress;
+  }
 
   check() { this.controller.signal.throwIfAborted(); }
 
   /** 未到预算时不创建微任务；调用点只在返回 Promise 时 await。 */
   checkpoint(force = false): Promise<void> | undefined {
     this.check();
+    // 仅真实阶段变化才能续期启动看门狗；同一阶段反复让出任务不能掩盖卡死。
+    if (this.phase !== this.reportedPhase) {
+      this.reportedPhase = this.phase;
+      this.reportProgress(this.phase);
+    }
     const duration = this.now() - this.started;
     if (!force && duration < 8) return;
     this.batches.push(duration);
@@ -41,6 +50,20 @@ export class Initialization {
   }
 
   cleanup(callback: () => void) { this.cleanups.add(callback); }
+
+  /** GPU 编译是异步等待，不把驱动轮询时间算作 CPU 批次；取消时立即结束等待并拒绝迟到结果。 */
+  waitFor<T>(promise: Promise<T>): Promise<T> {
+    this.check();
+    return new Promise((resolve, reject) => {
+      const signal = this.controller.signal;
+      const abort = () => reject(signal.reason);
+      signal.addEventListener("abort", abort, { once: true });
+      promise.then(value => {
+        signal.removeEventListener("abort", abort);
+        if (!signal.aborted) { this.started = this.now(); resolve(value); }
+      }, error => { signal.removeEventListener("abort", abort); reject(error); });
+    });
+  }
 
   /** 树遍历与独立登记可能命中同一资源，统一去重后释放。 */
   release(resource: { dispose(): void }) {

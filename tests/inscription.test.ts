@@ -52,3 +52,18 @@ test("late completion is signaled on the actual frame without backdating", () =>
   timeline.present(0, true, false); timeline.present(120, true, false);
   assert.equal(timeline.present(10000, true, false).complete, true);
 });
+
+// 冷启动的长任务不能一次耗尽开盖、书写或落墨；普通可见时钟仍保留原来的实时时间语义。
+test("presentation clock limits long foreground stalls and keeps background pause", () => {
+  const clock = new VisibleTime(50);
+  assert.equal(clock.sample(0), 0);
+  assert.equal(clock.sample(16), 16);
+  assert.equal(clock.sample(10016), 66);
+  assert.equal(clock.sample(10032), 82);
+  clock.pause();
+  assert.equal(clock.sample(90000), 82);
+  assert.equal(clock.sample(90016), 98);
+  const realtime = new VisibleTime();
+  realtime.sample(0);
+  assert.equal(realtime.sample(10000), 10000);
+});

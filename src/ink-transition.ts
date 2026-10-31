@@ -184,14 +184,22 @@ export class InkTransition {
     }
   }
 
-  /** 离页释放独立图层和画布，不留下动画循环或外部监听器。 */
-  dispose() {
+  /** 离页释放画布资源；出站全黑壳保留到文档替换，避免慢导航或历史快照重新露出题词。 */
+  dispose(preserveBlack = false) {
+    if (this.disposed) return;
     this.disposed = true;
-    this.layer.remove();
+    if (preserveBlack) {
+      this.layer.hidden = false;
+      this.layer.dataset.black = "true";
+      this.canvas.remove();
+      this.shade.remove();
+    } else {
+      this.layer.remove();
+      document.documentElement.classList.remove("ink-transition-active");
+    }
     this.canvas.width = this.canvas.height = 1;
     this.buffer.width = this.buffer.height = 1;
     this.context = null;
     this.presentedContext = null;
-    document.documentElement.classList.remove("ink-transition-active");
   }
 }

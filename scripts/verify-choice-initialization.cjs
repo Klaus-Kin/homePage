@@ -6,19 +6,20 @@ async (page) => {
     try{
       const target=await context.newPage(),errors=[];
       target.on('pageerror',error=>errors.push(error.message));
-      await target.route(/\/src\/scene\.ts(?:\?|$)/,async route=>{
+      await target.route(/\/src\/scene\/gpu-initialization\.ts(?:\?|$)/,async route=>{
         const response=await route.fetch(),source=await response.text();
         // 保留真实 compileAsync 的资源创建，再在第一次返回 Promise 后立即触发取消。
-        const marker='await renderer.compileAsync(scene, camera);';
-        if(!source.includes(marker)) throw new Error('未找到实际编译入口');
+        const marker=/const compilation\s*=\s*renderer\.compileAsync\(object,\s*camera,\s*scene\);/;
+        // Vite 输出会调整空格，定位语义调用而不绑定源文件的排版。
+        if(!marker.test(source)) throw new Error('未找到实际编译入口');
         await route.fulfill({response,body:source.replace(marker,`
-          const compiling=renderer.compileAsync(scene,camera);
+          const compilation=renderer.compileAsync(object,camera,scene);
           if(!window.__choiceCompileCancelled){
             window.__choiceCompileCancelled=true;
             window.__choiceCompileContext=renderer.getContext();
             dispatchEvent(new Event('${event}'));
           }
-          await compiling;`)});
+          `)});
       });
       await target.route('**/__choice-compile-review',route=>route.fulfill({contentType:'text/html',
         body:'<div id="scene" style="width:800px;height:600px"></div><button></button>'}));

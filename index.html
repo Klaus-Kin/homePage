@@ -20,8 +20,19 @@
       html, body { margin: 0; background: #080f20; }
       #app[data-state="loading"] { visibility: hidden; }
       /* 主场景先在幕布后显示；inert 由启动守卫维护，拉开完成前不接受鼠标和键盘输入。 */
-      #app[data-revealing="true"] { visibility: visible; }
+      /* 生产外链 CSS 排在内联样式后，必须高于 loading 规则，才能在拉幕过程中真正显露场景。 */
+      #app[data-state="loading"][data-revealing="true"] { visibility: visible; }
       #moon-loader { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; justify-items: center; overflow: hidden; isolation: isolate; color: #cbb77f; }
+      /* 缓存恢复先显示独立加载画面，再刷新；旧光幕、题词和出站黑壳不能参与恢复首帧。 */
+      html[data-moon-returning="true"] #app { visibility: hidden !important; }
+      html[data-moon-returning="true"] #ink-transition { display: none !important; }
+      html[data-moon-returning="true"] #moon-loader { z-index: 2147483647; background: #080f20; }
+      html[data-moon-returning="true"], html[data-moon-returning="true"] * { cursor: auto !important; }
+      /* 前后台切换不消耗开幕时间；暂停范围只覆盖加载层，避免改变主页动画。 */
+      #moon-loader.loader-paused, #moon-loader.loader-paused * { animation-play-state: paused !important; }
+      /* 一次开幕内减少动态只进不退，避免切回偏好时重新拉幕或被旧的短兜底截断。 */
+      #moon-loader.revealing.loader-reduced .loader-curtain { animation: none !important; }
+      #moon-loader.revealing.loader-reduced { animation: loader-fade-out 120ms ease-out both !important; }
       /* 中线保留两像素重叠，避免不同缩放比例下透出未就绪的主画面。 */
       #moon-loader .loader-curtain { position: absolute; inset-block: 0; width: calc(50% + 1px); z-index: -1; background: #080f20; }
       #moon-loader .loader-curtain-left { left: 0; }
@@ -32,7 +43,8 @@
       #moon-loader.revealing .hoop-halo, #moon-loader.revealing .hoop-rotor, #moon-loader.revealing .loading-label { opacity: 0; transition: opacity 140ms ease-out; }
       /* 静态柔光与旋转层分开绘制，避免 SVG 滤镜阻断合成线程旋转。 */
       #moon-loader .hoop-halo { grid-area: 1 / 1; width: 142px; height: 142px; margin: -15px; background: radial-gradient(ellipse, #c99d3515 15%, #c99d3509 46%, transparent 70%); }
-      #moon-loader .hoop-rotor { grid-area: 1 / 1; width: 112px; height: 112px; animation: hoop-spin 1.8s linear infinite; will-change: transform; }
+      /* 流式解析可能在紧邻的内联脚本之前先绘制；对齐完成后再显示，避免零角度首帧回跳。 */
+      #moon-loader .hoop-rotor { grid-area: 1 / 1; width: 112px; height: 112px; visibility: hidden; animation: hoop-spin 1.8s linear infinite; will-change: transform; }
       #moon-loader .hoop-rotor svg { display: block; width: 112px; height: 112px; }
       /* 小篆字形只定义一次供主页复用；标点仍按原文本和字号显示。 */
       .seal-character { display: inline-block; width: 1em; height: 1em; margin-inline-end: .12em; vertical-align: -.12em; }
@@ -100,6 +112,44 @@
       </span>
       <span class="loading-label">__MOON_LOADING__</span>
     </div>
+    <script>
+      // 紧随加载层执行，首次绘制前就使用跨文档一致的时间基准，后续旋转仍全部交给 CSS。
+      (() => {
+        const initialLoader = document.querySelector("#moon-loader");
+        const loaderTemplate = initialLoader.cloneNode(true);
+        function alignHoop(loader) {
+          const rotor = loader.querySelector(".hoop-rotor");
+          try {
+            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+            // getAnimations 会更新样式；只定位金箍，避免改动开幕幕布或淡出的时间轴。
+            const spin = rotor?.getAnimations?.()
+              .find(animation => animation.animationName === "hoop-spin");
+            if (spin) spin.currentTime = (performance.timeOrigin + performance.now()) % 1800;
+          } catch {
+            // 老浏览器不支持读取或设置动画时间时，沿用 CSS 旋转，不阻塞加载和缓存恢复。
+          } finally {
+            // 减少动态、缺少动画或 API 异常也要显露图形，不能让兼容性出口留下隐藏金箍。
+            if (rotor) rotor.style.visibility = "visible";
+          }
+        }
+        alignHoop(initialLoader);
+        window.addEventListener("pageshow", event => {
+          if (!event.persisted) return;
+          // 同步遮住缓存文档，再刷新已经销毁的场景；入口模块失败时该恢复路径也独立存在。
+          document.documentElement.dataset.moonReturning = "true";
+          let loader = document.querySelector("#moon-loader");
+          if (!loader) { loader = loaderTemplate.cloneNode(true); document.body.prepend(loader); }
+          loader.classList.remove("revealing", "loader-paused", "loader-reduced");
+          const app = document.querySelector("#app");
+          app.dataset.state = "loading";
+          delete app.dataset.revealing;
+          app.inert = true;
+          // 恢复层与刷新后文档各对齐一次，跨过完整旋转周期也不会重新从零起转。
+          alignHoop(loader);
+          window.location.reload();
+        });
+      })();
+    </script>
     <main id="app" data-state="loading">
       <!-- 静态图由同一新场景导出，只在 WebGL 失败或禁用脚本时显示。 -->
       <div class="scene-fallback">
@@ -185,62 +235,87 @@
       (() => {
         const app = document.querySelector("#app");
         let phase = "loading";
+        let failed = false;
         let revealComplete, finishReveal = () => {};
-        const timeout = window.setTimeout(() => fail("页面初始化超时"), 10000);
+        let timeout = 0, revealTimeout = 0, revealRaf = 0;
+        let active = !document.hidden, remaining = 60000, budgetSince = performance.now();
+        let revealRemaining = 0, revealSince = 0, revealingLoader;
+        // 每个真实阶段最多等待 20 秒，前台总预算 60 秒；隐藏期间不误判慢设备已卡死。
+        function accountBudget() {
+          const now = performance.now();
+          if (active) remaining -= Math.max(0, now - budgetSince);
+          active = !document.hidden;
+          budgetSince = now;
+        }
+        function watchProgress() {
+          clearTimeout(timeout);
+          accountBudget();
+          if (phase === "loading" && active)
+            timeout = window.setTimeout(() => fail("页面初始化超时"), Math.max(0, Math.min(20000, remaining)));
+        }
         function stopWatching() {
           clearTimeout(timeout);
           window.removeEventListener("error", onError, true);
         }
         function fail(reason) {
           if (phase !== "loading") return;
-          phase = "failed";
+          failed = true;
           stopWatching();
           app.classList.add("fallback", "boot-failed");
-          app.dataset.state = "idle";
-          document.querySelector("#moon-loader")?.remove();
+          app.dataset.bootReason = String(reason);
           document.querySelector("#status").textContent =
             "已启用静态场景，请选择文字入口开启旅程";
           // 主模块若已部分运行，通知它释放资源并锁定降级，迟到的初始化不得切回 3D。
           window.dispatchEvent(new Event("moon-boot-failed"));
           console.warn("月光页面启动失败，已恢复静态入口：", reason);
+          // 主模块未装载时守卫也能独立完成静态开幕，不把可用性绑定到失败的入口。
+          void window.__moonBoot.ready();
         }
         function onError(event) {
-          // 构建工具可能重写入口标签及 id，因此按模块脚本类型识别资源失败。
-          if (
-            (event.target instanceof HTMLScriptElement &&
-              event.target.type === "module") ||
-            event instanceof ErrorEvent
-          )
+          // 构建后入口 id 可能消失；只识别第一个同源模块，统计脚本和第三方运行错误不能拆幕。
+          const entry = Array.from(document.scripts).find(script => script.type === "module" && script.src &&
+            new URL(script.src, location.href).origin === location.origin);
+          if (entry && ((event.target instanceof HTMLScriptElement && event.target === entry) ||
+              (event instanceof ErrorEvent && event.filename === entry.src)))
             fail(event.message || "入口模块加载失败");
+        }
+        function armReveal() {
+          clearTimeout(revealTimeout);
+          if (!document.hidden) {
+            revealSince = performance.now();
+            revealTimeout = window.setTimeout(finishReveal, revealRemaining);
+          }
         }
         window.__moonBoot = {
           get failed() {
-            return phase === "failed";
+            return failed;
           },
-          ready(immediate = false) {
-            if (phase === "failed") return Promise.resolve(false);
-            // 重复就绪通知共享同一段转场；运行时降级可以立即解除已有的幕布门禁。
-            if (phase !== "loading") {
-              if (immediate) finishReveal();
-              return revealComplete;
-            }
+          progress(stage) {
+            if (phase !== "loading" || failed) return;
+            app.dataset.bootStage = stage;
+            watchProgress();
+          },
+          ready() {
+            // 正常场景、静态场景和重复通知始终共享开幕，不能用再次 ready 提前解锁。
+            if (phase !== "loading") return revealComplete;
             phase = "revealing";
             stopWatching();
             const loader = document.querySelector("#moon-loader");
             const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-            let revealTimeout = 0;
             revealComplete = new Promise((resolve) => {
               finishReveal = () => {
                 if (phase !== "revealing") return;
                 phase = "ready";
                 clearTimeout(revealTimeout);
+                cancelAnimationFrame(revealRaf);
                 loader?.removeEventListener("animationend", onRevealEnd);
-                motion.removeEventListener("change", finishReveal);
+                motion.removeEventListener("change", onMotionChange);
                 window.removeEventListener("pagehide", finishReveal);
                 loader?.remove();
                 app.inert = false;
                 delete app.dataset.revealing;
-                resolve(true);
+                if (failed) app.dataset.state = "idle";
+                resolve(!failed);
               };
             });
             function onRevealEnd(event) {
@@ -248,21 +323,49 @@
               if (event.animationName === "curtain-open-right" ||
                   (event.target === loader && event.animationName === "loader-fade-out")) finishReveal();
             }
+            function onMotionChange() {
+              // 偏好改变后交给短淡出完成，不能在切换当帧突然撤掉整个加载层。
+              if (!motion.matches) return;
+              loader?.classList.add("loader-reduced");
+              revealRemaining = 220;
+              armReveal();
+            }
             app.inert = true;
             app.dataset.revealing = "true";
-            if (!loader || immediate) finishReveal();
+            if (!loader) finishReveal();
             else {
+              revealingLoader = loader;
               loader.addEventListener("animationend", onRevealEnd);
-              motion.addEventListener("change", finishReveal);
+              motion.addEventListener("change", onMotionChange);
               window.addEventListener("pagehide", finishReveal, { once: true });
               // 动画被浏览器取消时也有出口；后台节流不会留下永久阻挡主页的透明层。
-              revealTimeout = window.setTimeout(finishReveal, motion.matches ? 220 : 1100);
-              loader.classList.add("revealing");
+              // 先给幕后的首帧一次实际呈现机会；兜底从动画启动后计时，不消耗首帧等待时间。
+              revealRaf = requestAnimationFrame(() => {
+                revealRaf = requestAnimationFrame(() => {
+                  if (phase !== "revealing") return;
+                  revealRemaining = motion.matches ? 220 : 1100;
+                  if (motion.matches) loader.classList.add("loader-reduced");
+                  loader.classList.toggle("loader-paused", document.hidden);
+                  loader.classList.add("revealing");
+                  armReveal();
+                });
+              });
             }
             return revealComplete;
           },
         };
+        document.addEventListener("visibilitychange", () => {
+          if (phase === "loading") watchProgress();
+          if (phase !== "revealing" || !revealingLoader) return;
+          revealingLoader.classList.toggle("loader-paused", document.hidden);
+          if (document.hidden) {
+            if (revealSince) revealRemaining = Math.max(0, revealRemaining - (performance.now() - revealSince));
+            clearTimeout(revealTimeout);
+          } else if (revealRemaining) armReveal();
+        });
+        window.addEventListener("pagehide", () => { stopWatching(); });
         window.addEventListener("error", onError, true);
+        watchProgress();
       })();
     </script>
     <script id="entry-module" type="module" src="/src/main.ts"></script>

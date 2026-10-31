@@ -17,10 +17,14 @@ export interface InscriptionFrame {
 export class VisibleTime {
   private last: number | null = null;
   private elapsed = 0;
+  private maxStep: number;
+
+  // 演出可限制单帧推进量，避免手机首次 GPU 长任务把关键镜头直接跳完；其他调用默认仍按实时时间累计。
+  constructor(maxStep = Infinity) { this.maxStep = maxStep; }
   sample(now: number, hidden = false): number {
     if (hidden) this.pause();
     else {
-      if (this.last !== null) this.elapsed += Math.max(0, now - this.last);
+      if (this.last !== null) this.elapsed += Math.min(this.maxStep, Math.max(0, now - this.last));
       this.last = now;
     }
     return this.elapsed;

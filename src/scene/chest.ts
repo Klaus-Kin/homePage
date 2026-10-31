@@ -21,7 +21,8 @@ async function makeWood(face: "plain" | "spell" | "name" | "return", init: Initi
   color.width = height.width = emission.width = 1536;
   color.height = height.height = emission.height = face === "plain" ? 512 : 256;
   const ctx = color.getContext("2d")!, bump = height.getContext("2d")!,
-    glow = emission.getContext("2d")!;
+    // 名称遮罩后续需要 CPU 读回；首次取得上下文时选择读回路径，保留原分辨率和绘制算法。
+    glow = emission.getContext("2d", { willReadFrequently: face === "name" })!;
   glow.fillStyle = "#000000"; glow.fillRect(0, 0, emission.width, emission.height);
   const h = color.height;
   ctx.fillStyle = "#64635b"; ctx.fillRect(0, 0, 1536, h);
@@ -121,8 +122,14 @@ export async function createChest(init = new Initialization()) {
   box.scale.setScalar(chestPlacement.scale);
   // 外侧刻字的金光实际照到草坡和月光阴影里；不启用盒内光，也不绘制假阴影贴片。
   const engravingMask = nameWood.emissiveMap!.image as HTMLCanvasElement;
+  init.phase = "engraving-readback";
+  await init.checkpoint(true);
+  const readbackStart = performance.now();
   const reflectionProfile = engravingReflectionProfile(engravingMask.getContext("2d")!
     .getImageData(0, 0, engravingMask.width, engravingMask.height).data, engravingMask.width, engravingMask.height);
+  performance.measure("moon-engraving-readback", { start: readbackStart, end: performance.now() });
+  await init.checkpoint(true);
+  init.phase = "chest-geometry";
   const engravingLight = new THREE.SpotLight(0xe9b95d, 0, 2.2, .65, .95, 2);
   engravingLight.name = "engraving-ground-light";
   engravingLight.castShadow = true;
@@ -293,5 +300,19 @@ export async function createChest(init = new Initialization()) {
       engravingLight.visible = engravingVisible;
     }
   }
-  return { box, fixedHalf, movingHalf, openingPivot, lightAnchor, bounds, glowMaterial, update, prepareChoice };
+  /** 首次开盖才出现的内腔灯与光束也在加载阶段编译，避免第一次点击临时创建新着色器组合。 */
+  async function prepareOpening(compile: () => Promise<unknown>) {
+    const engravingVisible = engravingLight.visible;
+    try {
+      update(1, 1, false);
+      engravingLight.visible = true;
+      await compile();
+      engravingLight.visible = false;
+      await compile();
+    } finally {
+      update(0, 0, false);
+      engravingLight.visible = engravingVisible;
+    }
+  }
+  return { box, fixedHalf, movingHalf, openingPivot, lightAnchor, bounds, glowMaterial, update, prepareChoice, prepareOpening };
 }

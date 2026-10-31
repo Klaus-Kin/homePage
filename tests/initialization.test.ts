@@ -2,6 +2,19 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Initialization } from "../src/scene/initialization.ts";
 
+// 异步编译的墙钟等待不能伪装成 CPU 长批次，取消也不必等驱动轮询完成。
+test("GPU waits reset CPU batch time and reject immediately on cancellation", async () => {
+  let time = 0;
+  const init = new Initialization(() => time, async () => {});
+  let resolve!: () => void;
+  const waiting = init.waitFor(new Promise<void>(done => { resolve = done; }));
+  time = 400; resolve(); await waiting;
+  assert.equal(init.checkpoint(), undefined);
+  const cancelled = init.waitFor(new Promise<void>(() => {}));
+  init.dispose();
+  await assert.rejects(cancelled, { name: "AbortError" });
+});
+
 // 用可控时钟确认让出的是任务调度器，预算内不会制造大量微任务。
 test("initialization yields after its 8ms budget and resets the batch clock", async () => {
   let time = 0, scheduled = 0;
@@ -37,4 +50,18 @@ test("late textures are released after cancellation without reviving initializat
   resolve({ dispose() { disposed++; } });
   await Promise.resolve();
   assert.equal(disposed, 1);
+});
+
+// 看门狗只接收真实阶段变化，不能让重复心跳无限延长同一个卡住的阶段。
+test("initialization reports each new phase once and stops reports after cancellation", async () => {
+  const phases: string[] = [];
+  const init = new Initialization(() => 0, async () => {}, phase => phases.push(phase));
+  await init.checkpoint(true);
+  await init.checkpoint(true);
+  init.phase = "ground";
+  await init.checkpoint(true);
+  assert.deepEqual(phases, ["setup", "ground"]);
+  init.dispose();
+  assert.throws(() => init.checkpoint(true), { name: "AbortError" });
+  assert.deepEqual(phases, ["setup", "ground"]);
 });
