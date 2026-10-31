@@ -19,7 +19,7 @@ test("static heading contains both seal lines and original accessible wording", 
 
 // 指定文案与欢迎语共享题词行书字形；重复汉字只定义一次，原文、标点和空格完整提供给辅助技术。
 test("static copy shares calligraphy outlines and preserves accessible wording", () => {
-  const lines = [...pageConfig.description, pageConfig.entranceLabel, ...pageConfig.worldLabel.split(/(?<=,)/), pageConfig.loadingLabel];
+  const lines = [...pageConfig.description, pageConfig.entranceLabel, ...pageConfig.worldLabel.split(/(?<=,|\.\.\.)/), pageConfig.loadingLabel];
   const page = renderStaticHtml(readFileSync(new URL("../index.html", import.meta.url), "utf8"), "/blog");
   for (const line of lines) {
     const html = renderCalligraphyCopy(line);

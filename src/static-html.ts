@@ -26,8 +26,8 @@ export function renderStaticHtml(html: string, blogUrl: string, inscriptionSvg =
     .replaceAll("__MOON_TITLE_SECOND__", () => renderSealTitleLine(pageConfig.titleLines[1]))
     .replaceAll("__MOON_DESCRIPTION__", () => pageConfig.description.map(line => renderCalligraphyCopy(line)).join("<br />"))
     .replaceAll("__MOON_ENTRANCE__", () => renderCalligraphyCopy(pageConfig.entranceLabel))
-    // 两段独立 SVG 只在手机换行；保留逗号及相邻原文，强制颜色模式也使用相同分行结构。
-    .replaceAll("__MOON_WORLD__", () => pageConfig.worldLabel.split(/(?<=,)/)
+    // 两段独立 SVG 只在手机换行；保留英文标点及相邻原文，强制颜色模式也使用相同分行结构。
+    .replaceAll("__MOON_WORLD__", () => pageConfig.worldLabel.split(/(?<=,|\.\.\.)/)
       .map(part => `<span class="world-line">${renderCalligraphyCopy(part)}</span>`).join(""))
     // 欢迎语仍使用 24px 原金色，字形与其余静态行书共用，首屏不依赖字体请求或主模块执行。
     .replaceAll("__MOON_LOADING__", () => renderCalligraphyCopy(pageConfig.loadingLabel, true))

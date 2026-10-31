@@ -4,9 +4,9 @@ export const pageConfig = {
   titleLines: ["程序猿的", "月光宝盒"],
   description: ["开发者 · 写作者 · 时空旅人", "写代码也写故事", "此间有故事，亦有远方", "把热爱写进代码，把故事交给月光"],
   // 页面、加载层与静态降级共用配置及题词行书；各处保留原有标点，欢迎语使用英文逗号。
-  entranceLabel: "循着月光，走进我的世界",
-  // 第二入口复用同一行书字形；英文逗号同时作为手机端的固定分行位置。
-  worldLabel: "程序外的世界是怎么样的,也想去看看",
+  entranceLabel: "循着月光, 走进我的博客",
+  // 第二入口复用同一行书字形；三个英文句点同时作为手机端的固定分行位置。
+  worldLabel: "你说...现在服务器的情况怎么样了",
   loadingLabel: "月色正好,欢迎来访",
   blogUrl: "https://example.com/blog",
   worldUrl: "https://example.org/",
