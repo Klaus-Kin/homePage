@@ -54,13 +54,15 @@ export class Initialization {
   /** GPU 编译是异步等待，不把驱动轮询时间算作 CPU 批次；取消时立即结束等待并拒绝迟到结果。 */
   waitFor<T>(promise: Promise<T>): Promise<T> {
     this.check();
+    // 保留等待前已经花费的 CPU 预算，只扣除异步驱动等待；立即完成的 Promise 也不能重置批次。
+    const spent = this.now() - this.started;
     return new Promise((resolve, reject) => {
       const signal = this.controller.signal;
       const abort = () => reject(signal.reason);
       signal.addEventListener("abort", abort, { once: true });
       promise.then(value => {
         signal.removeEventListener("abort", abort);
-        if (!signal.aborted) { this.started = this.now(); resolve(value); }
+        if (!signal.aborted) { this.started = this.now() - spent; resolve(value); }
       }, error => { signal.removeEventListener("abort", abort); reject(error); });
     });
   }

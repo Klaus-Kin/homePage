@@ -37,8 +37,9 @@
       #moon-loader .loader-curtain { position: absolute; inset-block: 0; width: calc(50% + 1px); z-index: -1; background: #080f20; }
       #moon-loader .loader-curtain-left { left: 0; }
       #moon-loader .loader-curtain-right { right: 0; }
-      #moon-loader.revealing .loader-curtain-left { animation: curtain-open-left 1000ms cubic-bezier(.76, 0, .24, 1) both; }
-      #moon-loader.revealing .loader-curtain-right { animation: curtain-open-right 1000ms cubic-bezier(.76, 0, .24, 1) both; }
+      /* 首帧就绪门禁保持不变；缩短两侧幕布的移动时间，让准备完成后尽快开放交互。 */
+      #moon-loader.revealing .loader-curtain-left { animation: curtain-open-left 450ms cubic-bezier(.76, 0, .24, 1) both; }
+      #moon-loader.revealing .loader-curtain-right { animation: curtain-open-right 450ms cubic-bezier(.76, 0, .24, 1) both; }
       /* 金箍和欢迎语先淡出，随后从中线显露主场景；旋转仍使用既有合成层。 */
       #moon-loader.revealing .hoop-halo, #moon-loader.revealing .hoop-rotor, #moon-loader.revealing .loading-label { opacity: 0; transition: opacity 140ms ease-out; }
       /* 静态柔光与旋转层分开绘制，避免 SVG 滤镜阻断合成线程旋转。 */
@@ -240,6 +241,8 @@
         let timeout = 0, revealTimeout = 0, revealRaf = 0;
         let active = !document.hidden, remaining = 60000, budgetSince = performance.now();
         let revealRemaining = 0, revealSince = 0, revealingLoader;
+        // 使用独立起点记录真实揭幕墙钟，不改变暂停、首帧呈现或动画结束的交互门禁。
+        let revealStarted;
         // 每个真实阶段最多等待 20 秒，前台总预算 60 秒；隐藏期间不误判慢设备已卡死。
         function accountBudget() {
           const now = performance.now();
@@ -306,6 +309,8 @@
               finishReveal = () => {
                 if (phase !== "revealing") return;
                 phase = "ready";
+                if (revealStarted !== undefined)
+                  performance.measure("moon-loader-reveal", { start: revealStarted, end: performance.now() });
                 clearTimeout(revealTimeout);
                 cancelAnimationFrame(revealRaf);
                 loader?.removeEventListener("animationend", onRevealEnd);
@@ -343,7 +348,9 @@
               revealRaf = requestAnimationFrame(() => {
                 revealRaf = requestAnimationFrame(() => {
                   if (phase !== "revealing") return;
-                  revealRemaining = motion.matches ? 220 : 1100;
+                  // 正常动画 450ms 加 100ms 兜底余量；减少动态继续沿用原有短淡出与余量。
+                  revealRemaining = motion.matches ? 220 : 550;
+                  revealStarted = performance.now();
                   if (motion.matches) loader.classList.add("loader-reduced");
                   loader.classList.toggle("loader-paused", document.hidden);
                   loader.classList.add("revealing");

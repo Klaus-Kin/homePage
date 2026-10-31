@@ -3,6 +3,7 @@ async (page) => {
   const origin = new URL(page.url()).origin;
   const browser = page.context().browser(), results = [];
   for (const viewport of [
+    { width: 1920, height: 1080 },
     { width: 1366, height: 768 },
     { width: 1024, height: 1366 },
     { width: 390, height: 844 },
@@ -29,7 +30,7 @@ async (page) => {
       await target.clock.pauseAt(new Date(Date.now() + 100));
       const frames = [];
       // 最后一帧停在结束前一毫秒，避免浏览器在截图期间自动派发 animationend。
-      for (const time of [0, 500, 999]) {
+      for (const time of [0, 225, 449]) {
         const frame = await target.evaluate((time) => {
           const loader = document.querySelector("#moon-loader");
           loader.getAnimations({ subtree: true }).forEach((animation) => { animation.currentTime = time; });
@@ -46,9 +47,9 @@ async (page) => {
           throw new Error(`幕布后的场景或交互门禁错误：${JSON.stringify(frame)}`);
         if (time === 0 && (frame.left.right < viewport.width / 2 || frame.right.left > viewport.width / 2))
           throw new Error("初始幕布存在中缝");
-        if (time === 500 && (Math.abs(frame.left.right - viewport.width / 4) > 2 || Math.abs(frame.right.left - viewport.width * .75) > 2))
+        if (time === 225 && (Math.abs(frame.left.right - viewport.width / 4) > 2 || Math.abs(frame.right.left - viewport.width * .75) > 2))
           throw new Error("左右幕布没有对称拉开");
-        if (time === 999 && (frame.left.right > .1 || frame.right.left < viewport.width - .1 || frame.labelOpacity !== "0"))
+        if (time === 449 && (frame.left.right > .1 || frame.right.left < viewport.width - .1 || frame.labelOpacity !== "0"))
           throw new Error("幕布未完全离场或欢迎语仍可见");
         await target.screenshot({ path: `output/playwright/curtain-${viewport.width}-${time}.png` });
         frames.push(frame);
@@ -57,7 +58,7 @@ async (page) => {
       if (await target.evaluate(() => document.querySelector("#app").contains(document.activeElement)))
         throw new Error("开幕过程中可以通过键盘进入主页");
       // 模拟动画事件被浏览器取消，确认兜底会释放幕布与交互锁。
-      await target.clock.runFor(1200);
+      await target.clock.runFor(600);
       const finished = await target.evaluate(() => ({
         state: document.querySelector("#app").dataset.state,
         inert: document.querySelector("#app").inert,
@@ -65,6 +66,8 @@ async (page) => {
       }));
       if (finished.state !== "idle" || finished.inert || finished.loader || errors.length)
         throw new Error(`开幕后没有恢复主页：${JSON.stringify({ finished, errors })}`);
+      // 保存最终交付画面，与过程中间帧一起检查首帧覆盖和短屏构图。
+      await target.screenshot({ path: `output/playwright/startup-final-${viewport.width}x${viewport.height}.png` });
       results.push({ viewport, frames, timerRecovery: true, errors });
     } finally { await context.close(); }
   }
@@ -94,7 +97,7 @@ async (page) => {
       await target.waitForFunction(() => !document.querySelector("#moon-loader") && !document.querySelector("#app").inert);
       if (scenario !== "pagehide") await target.waitForSelector('#app[data-state="idle"]');
       const state = await target.evaluate(() => ({ duration: window.__revealDuration, animations: window.__revealAnimations }));
-      if (scenario === "natural" && (state.duration < 900 || state.duration > 1600)) throw new Error("自然开幕时长异常");
+      if (scenario === "natural" && (state.duration < 400 || state.duration > 800)) throw new Error("自然开幕时长异常");
       if (scenario === "reduced" && (state.duration < 100 || state.duration > 500 ||
           !state.animations.includes("loader-fade-out") || state.animations.some((name) => name.startsWith("curtain-open"))))
         throw new Error("减少动态模式仍然横向拉开幕布");

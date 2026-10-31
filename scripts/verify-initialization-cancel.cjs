@@ -2,7 +2,9 @@
 async (page) => {
   const origin = new URL(page.url()).origin, results = [];
   for (const event of ["moon-boot-failed", "pagehide"]) {
-    for (const phase of ["mountain-0", "vegetation", "meadow-turf-desktop", "meadow-flowers-mobile", "wood-spell"]) {
+    // 植被流程已有细分阶段；使用确实会执行检查点的岩石阶段，并覆盖本轮调整的上传与预热等待。
+    for (const phase of ["mountain-0", "weathered-rock-geometry", "meadow-turf-desktop", "meadow-flowers-mobile", "wood-spell",
+      "gpu-textures", "gpu-choice-1", "gpu-opening-3"]) {
       const context = await page.context().browser().newContext();
       try {
         const target = await context.newPage();

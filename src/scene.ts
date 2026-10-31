@@ -47,9 +47,12 @@ export async function createScene(
   // 影像署名：NASA's Scientific Visualization Studio；LRO / LROC 月面颜色图。
   // 原始素材及使用信息：https://svs.gsfc.nasa.gov/4720/
   onProgress("moon-texture");
+  const downloadStart = performance.now();
   const lunarMap = await init.wait(new THREE.TextureLoader().loadAsync(
     "/assets/moon-lroc.jpg",
   ));
+  // 下载阶段包含图片解码；与后续生成和 GPU 上传分开，避免只看到一个笼统的等待时长。
+  performance.measure("moon-texture-download", { start: downloadStart, end: performance.now() });
   lunarMap.colorSpace = THREE.SRGBColorSpace;
   lunarMap.anisotropy = 4;
   const contextStart = performance.now();
@@ -383,6 +386,7 @@ export async function createScene(
     chest = await createChest(init);
     baseYaw = chest.box.rotation.y;
     performance.mark("moon-generation-end");
+    performance.measure("moon-generation", "moon-generation-start", "moon-generation-end");
     scene.add(chest.box);
     // 阴影范围同时合并盒盖完整扫掠体积，不能只扩大左右草地而裁掉竖起的上盖。
     chest.box.updateMatrixWorld(true);
@@ -430,6 +434,7 @@ export async function createScene(
     const firstSubmit = performance.now();
     render(true);
     const firstSubmitMs = performance.now() - firstSubmit;
+    performance.measure("moon-first-frame", { start: firstSubmit, end: performance.now() });
     // 正式首帧只提交一次；随后接上既有循环，后台变化仍沿用原来的暂停行为。
     document.addEventListener("visibilitychange", onVisibility);
     updateLoop(false);

@@ -14,6 +14,9 @@ function boot(reduced = false, timeOrigin = 0, initialTime = 0, animationAvailab
   const timers = new Map<number, () => void>(), listeners = new Map<string, (event: any) => void>();
   const windowListeners = new Map<string, Set<(event: any) => void>>();
   const frames = new Map<number, () => void>();
+  // 捕获浏览器实际注册的时限，确认缩短开幕后仍保留 100ms 事件缺失余量。
+  const timerDelays: number[] = [];
+  const measurements: { name: string; start: number; end: number }[] = [];
   let nextTimer = 0, timeout: () => void = () => {};
   let removed = false, reloaded = false, time = initialTime;
   // 记录真实动画时间写入，区分一次对齐与逐帧驱动，也模拟没有 Web Animations API 的浏览器。
@@ -43,7 +46,8 @@ function boot(reduced = false, timeOrigin = 0, initialTime = 0, animationAvailab
   const location = { href: "https://homepage.test/", origin: "https://homepage.test", reload() { reloaded = true; } };
   const dispatch = (name: string, event = {}) => windowListeners.get(name)?.forEach(callback => callback(event));
   const window: any = {
-    setTimeout(callback: () => void) {
+    setTimeout(callback: () => void, delay: number) {
+      timerDelays.push(delay);
       const id = ++nextTimer; if (id === 1) timeout = callback; timers.set(id, callback); return id;
     },
     matchMedia() { return { matches: reduced, addEventListener() {}, removeEventListener() {} }; },
@@ -57,7 +61,8 @@ function boot(reduced = false, timeOrigin = 0, initialTime = 0, animationAvailab
   // 加载层的内联初始化必须在守卫之前执行；使用同一沙箱保持浏览器的脚本顺序。
   const sandbox = {
     window, clearTimeout(id: number) { timers.delete(id); }, Event: class { type: string; constructor(type: string) { this.type = type; } },
-    HTMLScriptElement: Script, ErrorEvent: RuntimeError, URL, location, performance: { timeOrigin, now: () => time },
+    HTMLScriptElement: Script, ErrorEvent: RuntimeError, URL, location, performance: { timeOrigin, now: () => time,
+      measure(name: string, timing: { start: number; end: number }) { measurements.push({ name, ...timing }); } },
     requestAnimationFrame(callback: () => void) { const id = ++nextTimer; frames.set(id, callback); return id; },
     cancelAnimationFrame(id: number) { frames.delete(id); }, console: { warn() {} }, document,
   };
@@ -65,7 +70,7 @@ function boot(reduced = false, timeOrigin = 0, initialTime = 0, animationAvailab
   return { window, app, classes, root, entry, Script, RuntimeError, document, dispatch,
     reloaded: () => reloaded, expired: () => timeout(), removed: () => removed,
     frame: () => { const pending = [...frames.values()]; frames.clear(); pending.forEach(callback => callback()); },
-    advance: (delta: number) => { time += delta; }, timers, alignedTimes, rotor,
+    advance: (delta: number) => { time += delta; }, timers, timerDelays, measurements, alignedTimes, rotor,
     animationEnd: (name: string) => listeners.get("animationend")?.({ animationName: name, target: loader }),
     finishTimer: () => { for (const callback of [...timers.values()]) callback(); } };
 }
@@ -167,10 +172,13 @@ test("entry timeout reveals the static scene through curtains and rejects late W
 test("curtain completion has a timer fallback and duplicate readiness cannot skip it", async () => {
   const state = boot(), reveal = state.window.__moonBoot.ready();
   state.frame(); state.frame();
+  assert.equal(state.timerDelays.at(-1), 550);
+  state.advance(550);
   state.finishTimer();
   assert.equal(await reveal, true);
   assert.equal(state.removed(), true);
   assert.equal(state.app.inert, false);
+  assert.deepEqual(state.measurements, [{ name: "moon-loader-reveal", start: 0, end: 550 }]);
   const fallback = boot();
   const first = fallback.window.__moonBoot.ready();
   assert.equal(fallback.window.__moonBoot.ready(), first);
@@ -183,6 +191,7 @@ test("curtain completion has a timer fallback and duplicate readiness cannot ski
 test("reduced motion finishes on the short fade instead of moving curtains", async () => {
   const state = boot(true), reveal = state.window.__moonBoot.ready();
   state.frame(); state.frame();
+  assert.equal(state.timerDelays.at(-1), 220);
   assert.equal(state.removed(), false);
   assert.equal(state.app.inert, true);
   state.animationEnd("loader-fade-out");

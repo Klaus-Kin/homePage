@@ -6,9 +6,11 @@ async (page) => {
     const errors = [], logs = []; let navigations = 0;
     target.on("pageerror",error=>errors.push(error.message));
     target.on("console",message=>{ if (message.type()==="error") logs.push(message.text()); });
-    await target.route("https://example.com/blog",async route=>{ navigations++; await route.fulfill({contentType:"text/html",body:"<h1>Ink destination</h1>"}); });
     try {
       await target.goto(origin); await target.waitForSelector('#app[data-state="idle"]:not([inert])');
+      // 随页面配置读取真实入口，但由本地响应接管，确保故障检查不会离开验收环境。
+      const destination = await target.locator("[data-entrance=blog]").getAttribute("href");
+      await target.route(destination,async route=>{ navigations++; await route.fulfill({contentType:"text/html",body:"<h1>Ink destination</h1>"}); });
       await target.clock.install(); await target.clock.pauseAt(new Date(Date.now()+100));
       await target.locator("[data-entrance=blog]").focus(); await target.keyboard.press("Enter");
       const stage = () => target.locator("#ink-transition").getAttribute("data-stage");
@@ -42,7 +44,7 @@ async (page) => {
         throw new Error(`${kind}: 故障时墨迹丢失或画面闪回 ${JSON.stringify({initial,retained,sameScreenshot:before.equals(after)})}`);
       await target.clock.runFor(192);
       if(await stage()!=="black" || navigations) throw new Error("故障后未先淡黑再停留");
-      await target.clock.runFor(176); await target.waitForURL("https://example.com/blog");
+      await target.clock.runFor(176); await target.waitForURL(destination);
       if(navigations!==1 || errors.length || !logs.some(log=>log.includes("[ink-transition]"))) throw new Error(JSON.stringify({errors,logs,navigations}));
       results.push({kind,inkPixels:initial.black,mismatch:retained.mismatch,sameScreenshot:true,navigations});
     } finally {await context.close();}

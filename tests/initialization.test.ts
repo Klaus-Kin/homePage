@@ -15,6 +15,20 @@ test("GPU waits reset CPU batch time and reject immediately on cancellation", as
   await assert.rejects(cancelled, { name: "AbortError" });
 });
 
+// 同步完成的编译也会经过 Promise；这次等待不能抹掉已花费的 CPU 时间，否则永远达不到 8ms。
+test("GPU waits exclude driver time while preserving CPU work already spent in the batch", async () => {
+  let time = 0;
+  const init = new Initialization(() => time, async () => {});
+  time = 6;
+  const pending = init.waitFor(Promise.resolve());
+  time = 400;
+  await pending;
+  assert.equal(init.checkpoint(), undefined);
+  time += 2;
+  await init.checkpoint();
+  assert.deepEqual(init.batches, [8]);
+});
+
 // 用可控时钟确认让出的是任务调度器，预算内不会制造大量微任务。
 test("initialization yields after its 8ms budget and resets the batch clock", async () => {
   let time = 0, scheduled = 0;

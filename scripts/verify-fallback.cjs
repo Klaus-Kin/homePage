@@ -30,17 +30,13 @@ async (page) => {
         /\/(?:src\/scene\.ts|assets\/scene-[^/]+\.js)(?:\?|$)/,
         (route) => route.abort(),
       );
-    await target.route("https://example.com/blog", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "text/html",
-        body: "<h1>Fallback destination reached</h1>",
-      }),
-    );
     await target.goto(origin);
     await target.waitForFunction(
       () => document.querySelector("#app").dataset.state === "idle",
     );
+    // 读取当前导航配置并本地接管，避免沿用旧示例地址而把验收带到真实站点。
+    const destination = await target.locator("[data-entrance=blog]").getAttribute("href");
+    await target.route(destination, route => route.fulfill({ contentType: "text/html", body: "<h1>Fallback destination reached</h1>" }));
     if (kind === "context-lost")
       await target.evaluate(() =>
         document
@@ -60,7 +56,7 @@ async (page) => {
       .click();
     if (await target.locator("#app").getAttribute("data-state") !== "idle") throw new Error("降级宝盒误启动转场");
     await target.locator("[data-entrance=blog]").click();
-    await target.waitForURL("https://example.com/blog");
+    await target.waitForURL(destination);
     results.push({ kind, staticEntryWorks: true });
     await context.close();
   }
@@ -77,14 +73,9 @@ async (page) => {
     });
     try {
       const target = await context.newPage();
-      await target.route("https://example.com/blog", (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: "text/html",
-          body: "<h1>No-script destination reached</h1>",
-        }),
-      );
       await target.goto(origin);
+      const destination = await target.locator(".noscript-entry a").first().getAttribute("href");
+      await target.route(destination, route => route.fulfill({ contentType: "text/html", body: "<h1>No-script destination reached</h1>" }));
       const staticPage = await target.evaluate(async () => {
         const fallback = document.querySelector(".scene-fallback");
         const background = getComputedStyle(fallback).backgroundImage;
@@ -127,7 +118,7 @@ async (page) => {
       if (!(await target.getByRole("link", { name: "进入博客 →" }).isVisible()))
         throw new Error("No-JS entry missing");
       await target.getByRole("link", { name: "进入博客 →" }).click();
-      await target.waitForURL("https://example.com/blog");
+      await target.waitForURL(destination);
       results.push({
         kind: "javascript-disabled",
         viewport,

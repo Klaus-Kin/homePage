@@ -1,5 +1,5 @@
 import type { InkFrame } from "./ink-timeline";
-import { canvasSize, inkGeometry, inkRadius } from "./ink-geometry";
+import { canvasSize, inkGeometry, inkRadius } from "./ink-geometry.ts";
 
 /** 独立装饰层只消费主 RAF；不读取像素、不下载素材，也不接触 WebGL 生命周期。 */
 export class InkTransition {
@@ -139,7 +139,8 @@ export class InkTransition {
   /** 飞溅参数全部预生成；每滴到达固定落点后保留，直到被不断扩大的主体吞并。 */
   private draw(elapsed: number) {
     const ctx = this.context!;
-    if (ctx.isContextLost()) throw new Error("Canvas 2D context lost");
+    // 部分浏览器尚未实现 2D 上下文丢失检测；缺少能力时正常绘制，真实绘图异常仍由外层降级。
+    if (typeof ctx.isContextLost === "function" && ctx.isContextLost()) throw new Error("Canvas 2D context lost");
     ctx.clearRect(0, 0, this.width, this.height);
     if (elapsed < 120) {
       const t = Math.max(0, elapsed / 120), distance = 1 - t;

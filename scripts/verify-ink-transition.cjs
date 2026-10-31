@@ -1,6 +1,11 @@
 // 使用真实生产页面和浏览器时钟验证落墨，所有像素检查均来自未修改页面的截图。
 async (page) => {
   const browser = page.context().browser(), origin = new URL(page.url()).origin, results = [];
+  // 可选筛选用于慢内核的定向回归；不带参数时仍执行完整矩阵，页面本身不读取这些验收参数。
+  const options = new URL(page.url()).searchParams;
+  const selected = new Set((options.get("case") ?? "").split(",").filter(Boolean));
+  // 多浏览器可并行验收，截图按内核区分，避免相互覆盖证据。
+  const imagePrefix = browser.browserType().name() === "webkit" ? "webkit-" : "";
   async function setup(viewport = { width: 1366, height: 768 }, options = {}) {
     const { fault, reduced = false, dpr = 1 } = options;
     const context = await browser.newContext({ viewport, deviceScaleFactor: dpr, reducedMotion: reduced ? "reduce" : "no-preference" });
@@ -9,6 +14,12 @@ async (page) => {
     target.on("pageerror", error => errors.push(error.message));
     target.on("console", message => { if (message.type() === "error") logs.push(message.text()); });
     if (fault) await target.addInitScript(kind => {
+      // 直接移除原型方法以复现旧 Safari 的能力缺口；丢失状态只注入墨水画布，避免影响场景纹理生成。
+      if (kind === "canvas-no-loss-detection") Reflect.deleteProperty(CanvasRenderingContext2D.prototype, "isContextLost");
+      if (kind === "canvas-context-healthy") CanvasRenderingContext2D.prototype.isContextLost = () => false;
+      if (kind === "canvas-context-lost") CanvasRenderingContext2D.prototype.isContextLost = function() {
+        return this.canvas.dataset.inkSurface === "true";
+      };
       const original = HTMLCanvasElement.prototype.getContext;
       HTMLCanvasElement.prototype.getContext = function(type, ...args) {
         if (kind.startsWith("fallback") && /webgl/i.test(type)) return null;
@@ -16,8 +27,10 @@ async (page) => {
         return original.call(this, type, ...args);
       };
     }, fault);
-    await target.route("https://example.com/blog", async route => { navigations++; await route.fulfill({ contentType: "text/html", body: "<h1>Ink destination</h1>" }); });
     await target.goto(origin); await target.waitForSelector('#app[data-state="idle"]:not([inert])');
+    // 使用当前入口地址并在本地拦截导航，配置变化不会使验收访问真实站点或等待旧示例地址。
+    const destination = await target.locator("[data-entrance=blog]").getAttribute("href");
+    await target.route(destination, async route => { navigations++; await route.fulfill({ contentType: "text/html", body: "<h1>Ink destination</h1>" }); });
     await target.clock.install(); await target.clock.pauseAt(new Date(Date.now() + 100));
     // 记录 DOM 真正提交的黑场与导航，晚帧和后台用同一个前台时间轴验证。
     await target.evaluate(() => {
@@ -30,7 +43,7 @@ async (page) => {
     });
     const trigger = fault === "fallback-text" ? "[data-entrance=blog]" : "[data-entrance=blog]";
     await target.locator(trigger).focus(); await target.keyboard.press("Enter"); await target.keyboard.press("Enter");
-    return { target, context, errors, logs, navigations: () => navigations };
+    return { target, context, errors, logs, destination, navigations: () => navigations };
   }
   const inspect = target => target.evaluate(() => {
     const layer = document.querySelector("#ink-transition"), glyph = document.querySelector('#inscription [data-character="界"]').getBoundingClientRect();
@@ -46,7 +59,7 @@ async (page) => {
     throw new Error("未达到预期落墨阶段");
   }
   async function screenshot(target, name, black = false) {
-    const shot = await target.screenshot({ path: `output/playwright/ink-${name}.png` });
+    const shot = await target.screenshot({ path: `output/playwright/${imagePrefix}ink-${name}.png` });
     if (!black) return;
     const pixels = await target.evaluate(async uri => {
       const image = new Image(); image.src = uri; await image.decode();
@@ -62,6 +75,7 @@ async (page) => {
   }
   // 包括历史三个 P2 视口；不移动指针来规避检查，墨层必须自然隐藏所有光标。
   for (const [name, width, height] of [["desktop",1366,768],["phone",390,844],["ultrawide",3440,1440],["small",320,480],["landscape",640,600],["square",1100,1000]]) {
+    if (selected.size && !selected.has(name)) continue;
     const check = await setup({ width, height }, { dpr: name === "phone" ? 3 : 1 }), { target, context } = check;
     try {
       await target.mouse.move(width - 30, height - 30);
@@ -85,17 +99,33 @@ async (page) => {
       await target.setViewportSize({width,height});
       await target.clock.runFor(144); await screenshot(target, `${name}-before-navigation`, true);
       if (check.navigations()) throw new Error("纯黑尚未停留满160ms");
-      await target.clock.runFor(32); await target.waitForURL("https://example.com/blog");
+      await target.clock.runFor(32); await target.waitForURL(check.destination);
       if (check.navigations() !== 1 || check.errors.length || check.logs.length) throw new Error(JSON.stringify(check));
       results.push({ name, origin: start.origin, buffer: start.buffer, blackAt: black.events, pixels, navigationOnce: true });
     } finally { await context.close(); }
   }
-  for (const kind of ["reduced", "reduced-switch-back", "switch-drop", "switch-spread", "hidden-drop", "hidden-splash", "hidden-spread", "hidden-fade", "hidden-black", "canvas-unavailable", "canvas-draw-failure", "fallback-button", "fallback-text", "late-black"]) {
+  for (const kind of ["reduced", "reduced-switch-back", "switch-drop", "switch-spread", "hidden-drop", "hidden-splash", "hidden-spread", "hidden-fade", "hidden-black", "canvas-no-loss-detection", "canvas-context-healthy", "canvas-context-lost", "canvas-unavailable", "canvas-draw-failure", "fallback-button", "fallback-text", "late-black"]) {
+    if (selected.size && !selected.has(kind)) continue;
     const reduced = ["reduced", "reduced-switch-back", "hidden-fade", "hidden-black"].includes(kind);
     const fault = kind.startsWith("canvas") || kind.startsWith("fallback") ? kind : undefined;
-    const check = await setup(undefined, { reduced, fault }), { target, context } = check;
+    const phone = options.get("view") === "phone";
+    const check = await setup(phone ? { width: 390, height: 844 } : undefined, { reduced, fault, dpr: phone ? 3 : 1 }), { target, context } = check;
     try {
       await until(target, s => s.stage && s.stage !== "waiting");
+      const fullCanvas = ["canvas-no-loss-detection", "canvas-context-healthy"].includes(kind);
+      if (fullCanvas) {
+        // 缺失检测方法必须走完整 2400ms，而不是静默进入 180ms 淡黑；各阶段都保存真实截图。
+        if ((await inspect(target)).stage !== "drop") throw new Error(`${kind}: 首帧没有落墨`);
+        await target.clock.runFor(48); await screenshot(target, `${kind}-drop`);
+        await target.clock.runFor(192);
+        if ((await inspect(target)).stage !== "splash") throw new Error(`${kind}: 没有飞溅`);
+        await screenshot(target, `${kind}-splash`);
+        await target.clock.runFor(800);
+        const spread = await inspect(target);
+        if (spread.stage !== "spread" || spread.fade || spread.black === "true") throw new Error(`${kind}: 没有扩散`);
+        await screenshot(target, `${kind}-spread`);
+        if (check.logs.length) throw new Error(`${kind}: 兼容路径意外降级 ${JSON.stringify(check.logs)}`);
+      }
       if (kind === "reduced-switch-back") {
         await target.emulateMedia({reducedMotion:"no-preference"}); await target.clock.runFor(16);
         const locked = await inspect(target);
@@ -135,15 +165,19 @@ async (page) => {
         if (check.navigations()) throw new Error("恢复首帧提前导航");
       }
       if (kind === "late-black") {
+        const before = await inspect(target);
         await target.clock.fastForward(10000);
-        if ((await inspect(target)).black !== "true" || check.navigations()) throw new Error("晚帧提前消耗全黑停留");
+        // 当前演出时钟每帧最多推进 50ms；长停顿不能跳过落墨，后续仍要等真实黑场与完整停留。
+        const late = await inspect(target);
+        if (late.elapsed - before.elapsed > 50 || late.black === "true" || check.navigations())
+          throw new Error("晚帧跳过落墨或提前消耗全黑停留");
       }
       const black = await until(target, s => s.black === "true");
       await screenshot(target, kind, true);
       if (check.navigations()) throw new Error("未检查黑场便导航");
-      await target.clock.runFor(176); await target.waitForURL("https://example.com/blog");
+      await target.clock.runFor(176); await target.waitForURL(check.destination);
       if (check.navigations() !== 1 || check.errors.length) throw new Error(`${kind}: ${JSON.stringify(check.errors)}`);
-      if (kind.startsWith("canvas") && !check.logs.some(s => s.includes("[ink-transition]"))) throw new Error("Canvas 故障缺少上下文日志");
+      if (kind.startsWith("canvas") && !fullCanvas && !check.logs.some(s => s.includes("[ink-transition]"))) throw new Error("Canvas 故障缺少上下文日志");
       results.push({ kind, blackAt: black.events, navigationOnce: true, logs: check.logs });
     } finally { await context.close(); }
   }
