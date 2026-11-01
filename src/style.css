@@ -691,15 +691,36 @@ h1 > strong {
 }
 /* 红眼后备来自相同模型首帧，只交叉淡入眼色变化，主体轮廓与静止图完全重合。 */
 .monkey-eye { position: absolute; inset: 0; opacity: 0; transition: opacity .45s; }
+.entry-color-eye { position: absolute; inset: 0; opacity: 0; transition: opacity .45s; }
 .world-link:hover .monkey-eye, .world-link:focus-visible .monkey-eye {
   opacity: 1;
   transition-duration: .35s;
 }
+.world-link:hover .entry-color-eye, .world-link:focus-visible .entry-color-eye { opacity: 1; transition-duration: .35s; }
 @keyframes world-curiosity { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
 /* 图标格保持固定尺寸；图片与画布共用 160% 透明画幅，首帧接管时位置和比例不变。 */
 .entry-icon { position: relative; display: block; width: 44px; height: 44px; justify-self: center; pointer-events: none; }
 .entry-icon .entry-fallback, .entry-canvas { position: absolute; display: block; width: 160%; height: 160%; left: -30%; top: -30%; pointer-events: none; }
 .entry-fallback > picture, .entry-fallback img { display: block; width: 100%; height: 100%; }
+/* 双层后备图在无脚本与 WebGL 故障时也保留复色，注册数值让柔和水平边缘连续上移。 */
+@property --entry-color-progress { syntax: "<number>"; inherits: false; initial-value: 0; }
+.entry-color {
+  position: absolute; inset: 0; display: block;
+  --entry-color-progress: 0;
+  mask-image: linear-gradient(to bottom,
+    transparent calc(100% - var(--entry-color-progress) * 116%),
+    black calc(116% - var(--entry-color-progress) * 116%));
+}
+.entry-color > picture { display: block; width: 100%; height: 100%; }
+.journey-link:not([aria-disabled="true"]):is(:hover, :focus-visible) .entry-color {
+  animation: moon-entry-color .7s linear forwards;
+}
+@keyframes moon-entry-color { from { --entry-color-progress: 0; } to { --entry-color-progress: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .journey-link:not([aria-disabled="true"]):is(:hover, :focus-visible) .entry-color {
+    animation: none; --entry-color-progress: 1;
+  }
+}
 .entry-icon[data-model-ready="true"] .entry-fallback { visibility: hidden; }
 .journey-link:hover > .entry-icon, .journey-link:focus-visible > .entry-icon { transform: none; filter: none; }
 .entry-copy { display: block; }

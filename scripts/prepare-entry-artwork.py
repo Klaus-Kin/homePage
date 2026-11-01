@@ -27,10 +27,16 @@ def save(image, name, limit=512):
     image.save(ASSETS / name, optimize=True)
 
 
-icons = moonlight(Image.open(ROOT / "金羽王冠与猿王头像.png").convert("RGBA"))
+def save_color_pair(image, name, limit=512):
+    # 两版先共享原稿的裁切与遮罩，再以相同算法缩放；透明通道逐像素相同。
+    save(moonlight(image), name, limit)
+    save(image.copy(), name.replace(".png", "-color.png"), limit)
+
+
+icons = Image.open(ROOT / "金羽王冠与猿王头像.png").convert("RGBA")
 crown = icons.crop((0, 0, 950, icons.height))
 monkey = trim(icons.crop((950, 0, icons.width, icons.height)))
-save(monkey, "entry-monkey-artwork.png")
+save_color_pair(monkey, "entry-monkey-artwork.png")
 
 # 金色冠座覆盖羽根，三个互补透明遮罩重合后精确恢复完整原稿。
 base_mask = Image.new("L", crown.size)
@@ -48,14 +54,17 @@ for name, region in [("base", None), ("left", (0, 0, 480, crown.height)),
         mask = ImageChops.multiply(mask, half)
     layer = crown.copy()
     layer.putalpha(ImageChops.multiply(crown.getchannel("A"), mask))
-    save(layer.crop(bounds), f"entry-crown-{name}.png")
+    save_color_pair(layer.crop(bounds), f"entry-crown-{name}.png")
 
-cursor = moonlight(Image.open(ROOT / "金红云纹金箍棒与猴手饰件.png").convert("RGBA"))
+cursor = Image.open(ROOT / "金红云纹金箍棒与猴手饰件.png").convert("RGBA")
 for name, left, right in [("staff", 0, 700), ("point", 700, 1350), ("grab", 1350, cursor.width)]:
     item = trim(cursor.crop((left, 0, right, cursor.height)))
     # 同一 72px 方形画幅保留 3px 外边距；棒头、指尖和抓取中心分别对齐各自热点。
-    item.thumbnail((132, 132), Image.Resampling.LANCZOS)
-    tile = Image.new("RGBA", (144, 144))
-    tile.alpha_composite(item, (6, 6))
-    tile.save(ASSETS / f"cursor-{name}.png", optimize=True)
-    tile.resize((72, 72), Image.Resampling.LANCZOS).save(ASSETS / f"cursor-{name}-native.png", optimize=True)
+    versions = [("", moonlight(item))] + ([("-color", item.copy())] if name != "staff" else [])
+    for suffix, version in versions:
+        version.thumbnail((132, 132), Image.Resampling.LANCZOS)
+        tile = Image.new("RGBA", (144, 144))
+        tile.alpha_composite(version, (6, 6))
+        tile.save(ASSETS / f"cursor-{name}{suffix}.png", optimize=True)
+        if not suffix:
+            tile.resize((72, 72), Image.Resampling.LANCZOS).save(ASSETS / f"cursor-{name}-native.png", optimize=True)

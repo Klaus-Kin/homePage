@@ -1,4 +1,5 @@
 // 在开发服务器页面运行：直接导出共享渲染配置的透明首帧，所有临时 WebGL 资源均在导出后释放。
+// 将 CLI 输出重定向到 output/playwright/entry-stills.txt，再运行 python scripts/save-entry-stills.py output/playwright/entry-stills.txt。
 async (page) => {
   const origin=new URL(page.url()).origin,context=await page.context().browser().newContext();
   try {
@@ -18,12 +19,14 @@ async (page) => {
           const model=await createEntryArtwork(kind,init);
           try {
             const {scene,camera}=createEntryScene(model);
-            for(const size of [30,36,44]) for(const ratio of [1,2]) for(const eyes of kind==='crown'?[0]:[0,1]) {
+            for(const size of [30,36,44]) for(const ratio of [1,2]) for(const eyes of kind==='crown'?[0]:[0,1]) for(const color of [false,true]) {
               resizeEntryRenderer(renderer,size,ratio);
               // 红眼后备只改变眼色，保持相同姿态与无红丝状态，退化环境下仍能平滑显示聚焦反馈。
               model.update(0,0,eyes,0);
+              // 原色与月夜首帧由同一相机和网格导出；只改变双纹理混合进度。
+              model.setColorReveal?.(color?1:0);
               renderer.render(scene,camera);
-              const name=`entry-${kind}${eyes?'-active':''}-${size}${ratio===2?'@2x':''}.png`;
+              const name=`entry-${kind}${eyes?'-active':''}${color?'-color':''}-${size}${ratio===2?'@2x':''}.png`;
               frames.push({name,url:canvas.toDataURL('image/png'),width:canvas.width,height:canvas.height});
             }
           } finally {init.dispose();}
@@ -31,17 +34,7 @@ async (page) => {
       } finally {renderer.dispose();renderer.forceContextLoss();}
       return frames;
     });
-    for(const frame of frames) {
-      const pending=target.waitForEvent('download');
-      await target.evaluate(({name,url})=>{
-        const link=document.createElement('a');link.href=url;link.download=name;link.textContent=name;
-        document.body.replaceChildren(link);
-      },frame);
-      // 每张图片通过真实点击下载，避免连续脚本点击触发浏览器的自动多文件下载限制。
-      await target.getByRole('link',{name:frame.name,exact:true}).click();
-      const download=await pending;
-      await download.saveAs(`public/assets/${frame.name}`);
-    }
-    return frames.map(({name,width,height,url})=>({name,width,height,bytes:Math.floor((url.length-url.indexOf(',')-1)*.75)}));
+    // 返回像素由本地保存器写入，避免连续下载触发浏览器的多文件下载限额。
+    return frames;
   } finally {await context.close();}
 }

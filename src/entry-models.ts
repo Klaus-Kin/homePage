@@ -6,6 +6,8 @@ import { featherSection, silkPoint } from "./entry-motion.ts";
 export interface EntryModel {
   root: THREE.Group;
   update(time: number, amount: number, eye: number, silk: number): void;
+  /** 原稿图标可选的复色入口，旧几何模型及其动画接口保持兼容。 */
+  setColorReveal?(progress: number): void;
 }
 
 /** 小图标把同材质静态雕刻合批；动态羽片、丝线保留自己的可更新缓冲。 */

@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 // 直接核对交付的 PNG 和 HTML，避免导出脚本存在但页面仍然显示另一套手绘图。
 test("entry fallbacks use transparent first-frame PNGs at each layout and pixel density", () => {
   const html=readFileSync(new URL("../index.html",import.meta.url),"utf8");
-  for(const kind of ["crown","monkey","monkey-active"]) for(const size of [30,36,44]) for(const ratio of [1,2]) {
+  for(const kind of ["crown","monkey","monkey-active","crown-color","monkey-color","monkey-active-color"]) for(const size of [30,36,44]) for(const ratio of [1,2]) {
     const name=`entry-${kind}-${size}${ratio===2?"@2x":""}.png`;
     assert.ok(html.includes(`/assets/${name}`),`入口未引用 ${name}`);
     const png=readFileSync(new URL(`../public/assets/${name}`,import.meta.url));

@@ -38,7 +38,7 @@ test("GPU warmup draws objects separately and restores state on cancellation", a
   assert.deepEqual(draws,[[parent],[child]]);
   assert.ok(parent.visible && child.visible && !hidden.visible);
   assert.equal(parent.layers.mask,1);assert.equal(child.layers.mask,1);
-  task=0;draws.length=0;cancel=true;
+  task=0;draws.length=0;cancel=true;parent.position.x=1;
   await assert.rejects(warmScene(renderer,scene,camera,init),{name:"AbortError"});
   assert.equal(draws.length,1);
   assert.ok(parent.visible && child.visible && !hidden.visible);
@@ -109,4 +109,79 @@ test("GPU warmup restores layers when cancelled during asynchronous compilation"
   assert.equal(mesh.layers.mask, 1);
   assert.equal(draws, 0);
   assert.equal(renderer.shadowMap.needsUpdate, true);
+});
+
+// 只缓存成功提交的完整绘制状态；隐藏的新对象仍须预热，几何、材质、变换、灯光变化均失效。
+test("GPU submission cache skips identical draws and invalidates all changed render inputs", async () => {
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera();
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial());
+  const hidden = mesh.clone(); hidden.visible = false; scene.add(mesh, hidden);
+  const light = new THREE.PointLight(); scene.add(light);
+  let draws = 0, fail = false;
+  const init = new Initialization(() => 0, async () => {});
+  const renderer = { shadowMap: { needsUpdate: false }, async compileAsync() {}, render() {
+    if (fail) throw new Error("submission rejected"); draws++;
+  } } as unknown as THREE.WebGLRenderer;
+  await warmScene(renderer, scene, camera, init); assert.equal(draws, 1);
+  await warmScene(renderer, scene, camera, init); assert.equal(draws, 1);
+  for (const change of [
+    () => { mesh.position.x++; },
+    () => { mesh.geometry.getAttribute("position").needsUpdate = true; },
+    () => { mesh.geometry.setAttribute("position", mesh.geometry.getAttribute("position").clone()); },
+    () => { mesh.geometry.setDrawRange(0, 3); },
+    () => { mesh.material.color.set(0xffddaa); },
+    () => { mesh.material.needsUpdate = true; },
+    () => { light.intensity++; },
+    () => { light.position.y++; },
+    () => { camera.position.z++; },
+  ]) {
+    const before = draws; change();
+    await warmScene(renderer, scene, camera, init); assert.equal(draws, before + 1);
+  }
+  hidden.visible = true;
+  await warmScene(renderer, scene, camera, init); assert.equal(draws, 11);
+  mesh.position.z++; fail = true;
+  await assert.rejects(warmScene(renderer, scene, camera, init), /submission rejected/);
+  fail = false;
+  await warmScene(renderer, scene, camera, init); assert.equal(draws, 12);
+  init.dispose();
+});
+
+// 自定义 uniform、实例缓冲和阴影投影体变化不能沿用已提交缓存。
+test("GPU cache invalidates uniforms, instances, depth materials and moved shadow casters", async () => {
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera();
+  const material = new THREE.ShaderMaterial({ uniforms: { strength: { value: 0 } } });
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(), material, 1); scene.add(mesh);
+  const init = new Initialization(() => 0, async () => {});
+  let draws = 0;
+  const renderer = { shadowMap: { needsUpdate: false }, async compileAsync() {}, render() { draws++; } } as unknown as THREE.WebGLRenderer;
+  await warmScene(renderer, scene, camera, init);
+  material.uniforms.strength.value++;
+  await warmScene(renderer, scene, camera, init); assert.equal(draws, 2);
+  mesh.instanceMatrix.needsUpdate = true;
+  await warmScene(renderer, scene, camera, init); assert.equal(draws, 3);
+  mesh.customDepthMaterial = new THREE.MeshDepthMaterial();
+  await warmScene(renderer, scene, camera, init); assert.equal(draws, 4);
+  const caster = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+  caster.castShadow = true; scene.add(caster);
+  await warmScene(renderer, scene, camera, init); assert.equal(draws, 6);
+  caster.position.y++;
+  await warmScene(renderer, scene, camera, init); assert.equal(draws, 8);
+  init.dispose();
+});
+
+// 外部闭包 uniform 无法从材质属性读取；保守提交，避免把未知状态当成完全相同的状态。
+test("GPU cache never skips custom callbacks with unobservable external uniforms", async () => {
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera();
+  const material = new THREE.MeshStandardMaterial(), wind = { value: 0 };
+  material.onBeforeCompile = shader => { shader.uniforms.wind = wind; };
+  scene.add(new THREE.Mesh(new THREE.BoxGeometry(), material));
+  const init = new Initialization(() => 0, async () => {});
+  let draws = 0;
+  const renderer = { shadowMap: { needsUpdate: false }, async compileAsync() {}, render() { draws++; } } as unknown as THREE.WebGLRenderer;
+  await warmScene(renderer, scene, camera, init);
+  wind.value++;
+  await warmScene(renderer, scene, camera, init);
+  assert.equal(draws, 2);
+  init.dispose();
 });

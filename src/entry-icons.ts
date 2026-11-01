@@ -5,6 +5,7 @@ import { Initialization } from "./scene/initialization.ts";
 import { warmScene } from "./scene/gpu-initialization.ts";
 import type { EntryModel } from "./entry-models.ts";
 import { createEntryRenderer, createEntryScene, resizeEntryRenderer } from "./entry-rendering.ts";
+import { targetColorReveal, synchronizeTargetColorReveal } from "./color-reveal.ts";
 
 /** 两个透明画布共用一个按需 RAF；交互文本独立于 WebGL，失败时仍可使用静态入口。 */
 export function installEntryIcons(links: HTMLAnchorElement[]) {
@@ -48,7 +49,16 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
     if(disposed || document.hidden || raf) return;
     raf=requestAnimationFrame(tick);
   }
+  function synchronizeFallback(item: Item) {
+    // CSS 在模块下载和 GPU 预热期间已经复色；以交接当下的实际计算值为准，不按模块启动时间重播。
+    const fallback=item.slot.querySelector<HTMLElement>(".entry-color");
+    const progress=fallback?Number(getComputedStyle(fallback).getPropertyValue("--entry-color-progress")):0;
+    return synchronizeTargetColorReveal(item.link,progress,performance.now(),motionQuery.matches);
+  }
   function activate(item: Item) {
+    // 延迟安装时也立即同步共享时钟，让鼠标在模型准备期间沿用已显示的复色进度。
+    if(item.ready) targetColorReveal(item.link, performance.now(), motionQuery.matches);
+    else synchronizeFallback(item);
     const active=(item.hover || item.focus) && item.link.getAttribute("aria-disabled")!=="true";
     item.motion.setActive(active);
     item.dirty=true;
@@ -91,11 +101,14 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
       await warmScene(renderer,item.scene,item.camera,item.init);
       item.init.check();
       item.model.update(item.motion.time,item.motion.reduced?0:item.motion.amount,item.motion.eye,item.motion.silk);
+      const colorReveal=synchronizeFallback(item);
+      item.model.setColorReveal?.(colorReveal);
       renderer.render(item.scene,item.camera);
       item.init.check();
       // 最后一次取消检查之后没有异步间隙，迟到构建不能在旅程或离页后追加画布。
       item.slot.append(canvas);
       item.ready=true;
+      item.slot.dataset.colorReveal=String(colorReveal);
       item.slot.dataset.modelReady="true";
       item.dirty=true;
       wake();
@@ -127,6 +140,9 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
       if(item.ready && item.renderer && item.scene && item.camera && item.model && !contrastQuery.matches) {
         try {
           item.model.update(motion.time,amount,motion.eye,motion.silk);
+          const colorReveal=targetColorReveal(item.link, now, motionQuery.matches);
+          item.model.setColorReveal?.(colorReveal);
+          item.slot.dataset.colorReveal=String(colorReveal);
           item.renderer.render(item.scene,item.camera);
           // 首帧成功提交后才隐藏后备图；布局始终由固定占位和原图决定。
           item.slot.dataset.modelReady="true";
@@ -193,6 +209,7 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
       release(item);
       item.link.classList.remove("entry-enhanced");
       delete item.link.dataset.entryActive;
+      delete item.slot.dataset.colorReveal;
       item.copy.style.removeProperty("transform");
       item.slot.style.removeProperty("transform");
     });

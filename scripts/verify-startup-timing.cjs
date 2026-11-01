@@ -1,6 +1,8 @@
 // 在同一生产服务上各测五次冷、热启动；冷启动使用独立上下文，热启动复用其 HTTP 缓存。
 async (page) => {
   const browser = page.context().browser(), origin = new URL(page.url()).origin, samples = [];
+  // 地址先保存，再停止驱动页自己的场景；否则它会与被测上下文争用 GPU，污染冷、热启动对照。
+  await page.goto("about:blank");
   for (let trial = 0; trial < 5; trial++) {
     const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
     try {
@@ -22,6 +24,8 @@ async (page) => {
         }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "data-state", "data-boot-stage"] });
       });
       const target = await context.newPage(), errors = [];
+      // 明确保持被测页面在前台，减少驱动轮询被后台计时器节流干扰的情况。
+      await target.bringToFront();
       target.on("pageerror", error => errors.push(error.message));
       for (const cache of ["cold", "warm"]) {
         await target.goto(origin, { waitUntil: "domcontentloaded" });

@@ -76,3 +76,27 @@ test("reference monkey preserves turn, red eyes, silk and texture disposal", () 
   init.dispose(); init.dispose();
   assert.equal(released, 1);
 });
+
+// 冠座与羽片共用复色进度和画布纵坐标；猴头红眼在复色混合之后叠加，不被原色覆盖。
+test("artwork color reveal shares a horizontal screen boundary and preserves red eyes", () => {
+  const init = new Initialization(), night = [0, 1, 2].map(() => init.track(new THREE.Texture()));
+  const color = [0, 1, 2].map(() => init.track(new THREE.Texture()));
+  const crown = buildEntryArtwork("crown", night, init, color);
+  crown.setColorReveal?.(.5);
+  let shared: unknown;
+  for (const child of crown.root.children as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[]) {
+    const shader = { uniforms: {}, fragmentShader: "#include <map_fragment>\n#include <color_fragment>" } as THREE.WebGLProgramParametersWithUniforms;
+    child.material.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
+    assert.equal(shader.uniforms.artworkReveal.value, .5);
+    if (shared) assert.equal(shader.uniforms.artworkReveal, shared);
+    shared = shader.uniforms.artworkReveal;
+    assert.match(shader.fragmentShader, /gl_FragCoord.y \/ artworkViewport.y/);
+  }
+  const monkey = buildEntryArtwork("monkey", [night[0]], init, [color[0]]);
+  monkey.setColorReveal?.(1);
+  const mesh = monkey.root.getObjectByName("artwork-monkey") as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  const shader = { uniforms: {}, fragmentShader: "#include <map_fragment>\n#include <color_fragment>" } as THREE.WebGLProgramParametersWithUniforms;
+  mesh.material.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
+  assert.ok(shader.fragmentShader.indexOf("float eyeMask") > shader.fragmentShader.indexOf("float revealed"));
+  init.dispose();
+});

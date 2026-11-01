@@ -5,11 +5,31 @@ import type { EntryModel } from "./entry-models.ts";
 import { Initialization } from "./scene/initialization.ts";
 
 /** 月夜素材保持烘焙后的冷金高光，网格只负责羽片变形和转头透视，不再叠加场景灯光染色。 */
-function artworkMesh(texture: THREE.Texture, width: number, height: number, init: Initialization) {
+function artworkMesh(texture: THREE.Texture, width: number, height: number, init: Initialization,
+  color?: THREE.Texture, reveal = { value: 0 }) {
   const geometry = init.track(new THREE.PlaneGeometry(width, height, 48, 48));
   const material = init.track(new THREE.MeshBasicMaterial({
     map: texture, transparent: true, alphaTest: .015, side: THREE.DoubleSide, toneMapped: false,
   }));
+  if (color) {
+    // gl_FragCoord 与画布高度归一化，使冠座和变形羽毛严格共用水平边界。
+    const viewport = { value: new THREE.Vector2(1, 1) };
+    material.onBeforeRender = renderer => { renderer.getDrawingBufferSize(viewport.value); };
+    material.onBeforeCompile = shader => {
+      shader.uniforms.artworkColor = { value: color };
+      shader.uniforms.artworkReveal = reveal;
+      shader.uniforms.artworkViewport = viewport;
+      shader.fragmentShader = `uniform sampler2D artworkColor;\nuniform float artworkReveal;\nuniform vec2 artworkViewport;\n${shader.fragmentShader}`
+        .replace("#include <map_fragment>", `
+          #include <map_fragment>
+          float screenY = gl_FragCoord.y / artworkViewport.y;
+          float boundary = artworkReveal * 1.16 - .08;
+          float revealed = 1. - smoothstep(boundary - .08, boundary + .08, screenY);
+          diffuseColor.rgb = mix(diffuseColor.rgb, texture2D(artworkColor, vMapUv).rgb, revealed);
+        `);
+    };
+    material.customProgramCacheKey = () => "reference-color-reveal-v1";
+  }
   return new THREE.Mesh(geometry, material);
 }
 
@@ -59,12 +79,15 @@ function monkeySurface(mesh: THREE.Mesh, width: number, height: number) {
 }
 
 /** 静态后备导出与运行时共用造型工厂，保留原来的 update 接口及初始化资源域。 */
-export function buildEntryArtwork(kind: "crown" | "monkey", textures: THREE.Texture[], init: Initialization): EntryModel {
+export function buildEntryArtwork(kind: "crown" | "monkey", textures: THREE.Texture[], init: Initialization,
+  colors: THREE.Texture[] = []): EntryModel {
   const root = new THREE.Group();
+  const reveal = { value: 0 };
+  const setColorReveal = (progress: number) => { reveal.value = THREE.MathUtils.clamp(progress, 0, 1); };
   if (kind === "crown") {
     const updates: Array<(time: number, amount: number) => void> = [];
     for (let i = 0; i < 3; i++) {
-      const mesh = artworkMesh(textures[i], 64, 64 * 407 / 512, init);
+      const mesh = artworkMesh(textures[i], 64, 64 * 407 / 512, init, colors[i], reveal);
       mesh.name = i === 0 ? "artwork-crown-base" : `artwork-feather-${i}`;
       mesh.position.y = 3;
       mesh.position.z = i === 0 ? 2 : 0;
@@ -72,27 +95,29 @@ export function buildEntryArtwork(kind: "crown" | "monkey", textures: THREE.Text
       if (i > 0) updates.push(feather(mesh, i === 1 ? -1 : 1));
     }
     root.rotation.y = -.1;
-    return { root, update(time, amount) { updates.forEach(update => update(time, amount)); } };
+    return { root, setColorReveal, update(time, amount) { updates.forEach(update => update(time, amount)); } };
   }
 
-  const width = 68 * 408 / 512, mesh = artworkMesh(textures[0], width, 68, init);
+  const width = 68 * 408 / 512, mesh = artworkMesh(textures[0], width, 68, init, colors[0], reveal);
   mesh.name = "artwork-monkey";
   monkeySurface(mesh, width, 68);
   root.add(mesh);
   // 只在参考图的两只虹膜内渐变红色，原本的眼睑、眉毛和瞳孔细节仍由原稿提供。
   const eye = { value: 0 };
   mesh.material.userData.eye = eye;
-  mesh.material.onBeforeCompile = shader => {
+  const compileColor = mesh.material.onBeforeCompile;
+  mesh.material.onBeforeCompile = (shader, renderer) => {
+    compileColor(shader, renderer);
     shader.uniforms.artworkEye = eye;
-    shader.fragmentShader = `uniform float artworkEye;\n${shader.fragmentShader}`.replace("#include <map_fragment>", `
-      #include <map_fragment>
+    shader.fragmentShader = `uniform float artworkEye;\n${shader.fragmentShader}`.replace("#include <color_fragment>", `
+      #include <color_fragment>
       vec2 eyeLeft = (vMapUv - vec2(.387, .457)) / vec2(.030, .014);
       vec2 eyeRight = (vMapUv - vec2(.654, .457)) / vec2(.030, .014);
       float eyeMask = 1. - smoothstep(.35, 1., min(length(eyeLeft), length(eyeRight)));
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1., .018, .006), eyeMask * artworkEye * .88);
     `);
   };
-  mesh.material.customProgramCacheKey = () => "reference-monkey-eyes-v1";
+  mesh.material.customProgramCacheKey = () => "reference-monkey-eyes-color-v2";
   // 复用六条红丝的原曲线和缓冲，仅把根点映射到新参考图的外眼角。
   const updates = [-1, 1].flatMap(side => [0, 1, 2].map(strand => {
     const update = redSilk(init, root, side, strand, { width: 1.9, reach: 1.25, glow: .68 });
@@ -103,7 +128,7 @@ export function buildEntryArtwork(kind: "crown" | "monkey", textures: THREE.Text
     return update;
   }));
   root.rotation.y = -.04;
-  return { root, update(time, amount, eyes, threads) {
+  return { root, setColorReveal, update(time, amount, eyes, threads) {
     root.rotation.y = -.04 + .23 * (1 - Math.cos(time / 1000 * Math.PI * 2 / 1.8)) * amount;
     eye.value = eyes;
     updates.forEach(update => update(time, threads));
@@ -115,12 +140,12 @@ export async function createEntryArtwork(kind: "crown" | "monkey", init: Initial
   const names = kind === "crown" ? ["crown-base", "crown-left", "crown-right"] : ["monkey-artwork"];
   try {
     await init.checkpoint(true);
-    const textures = await Promise.all(names.map(async name => {
+    const textures = await Promise.all(names.flatMap(name => [name, `${name}-color`]).map(async name => {
       const texture = await init.wait(new THREE.TextureLoader().loadAsync(`/assets/entry-${name}.png`));
       texture.colorSpace = THREE.SRGBColorSpace;
       return texture;
     }));
     init.check();
-    return buildEntryArtwork(kind, textures, init);
+    return buildEntryArtwork(kind, textures.filter((_, i) => i % 2 === 0), init, textures.filter((_, i) => i % 2 === 1));
   } catch (error) { init.dispose(); throw error; }
 }
