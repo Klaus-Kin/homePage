@@ -1,15 +1,27 @@
 // 由现有 Playwright CLI 执行；浏览器实例来自 CLI，不在项目中 require 未声明的 Playwright 包。
 async (page) => {
+  // 从当前服务的静态入口读取实际地址；独立无脚本文档不会启动额外的 WebGL 场景。
+  const linkContext = await page.context().browser().newContext({ javaScriptEnabled: false });
+  let destinations;
+  try {
+    const links = await linkContext.newPage();
+    await links.goto(new URL(page.url()).origin);
+    destinations = await links.locator("[data-entrance]").evaluateAll(links =>
+      Object.fromEntries(links.map(link => [link.dataset.entrance, link.href])));
+  } finally { await linkContext.close(); }
   const browser = page.context().browser(), origin = new URL(page.url()).origin, results = [];
   for (const [name,width,height] of [["desktop",1366,768],["phone",390,844]]) {
     const context = await browser.newContext({viewport:{width,height}}), target = await context.newPage();
+    // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+    await context.route("**/*", route => new URL(route.request().url()).origin === origin
+      ? route.continue() : route.abort());
     const frames = [], acknowledgements = [];
     try {
       // 全黑停留很短，页面内观察器回传实际提交帧，避免轮询错过。
       let resolveBlack;
       const presentedBlack = new Promise(resolve => { resolveBlack = resolve; });
       await target.exposeFunction("recordInkBlack",sample=>resolveBlack(sample));
-      await target.route("https://example.com/blog",route=>route.fulfill({contentType:"text/html",body:"<h1>Destination</h1>"}));
+      await target.route(destinations.blog,route=>route.fulfill({contentType:"text/html",body:"<h1>Destination</h1>"}));
       await target.goto(origin); await target.waitForSelector('#app[data-state="idle"]:not([inert])');
       await target.evaluate(()=>{
         window.__inkPerformance={gaps:[],draws:[]}; let previous, started;
@@ -46,7 +58,7 @@ async (page) => {
       await cdp.send("Page.startScreencast",{format:"jpeg",quality:92,maxWidth:width,maxHeight:height,everyNthFrame:2});
       await target.locator("[data-entrance=blog]").focus(); await target.keyboard.press("Enter");
       const performance=await Promise.race([presentedBlack,target.waitForTimeout(20000).then(()=>{throw new Error(`${name}: 未收到全黑提交帧`);})]);
-      await target.waitForURL("https://example.com/blog"); await target.waitForTimeout(100);
+      await target.waitForURL(destinations.blog); await target.waitForTimeout(100);
       await cdp.send("Page.stopScreencast"); await Promise.all(acknowledgements);
       if(frames.length<30) throw new Error(`${name}: insufficient recording frames`);
       const gaps=performance.gaps.sort((a,b)=>a-b);

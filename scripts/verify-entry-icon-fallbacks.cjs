@@ -1,11 +1,23 @@
 // 图标故障与主场景隔离；无脚本、延迟导入及高对比模式都保留原有静态链接。
 async (page) => {
+  // 从当前服务的静态入口读取实际地址；独立无脚本文档不会启动额外的 WebGL 场景。
+  const linkContext = await page.context().browser().newContext({ javaScriptEnabled: false });
+  let destinations;
+  try {
+    const links = await linkContext.newPage();
+    await links.goto(new URL(page.url()).origin);
+    destinations = await links.locator("[data-entrance]").evaluateAll(links =>
+      Object.fromEntries(links.map(link => [link.dataset.entrance, link.href])));
+  } finally { await linkContext.close(); }
   const browser=page.context().browser(),origin=new URL(page.url()).origin,results=[];
   const assert=(value,message)=>{if(!value) throw new Error(message);};
   for(const mode of ['no-webgl','icons-no-webgl','context-loss','draw-failure','module-delay','module-failure','no-script','forced-colors','boot-timeout']) {
     const context=await browser.newContext({viewport:{width:390,height:844},javaScriptEnabled:mode!=='no-script',
       forcedColors:mode==='forced-colors'?'active':'none',reducedMotion:'reduce'});
     const target=await context.newPage(),errors=[];
+    // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+    await context.route("**/*", route => new URL(route.request().url()).origin === origin
+      ? route.continue() : route.abort());
     target.on('pageerror',error=>errors.push(error.message));
     try {
       if(mode==='no-webgl'||mode==='icons-no-webgl') await target.addInitScript(onlyIcons=>{
@@ -54,8 +66,8 @@ async (page) => {
         if(mode!=='no-script') await target.waitForTimeout(500);
         assert(await target.locator('.entry-fallback').evaluateAll(icons=>icons.every(el=>getComputedStyle(el).visibility==='visible')),'后备图不可见');
       }
-      assert(await target.locator('[data-entrance=blog]').getAttribute('href')==='https://example.com/blog','博客目的地改变');
-      assert(await target.locator('[data-entrance=world]').getAttribute('href')==='https://example.org/','世界目的地改变');
+      assert(await target.locator('[data-entrance=blog]').getAttribute('href')===destinations.blog,'博客目的地改变');
+      assert(await target.locator('[data-entrance=world]').getAttribute('href')===destinations.world,'世界目的地改变');
       assert(await target.locator('.entry-icon').evaluateAll(slots=>slots.every(el=>getComputedStyle(el).pointerEvents==='none')),'图标拦截点击');
       if(mode==='icons-no-webgl') assert(await target.locator('#app').evaluate(el=>!el.classList.contains('fallback')),'图标故障拖累主场景');
       await target.screenshot({path:`output/playwright/entry-icons-${mode}.png`});

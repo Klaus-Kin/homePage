@@ -3,6 +3,9 @@ async (page) => {
   const browser = page.context().browser(), origin = new URL(page.url()).origin, results = [];
   for (const kind of ["fill", "resize", "commit"]) {
     const context = await browser.newContext({viewport:{width:1366,height:768}}), target = await context.newPage();
+    // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+    await context.route("**/*", route => new URL(route.request().url()).origin === origin
+      ? route.continue() : route.abort());
     const errors = [], logs = []; let navigations = 0;
     target.on("pageerror",error=>errors.push(error.message));
     target.on("console",message=>{ if (message.type()==="error") logs.push(message.text()); });

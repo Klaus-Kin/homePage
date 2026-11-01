@@ -7,10 +7,13 @@ async (page) => {
     });
     try {
       const target = await context.newPage();
-      await target.clock.install();
-      await target.clock.pauseAt(new Date(Date.now() + 1000));
+      // 中止未受控的外部请求，短时采样也不能意外导航到真实站点。
+      await context.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
       await target.goto(origin);
       await target.waitForSelector('#app[data-state="idle"]');
+      // 启动使用真实调度；就绪后才冻结交互时钟，避免慢首帧把揭幕永久暂停。
+      await target.clock.install();
+      await target.clock.pauseAt(new Date(Date.now() + 100));
       await target.clock.runFor(32);
       const sample = () => target.locator('#scene').evaluate(el => ({
         angle: +el.dataset.lidAngle,

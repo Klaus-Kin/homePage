@@ -1,6 +1,15 @@
 // 通过 playwright-cli run-code --filename 执行。地址可带 ?view=desktop|phone|short 缩小录制矩阵。
 // 真实跨站导航、慢响应、阻塞首屏和历史回退；所有网络延迟有固定终点，不在路由回调中等待页面操作。
 async (page) => {
+  // 从当前服务的静态入口读取实际地址；独立无脚本文档不会启动额外的 WebGL 场景。
+  const linkContext = await page.context().browser().newContext({ javaScriptEnabled: false });
+  let destinations;
+  try {
+    const links = await linkContext.newPage();
+    await links.goto(new URL(page.url()).origin);
+    destinations = await links.locator("[data-entrance]").evaluateAll(links =>
+      Object.fromEntries(links.map(link => [link.dataset.entrance, link.href])));
+  } finally { await linkContext.close(); }
   const address = new URL(page.url()), origin = address.origin, results = [];
   // Playwright 默认禁用 BFCache；单独启动允许缓存的浏览器，确保测到真实 persisted，而非合成事件。
   const browser = await page.context().browser().browserType().launch({ channel: "chrome", headless: true,
@@ -15,6 +24,9 @@ async (page) => {
           viewport: { width, height }, isMobile: viewportName === "phone",
           hasTouch: viewportName === "phone", reducedMotion: "no-preference" });
         const target = await context.newPage(), events = [], errors = [];
+        // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+        await context.route("**/*", route => new URL(route.request().url()).origin === origin
+          ? route.continue() : route.abort());
         let inputTimer;
         target.setDefaultTimeout(35000);
         target.on("pageerror", error => errors.push(error.message));
@@ -83,7 +95,7 @@ async (page) => {
             });
           });
           let navigations = 0;
-          const destination = kind === "world" ? "https://kk.jinsc.de5.net/" : "https://blog.jinsc.icu/";
+          const destination = kind === "world" ? destinations.world : destinations.blog;
           await target.route(destination + "**", async route => {
             if (route.request().url().endsWith("delayed.css")) {
               await new Promise(resolve => setTimeout(resolve, 2500));

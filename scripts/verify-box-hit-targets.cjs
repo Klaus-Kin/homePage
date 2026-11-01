@@ -1,5 +1,14 @@
 // 验证真实鼠标命中与导航，覆盖临界视口中的透明介绍区、运行降级和无脚本入口。
 async (page) => {
+  // 从当前服务的静态入口读取实际地址；独立无脚本文档不会启动额外的 WebGL 场景。
+  const linkContext = await page.context().browser().newContext({ javaScriptEnabled: false });
+  let destinations;
+  try {
+    const links = await linkContext.newPage();
+    await links.goto(new URL(page.url()).origin);
+    destinations = await links.locator("[data-entrance]").evaluateAll(links =>
+      Object.fromEntries(links.map(link => [link.dataset.entrance, link.href])));
+  } finally { await linkContext.close(); }
   const origin = new URL(page.url()).origin;
   const results = [];
   // 平板复现点覆盖盒面上缘，分别验证正常、降级及原生入口的真实点击行为。
@@ -17,6 +26,9 @@ async (page) => {
     });
     try {
       const target = await context.newPage();
+      // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+      await context.route("**/*", route => new URL(route.request().url()).origin === origin
+        ? route.continue() : route.abort());
       if (mode === "no-webgl") {
         await target.addInitScript(() => {
           const getContext = HTMLCanvasElement.prototype.getContext;
@@ -27,7 +39,7 @@ async (page) => {
       }
       if (mode === "module-failure")
         await target.route(/\/(?:src\/main\.ts|assets\/index-[^/]+\.js)(?:\?|$)/, (route) => route.abort());
-      await target.route("https://example.com/blog", (route) => route.fulfill({
+      await target.route(destinations.blog, (route) => route.fulfill({
         contentType: "text/html", body: "<h1>Box destination reached</h1>",
       }));
       await target.goto(origin);
@@ -80,7 +92,7 @@ async (page) => {
         await target.waitForURL(`${origin}/#journey-choices`);
         await target.locator("[data-entrance=blog]").click();
       }
-      await target.waitForURL("https://example.com/blog");
+      await target.waitForURL(destinations.blog);
       results.push({ mode, width, height, touch, pointsChecked: hit.points.length, box: hit.box, navigated: true });
     } finally {
       await context.close();

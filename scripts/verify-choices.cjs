@@ -1,14 +1,26 @@
 // 提示、输入与目标锁定均使用真实浏览器事件；目的地在网络边界拦截，不访问外站。
 async (page) => {
+  // 从当前服务的静态入口读取实际地址；独立无脚本文档不会启动额外的 WebGL 场景。
+  const linkContext = await page.context().browser().newContext({ javaScriptEnabled: false });
+  let destinations;
+  try {
+    const links = await linkContext.newPage();
+    await links.goto(new URL(page.url()).origin);
+    destinations = await links.locator("[data-entrance]").evaluateAll(links =>
+      Object.fromEntries(links.map(link => [link.dataset.entrance, link.href])));
+  } finally { await linkContext.close(); }
   const browser=page.context().browser(), origin=new URL(page.url()).origin, results=[];
   const assert=(value,message)=>{if(!value) throw new Error(message);};
   async function setup(name, options={}) {
     const context=await browser.newContext({viewport:{width:1366,height:768}, ...options});
     const target=await context.newPage(), errors=[], navigation=[];
+    // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+    await context.route("**/*", route => new URL(route.request().url()).origin === origin
+      ? route.continue() : route.abort());
     let presentation;
     await target.exposeFunction('recordChoiceNavigation',value=>{presentation=value;});
     target.on('pageerror',error=>errors.push(error.message));
-    for(const destination of ['https://example.com/blog','https://example.org/']) await target.route(destination, async route=>{
+    for(const destination of [destinations.blog,destinations.world]) await target.route(destination, async route=>{
       navigation.push({destination,...presentation});
       await route.fulfill({contentType:'text/html',body:`<h1>${name} reached</h1>`});
     });
@@ -82,7 +94,7 @@ async (page) => {
         getComputedStyle(document.querySelector('.choice-motion')).transform==='none' && document.querySelector('#box-button').disabled &&
         [...document.querySelectorAll('[data-entrance]')].every(el=>el.getAttribute('aria-disabled')==='true'&&el.tabIndex===-1);
     }),'接受选择后未清理提示或未禁用入口');
-    await target.waitForURL('https://example.org/');
+    await target.waitForURL(destinations.world);
     const nav=prompt.navigation[0];
     assert(prompt.navigation.length===1&&nav.black==='true'&&nav.complete==='true'&&nav.now-nav.blackAt>=159,'世界入口绕过实际全黑门禁或导航多次');
     assert(prompt.errors.length===0,JSON.stringify(prompt.errors));
@@ -104,7 +116,7 @@ async (page) => {
     assert(await target.evaluate(()=>window.__choiceStarts===1&&document.querySelector('#journey-choices').dataset.prompt==='true'),'轻触未触发一次提示');
     const r=await target.locator('[data-entrance=blog]').boundingBox();await target.touchscreen.tap(r.x+r.width/2,r.y+r.height/2);
     await target.locator('[data-entrance=world]').dispatchEvent('click');
-    await target.waitForURL('https://example.com/blog');
+    await target.waitForURL(destinations.blog);
     assert(touch.navigation.length===1&&touch.navigation[0].black==='true'&&touch.navigation[0].now-touch.navigation[0].blackAt>=159,'博客入口锁定或全黑门禁失效');
     assert(touch.errors.length===0,JSON.stringify(touch.errors));
     results.push({scenario:'touch swipe, long press, tap and blog lock',navigation:touch.navigation[0]});
@@ -125,7 +137,7 @@ async (page) => {
     }));
     assert(accepted.transform==='none'&&accepted.yaw===0&&accepted.lid===0&&accepted.state==='transition',`选择未先归位：${JSON.stringify(accepted)}`);
     await target.emulateMedia({reducedMotion:'reduce'});
-    await target.waitForURL('https://example.org/');
+    await target.waitForURL(destinations.world);
     assert(interrupt.navigation.length===1&&interrupt.errors.length===0,'取消提示后导航异常');
     results.push({scenario:'normal-motion selection cancels at once',accepted});
   } finally {await interrupt.context.close();}
@@ -142,7 +154,11 @@ async (page) => {
     await target.locator('[data-entrance=world]').focus();await target.waitForTimeout(350);
     assert(await target.locator('.monkey-eye').evaluate(el=>+getComputedStyle(el).opacity>.95),'聚焦未点亮猴眼');
     // 三维图标与文字共用按需调度，降级时文字仍由同一个独立容器平滑位移。
-    assert(await target.locator('.journey-copy').evaluate(el=>getComputedStyle(el).animationName==='none'&&new DOMMatrix(getComputedStyle(el).transform).m41>0),'文字未使用独立悬停层');
+    // 启动降级可能尚未启用共享图标调度，此时保留原有 CSS 悬停动效，同样只移动文字层。
+    await target.waitForFunction(()=>{
+      const copy=document.querySelector('.journey-copy'), enhanced=copy.closest('[data-entrance]').classList.contains('entry-enhanced');
+      return getComputedStyle(copy).animationName===(enhanced?'none':'world-curiosity') && new DOMMatrix(getComputedStyle(copy).transform).m41>0;
+    });
     assert(await target.locator('.monkey-face').evaluate(el=>getComputedStyle(el).animationName==='none'&&getComputedStyle(el).transform==='none'),'猴头参与了文字位移');
     results.push({scenario:'fallback and eye focus',passed:true});
   } finally {await fallback.context.close();}

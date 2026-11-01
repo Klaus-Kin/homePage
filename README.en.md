@@ -61,7 +61,7 @@ The main settings are in [src/config.ts](src/config.ts):
 | `sceneConfig.layout`, `layoutRules` | Camera position, target height, field of view, moon position, and layout selection rules |
 | `sceneConfig.quality` | Desktop/mobile pixel-ratio caps, shadow sizes, vegetation and other scene object counts |
 
-**Replace both example URLs before deployment:** `blogUrl: "https://example.com/blog"` and `worldUrl: "https://example.org/"`. These are not the author's actual sites, and the second link does not implement a server-status query.
+The current configuration is `blogUrl: "https://blog.jinsc.icu/"` and `worldUrl: "https://kk.jinsc.de5.net/"`. Check both destinations before deployment; change the configuration and rebuild when publishing for other sites. The second link navigates to its configured destination; this homepage does not query server status.
 
 Update the static `<title>`, SEO description, and relevant fixed no-script copy in [index.html](index.html) as needed; not all of them are generated from `pageConfig`. Box choice-prompt durations are in [src/choice-prompt.ts](src/choice-prompt.ts); entry icon animations are in [src/entry-motion.ts](src/entry-motion.ts). Recheck all target viewports after camera or quality changes to catch obstructed links and clipped models.
 
@@ -112,7 +112,7 @@ scripts/                   Browser checks, recordings, captures, optional asset 
 
 ## Deployment
 
-1. Replace both example destinations and check static metadata and glyphs.
+1. Check both destinations, adjust them for this deployment as needed, and check static metadata and glyphs.
 2. Run `npm ci`, `npm test`, and `npm run build`.
 3. Publish the **contents of `dist/`** to a static host, preserving the directory structure. Page requests do not require a Node server.
 4. At the deployed URL, check asset loading, both links, mobile framing, and static fallbacks.
@@ -139,7 +139,11 @@ playwright-cli run-code --filename scripts/verify-layout.cjs
 playwright-cli run-code --filename scripts/verify-fallback.cjs
 ```
 
-Use the actual server address; scripts usually derive the origin from the current page. Read each script's header and contents first to check whether it requires the development server or production preview, capture directories, or other setup. Playwright CLI is not a project npm dependency, and `npm test` does not automatically run these browser scripts. This describes the verification workflow; it does not claim performance or compatibility for untested viewports, browsers, or devices.
+Use the actual server address; scripts usually derive the origin from the current page. Create `output/playwright/` first and read each script's header and contents. Scripts that import `/src/` or intercept source modules, such as `verify-scene-runtime.cjs` and `verify-entry-icon-fallbacks.cjs`, require the development server. For production checks, build first, then run layout, interaction, fallback, and history-return scripts that support built assets against the preview URL.
+
+Ordinary navigation checks read the actual destinations from page links and supply controlled destination pages at the browser network boundary. Abort unmatched external requests so checks cannot visit real sites. For custom configuration checks, `verify-static-links.cjs` requires both URL-encoded `expectedBlogUrl` and `expectedWorldUrl` parameters in the test page URL; the second expectation has no default. Locate the main scene with `#scene canvas` to avoid selecting entry-icon or ink canvases.
+
+Playwright CLI is not a project npm dependency, and `npm test` does not automatically run these browser scripts. Automated results apply only to the tested environment. Mobile viewport emulation does not replace checks on physical devices such as iPhones running Safari; report the browser, device, and scope behind compatibility or performance claims.
 
 ## Troubleshooting
 
@@ -148,7 +152,7 @@ Use the actual server address; scripts usually derive the origin from the curren
 | Node reports an unknown flag or unsupported syntax | Check `node --version` and the executable being used; use the recommended Node.js 22.18+ and install from the lockfile |
 | Opening HTML directly shows a blank page or placeholders | Use the Vite server or serve the built output over HTTP. Source HTML requires Vite transformation and cannot be used via `file://` |
 | Only the static background appears | Check the console, WebGL, asset requests, and load errors. This is a fallback path; text links should remain accessible |
-| A link opens an example site | Replace `blogUrl` and `worldUrl` in `src/config.ts`, then rebuild and deploy |
+| A link opens an unexpected destination | Check `blogUrl` and `worldUrl` in `src/config.ts`, then rebuild and deploy after changes |
 | Copy changes cause missing glyphs or build failures | Regenerate calligraphic glyphs; maintain heading and inscription resources separately as described above |
 | Images disappear under a subdirectory | Audit root-absolute asset paths. Vite's `base` alone does not cover every `/assets/` reference |
 

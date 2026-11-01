@@ -1,20 +1,33 @@
 // 验证真实转轴、光圈起点与六种尺寸；虚拟时钟控制生产 RAF，不注入场景修改接口。
 async (page) => {
+  // 从当前服务的静态入口读取实际地址；独立无脚本文档不会启动额外的 WebGL 场景。
+  const linkContext = await page.context().browser().newContext({ javaScriptEnabled: false });
+  let destinations;
+  try {
+    const links = await linkContext.newPage();
+    await links.goto(new URL(page.url()).origin);
+    destinations = await links.locator("[data-entrance]").evaluateAll(links =>
+      Object.fromEntries(links.map(link => [link.dataset.entrance, link.href])));
+  } finally { await linkContext.close(); }
   const origin = new URL(page.url()).origin, results = [];
   for (const [name, width, height] of [["ultrawide",3440,1440],["wide",2560,1080],["desktop",1920,1080],["mobile",390,844],["tablet",768,1024],["short",844,390]]) {
     const context = await page.context().browser().newContext({ viewport: { width, height } });
     try {
       const target = await context.newPage(), errors = [];
+      // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+      await context.route("**/*", route => new URL(route.request().url()).origin === origin
+        ? route.continue() : route.abort());
       target.on("pageerror", error => errors.push(error.message));
-      await target.clock.install();
-      await target.clock.pauseAt(new Date(Date.now() + 1000));
       let navigations = 0;
-      await target.route("https://example.com/blog", async route => {
+      await target.route(destinations.blog, async route => {
         navigations++;
         await route.fulfill({ contentType: "text/html", body: "<h1>到达博客</h1>" });
       });
       await target.goto(origin);
       await target.waitForSelector('#app[data-state="idle"]');
+      // 启动使用真实调度；就绪后才冻结交互时钟，避免慢首帧把揭幕永久暂停。
+      await target.clock.install();
+      await target.clock.pauseAt(new Date(Date.now() + 100));
       await target.clock.runFor(32);
       async function sample(stage) {
         const data = await target.evaluate(() => {
@@ -97,10 +110,17 @@ async (page) => {
       await target.clock.runFor(2950);
       if (await target.locator("#inscription").getAttribute("data-complete") !== "true" || navigations)
         throw new Error("题词没有在三秒内写完，或尚未完整停留就跳转");
-      await target.clock.runFor(1050);
-      if (navigations) throw new Error("完整题词阅读停留不足 1.2 秒");
-      await target.clock.runFor(100);
-      await target.waitForURL("https://example.com/blog");
+      // 导航依据实际黑场及 160ms 呈现门禁；题词完成后不再套用已移除的固定阅读时长。
+      for (let frame = 0; frame < 200; frame++) {
+        if (await target.locator("#ink-transition").getAttribute("data-black") === "true") break;
+        if (navigations) throw new Error("黑场完成前发生导航");
+        await target.clock.runFor(16);
+      }
+      if (await target.locator("#ink-transition").getAttribute("data-black") !== "true") throw new Error("未呈现最终黑场");
+      await target.clock.runFor(144);
+      if (navigations) throw new Error("实际黑场停留不足 160ms");
+      await target.clock.runFor(32);
+      await target.waitForURL(destinations.blog);
       if (navigations !== 1 || errors.length) throw new Error(JSON.stringify({ navigations, errors }));
       results.push({ name, idle, opening, open, spread, white, navigations, errors });
     } finally { await context.close(); }
@@ -111,10 +131,14 @@ async (page) => {
   });
   try {
     const target = await context.newPage();
-    await target.clock.install();
-    await target.clock.pauseAt(new Date(Date.now() + 1000));
+    // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+    await context.route("**/*", route => new URL(route.request().url()).origin === origin
+      ? route.continue() : route.abort());
     await target.goto(origin);
     await target.waitForSelector('#app[data-state="idle"]');
+      // 启动使用真实调度；就绪后才冻结交互时钟，避免慢首帧把揭幕永久暂停。
+      await target.clock.install();
+      await target.clock.pauseAt(new Date(Date.now() + 100));
     await target.locator("[data-entrance=blog]").focus();
     await target.keyboard.press("Enter");
     await target.clock.runFor(320);

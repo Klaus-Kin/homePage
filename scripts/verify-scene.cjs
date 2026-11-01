@@ -40,11 +40,14 @@ async (page) => {
     .browser()
     .newContext({ viewport: { width: 1366, height: 768 } });
   const target = await context.newPage();
+  // 中止未受控的外部请求，短时采样也不能意外导航到真实站点。
+  await context.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   // 虚拟时钟只控制真实 requestAnimationFrame，位移和朝向仍由生产算法生成。
-  await target.clock.install();
-  await target.clock.pauseAt(new Date(Date.now() + 1000));
   await target.goto(origin);
   await target.waitForSelector('#app[data-state="idle"]');
+  // 启动使用真实调度；就绪后才冻结交互时钟，避免慢首帧把揭幕永久暂停。
+  await target.clock.install();
+  await target.clock.pauseAt(new Date(Date.now() + 100));
   await target.clock.runFor(1400);
   for (let i = 0; i < 3; i++) {
     await target.screenshot({ path: `output/playwright/meteor-${i}.png` });

@@ -1,5 +1,14 @@
 // 拦截入口及静态依赖，并从截图中的宝盒位置点击，覆盖主模块完全不可用的边界。
 async (page) => {
+  // 从当前服务的静态入口读取实际地址；独立无脚本文档不会启动额外的 WebGL 场景。
+  const linkContext = await page.context().browser().newContext({ javaScriptEnabled: false });
+  let destinations;
+  try {
+    const links = await linkContext.newPage();
+    await links.goto(new URL(page.url()).origin);
+    destinations = await links.locator("[data-entrance]").evaluateAll(links =>
+      Object.fromEntries(links.map(link => [link.dataset.entrance, link.href])));
+  } finally { await linkContext.close(); }
   const origin = new URL(page.url()).origin;
   const browser = page.context().browser();
   const results = [];
@@ -7,7 +16,7 @@ async (page) => {
   const scenePattern = /\/(?:src\/scene\.ts|assets\/scene-[^/]+\.js)(?:\?|$)/;
   const moonPattern = "**/assets/moon-lroc.jpg";
   async function destination(target) {
-    await target.route("https://example.com/blog", (route) =>
+    await target.route(destinations.blog, (route) =>
       route.fulfill({
         status: 200,
         contentType: "text/html",
@@ -15,7 +24,7 @@ async (page) => {
       }),
     );
   }
-  // 错误事件应立即恢复入口；超时与迟到资源使用浏览器时钟验证，无须真实等待十秒。
+  // 错误事件应立即恢复入口；超时与迟到资源使用浏览器时钟验证，无须真实等待超时预算。
   for (const kind of [
     "entry-failure",
     "dependency-failure",
@@ -34,6 +43,9 @@ async (page) => {
     });
     try {
       const target = await context.newPage();
+      // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+      await context.route("**/*", route => new URL(route.request().url()).origin === origin
+        ? route.continue() : route.abort());
       await destination(target);
       await target.clock.install();
       const late = kind.startsWith("late-");
@@ -76,8 +88,11 @@ async (page) => {
       await target.goto(origin, { waitUntil: "commit" });
       await requested;
       await target.waitForFunction(() => Boolean(window.__moonBoot));
-      if (late) await target.clock.runFor(10100);
-      await target.waitForSelector("#app.boot-failed", { timeout: 2000 });
+      // 当前守卫允许每个真实阶段等待 20 秒；锁定失败后仍需完整走完减少动态的揭幕。
+      if (late) await target.clock.runFor(20100);
+      await target.waitForSelector("#app.boot-failed", { state: "attached", timeout: 2000 });
+      await target.clock.runFor(1000);
+      await target.waitForSelector('#app[data-state="idle"]:not([inert])');
       if (
         !(await target.locator("[data-entrance=blog]").isVisible()) ||
         !(await target.locator("#static-box").isVisible())
@@ -118,7 +133,7 @@ async (page) => {
         await target.waitForURL(`${origin}/#journey-choices`);
         await target.locator("[data-entrance=blog]").click();
       }
-      await target.waitForURL("https://example.com/blog");
+      await target.waitForURL(destinations.blog);
       results.push({ scenario: kind, recovered, nativeEntryWorks: true });
     } catch (error) {
       throw new Error(`${kind}: ${error.message}`);
@@ -170,11 +185,15 @@ async (page) => {
     });
     try {
       const target = await context.newPage();
+      // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+      await context.route("**/*", route => new URL(route.request().url()).origin === origin
+        ? route.continue() : route.abort());
       await destination(target);
       if (javaScriptEnabled)
         await target.route(scenePattern, (route) => route.abort());
       await target.goto(origin);
-      if (javaScriptEnabled) await target.waitForSelector("#app.fallback");
+      // 标记降级时幕布可能仍在揭开，布局和命中验收必须等待同一个就绪门禁。
+      if (javaScriptEnabled) await target.waitForSelector('#app.fallback[data-state="idle"]:not([inert])');
       if (await target.locator("#moon-loader").isVisible()) throw new Error("降级或禁用脚本时加载层仍可见");
       const layouts = [];
       for (const [width, height] of sizes) {
@@ -243,7 +262,7 @@ async (page) => {
         if (await target.locator("#app").getAttribute("data-state") !== "idle") throw new Error("降级宝盒误启动转场");
       } else await target.waitForURL(`${origin}/#journey-choices`);
       await target.locator("[data-entrance=blog]").click();
-      await target.waitForURL("https://example.com/blog");
+      await target.waitForURL(destinations.blog);
       results.push({
         scenario: javaScriptEnabled
           ? "scene-fallback-rotation"

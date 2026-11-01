@@ -33,7 +33,7 @@ function boot(reduced = false, timeOrigin = 0, initialTime = 0, animationAvailab
     addEventListener(name: string, listener: (event: any) => void) { listeners.set(name, listener); },
     removeEventListener(name: string) { listeners.delete(name); } };
   loader.cloneNode = () => loader;
-  class Script { type = "module"; src: string; constructor(src: string) { this.src = src; } }
+  class Script { type = "module"; id = ""; src: string; constructor(src: string) { this.src = src; } }
   class RuntimeError { filename: string; message = "runtime error"; constructor(filename: string) { this.filename = filename; } }
   const entry = new Script("https://homepage.test/assets/index-entry.js");
   const root = { dataset: {} as Record<string, string> };
@@ -210,6 +210,18 @@ test("third-party module and runtime errors are isolated from the critical entry
   state.dispatch("error", { target: state.entry });
   assert.equal(state.window.__moonBoot.failed, true);
   assert.equal(state.removed(), false);
+});
+
+// Vite 会把同源热更新模块插到入口之前，显式入口仍必须拥有独立的失败出口。
+test("development client errors do not mask the explicitly identified entry failure", () => {
+  const state = boot();
+  state.entry.id = "entry-module";
+  const client = new state.Script("https://homepage.test/@vite/client");
+  state.document.scripts.unshift(client);
+  state.dispatch("error", { target: client });
+  assert.equal(state.window.__moonBoot.failed, false);
+  state.dispatch("error", { target: state.entry });
+  assert.equal(state.window.__moonBoot.failed, true);
 });
 
 // 真正阶段进展允许慢设备完成首次初始化；硬期限不能被心跳无限续期。

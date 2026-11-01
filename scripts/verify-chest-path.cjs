@@ -5,16 +5,21 @@ async (page) => {
   const results = [];
   try {
     const target = await context.newPage();
-    await target.clock.install();
-    await target.clock.pauseAt(new Date(Date.now() + 1000));
+    // 中止未受控的外部请求，短时采样也不能意外导航到真实站点。
+    await context.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
     for (const [width, height] of [
       [1920,1080],[1366,768],[768,1024],[1024,1366],[1280,1600],
       [1440,1920],[1024,1024],[1280,1024],[1366,1024],
       [360,800],[390,844],[430,932],[844,390],
     ]) {
       await target.setViewportSize({ width, height });
+      // 同一标签页复用时先解除上一轮暂停，让新文档仍能完成启动和揭幕。
+      await target.clock.resume();
       await target.goto(origin);
       await target.waitForSelector('#app[data-state="idle"]');
+      // 启动使用真实调度；就绪后才冻结交互时钟，避免慢首帧把揭幕永久暂停。
+      await target.clock.install();
+      await target.clock.pauseAt(new Date(Date.now() + 100));
       await target.clock.runFor(32);
       // 使用真实几何端点检查屏幕中的摆放和弧线，而不只检查归一化角度。
       const idle = await target.locator("#scene").evaluate(el => ({

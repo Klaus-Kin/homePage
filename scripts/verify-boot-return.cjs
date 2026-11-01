@@ -19,6 +19,9 @@ async (page) => {
         }));
       });
       const target = await context.newPage(), errors = [];
+      // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+      await context.route("**/*", route => new URL(route.request().url()).origin === origin
+        ? route.continue() : route.abort());
       target.on("pageerror", error => errors.push(error.message));
       await target.goto(origin);
       await target.waitForSelector('#app[data-state="idle"]:not([inert])');

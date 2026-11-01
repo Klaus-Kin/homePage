@@ -12,7 +12,8 @@ Store static images and textures in `public/assets/`; bundled artwork lives in `
 - `npm run dev`: start Vite on localhost.
 - `npm run build`: run TypeScript checking, then produce `dist/`.
 - `npm run preview`: serve the production build locally.
-- `npm test`: run all `tests/*.test.ts` files with Node's built-in runner and experimental TypeScript stripping. Use a Node version supporting this flag.
+- Use Node.js 22.18+ and npm for the complete workflow; Node 20 can satisfy Vite's engine range but cannot run this project's TypeScript test command. Check the actual `node --version` and executable before validation.
+- `npm test`: run all `tests/*.test.ts` files with Node's built-in runner and `--experimental-strip-types`.
 - `git diff --check`: check patches for whitespace errors.
 
 ## Coding Style & Naming Conventions
@@ -26,6 +27,14 @@ Add explanatory Chinese comments for new code; preserve existing comments unless
 Use `node:test` and `node:assert/strict`. Name tests `tests/<feature>.test.ts`, with descriptive behavior-focused cases. Add regression tests for bugs and tests for new behavior. No numeric coverage threshold is configured.
 
 Run tests and the build before review. For visual changes, inspect actual browser screenshots at desktop, mobile, and short-screen sizes. Check reduced-motion, WebGL fallback, and JavaScript-disabled behavior when affected. Browser helpers in `scripts/verify-*.cjs` generally run through Playwright tooling; inspect their invocation comments first.
+
+Browser scripts are executor callbacks, not standalone Node programs, and Playwright CLI is prepared separately from project dependencies. Create `output/playwright/` before captures. Scripts that import `/src/` or intercept source modules require `npm run dev`; use a fresh `npm run build` followed by `npm run preview` for production-compatible checks. Record which server, browser, and viewport each result covers.
+
+Use `#scene canvas` for the homepage's main WebGL surface. Entry icons and the ink transition own separate canvases; global canvas selectors are appropriate only in isolated previews or deliberate whole-page resource counts. Include visible calligraphy SVG bounds in layout occlusion checks.
+
+Read navigation destinations from page links for ordinary checks. Intercept the expected destinations with controlled pages and abort unmatched external requests before activating links. Custom-configuration checks must explicitly supply both expected destinations, including `expectedBlogUrl` and `expectedWorldUrl` for `verify-static-links.cjs`.
+
+Passing unit tests, builds, or emulated mobile viewports does not establish physical-device acceptance. Do not claim iPhone Safari compatibility or device performance without corresponding device evidence. For lifecycle changes, verify initialization rejection, runtime fallback, once-only notification, cancellation, resource disposal, background pause, and both entry journeys.
 
 ## Commit & Pull Request Guidelines
 

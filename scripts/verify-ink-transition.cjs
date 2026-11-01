@@ -10,6 +10,9 @@ async (page) => {
     const { fault, reduced = false, dpr = 1 } = options;
     const context = await browser.newContext({ viewport, deviceScaleFactor: dpr, reducedMotion: reduced ? "reduce" : "no-preference" });
     const target = await context.newPage(), errors = [], logs = [];
+    // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+    await context.route("**/*", route => new URL(route.request().url()).origin === origin
+      ? route.continue() : route.abort());
     let navigations = 0;
     target.on("pageerror", error => errors.push(error.message));
     target.on("console", message => { if (message.type() === "error") logs.push(message.text()); });

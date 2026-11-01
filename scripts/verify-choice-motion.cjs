@@ -1,12 +1,24 @@
 // 对生产构建使用真实可见时间采样；暂停页面后截图，避免截图等待跨过短暂的合盖/冲击阶段。
 async (page) => {
+  // 从当前服务的静态入口读取实际地址；独立无脚本文档不会启动额外的 WebGL 场景。
+  const linkContext = await page.context().browser().newContext({ javaScriptEnabled: false });
+  let destinations;
+  try {
+    const links = await linkContext.newPage();
+    await links.goto(new URL(page.url()).origin);
+    destinations = await links.locator("[data-entrance]").evaluateAll(links =>
+      Object.fromEntries(links.map(link => [link.dataset.entrance, link.href])));
+  } finally { await linkContext.close(); }
   const browser = page.context().browser(), origin = new URL(page.url()).origin, results = [];
   const assert = (ok, message) => { if (!ok) throw new Error(message); };
   async function setup(viewport = {width:1366,height:768}, reducedMotion = 'no-preference') {
     const context = await browser.newContext({viewport, reducedMotion});
     const target = await context.newPage(), errors = [], navigations = [];
+    // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+    await context.route("**/*", route => new URL(route.request().url()).origin === origin
+      ? route.continue() : route.abort());
     target.on('pageerror', error => errors.push(error.message));
-    for (const destination of ['https://example.com/blog', 'https://example.org/']) await target.route(destination, async route => {
+    for (const destination of [destinations.blog, destinations.world]) await target.route(destination, async route => {
       navigations.push(destination); await route.fulfill({contentType:'text/html', body:'<h1>到达</h1>'});
     });
     await target.goto(origin); await target.waitForSelector('#app[data-state="idle"]:not([inert])');
@@ -78,7 +90,7 @@ async (page) => {
     } finally { await s.context.close(); }
   }
   // 各阶段接受入口都必须同步清除光效和全部姿态，第二入口点击不得改写首次锁定的目标。
-  for (const [ms,entry,url] of [[150,'blog','https://example.com/blog'],[620,'world','https://example.org/'],[1170,'blog','https://example.com/blog'],[1480,'world','https://example.org/']]) {
+  for (const [ms,entry,url] of [[150,'blog',destinations.blog],[620,'world',destinations.world],[1170,'blog',destinations.blog],[1480,'world',destinations.world]]) {
     const s = await setup();
     try {
       await s.target.locator('#box-button').click(); await wait(s.target,ms);

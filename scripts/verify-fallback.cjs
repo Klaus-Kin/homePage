@@ -14,6 +14,9 @@ async (page) => {
       reducedMotion: "reduce",
     });
     const target = await context.newPage();
+    // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+    await context.route("**/*", route => new URL(route.request().url()).origin === origin
+      ? route.continue() : route.abort());
     // 新月面资产失败同样进入可访问降级，不能留下没有纹理的占位球。
     if (kind === "moon-failure")
       await target.route("**/assets/moon-lroc.jpg", (route) => route.abort());
@@ -40,7 +43,7 @@ async (page) => {
     if (kind === "context-lost")
       await target.evaluate(() =>
         document
-          .querySelector("canvas")
+          .querySelector("#scene canvas")
           .getContext("webgl2")
           .getExtension("WEBGL_lose_context")
           .loseContext(),
@@ -73,6 +76,9 @@ async (page) => {
     });
     try {
       const target = await context.newPage();
+      // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+      await context.route("**/*", route => new URL(route.request().url()).origin === origin
+        ? route.continue() : route.abort());
       await target.goto(origin);
       const destination = await target.locator(".noscript-entry a").first().getAttribute("href");
       await target.route(destination, route => route.fulfill({ contentType: "text/html", body: "<h1>No-script destination reached</h1>" }));

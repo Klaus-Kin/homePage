@@ -1,10 +1,22 @@
 // 覆盖减少动态、WebGL 与墨水画布故障、无脚本；只在实际黑场后结束受控旅程。
 async (page) => {
+  // 从当前服务的静态入口读取实际地址；独立无脚本文档不会启动额外的 WebGL 场景。
+  const linkContext = await page.context().browser().newContext({ javaScriptEnabled: false });
+  let destinations;
+  try {
+    const links = await linkContext.newPage();
+    await links.goto(new URL(page.url()).origin);
+    destinations = await links.locator("[data-entrance]").evaluateAll(links =>
+      Object.fromEntries(links.map(link => [link.dataset.entrance, link.href])));
+  } finally { await linkContext.close(); }
   const browser = page.context().browser(), origin = new URL(page.url()).origin, results = [];
   for (const scenario of ["reduced", "webgl", "ink-context", "ink-draw", "no-js"]) {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,
       reducedMotion: scenario === "reduced" ? "reduce" : "no-preference", javaScriptEnabled: scenario !== "no-js" });
     const target = await context.newPage(), errors = [];
+    // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+    await context.route("**/*", route => new URL(route.request().url()).origin === origin
+      ? route.continue() : route.abort());
     target.setDefaultTimeout(30000);
     target.on("pageerror", error => errors.push(error.message));
     try {
@@ -28,10 +40,10 @@ async (page) => {
       if (scenario === "no-js") {
         if (await target.locator("#moon-loader").isVisible() || !await target.locator(".scene-fallback").isVisible())
           throw new Error("无脚本页面没有恢复静态入口");
-        await target.route("https://blog.jinsc.icu/**", route => route.fulfill({ contentType: "text/html", body: "<h1>Native destination</h1>" }));
+        await target.route(destinations.blog, route => route.fulfill({ contentType: "text/html", body: "<h1>Native destination</h1>" }));
         await target.screenshot({ path: "output/playwright/lifecycle-no-js.png" });
         await target.locator("[data-entrance=blog]").click();
-        await target.waitForURL("https://blog.jinsc.icu/");
+        await target.waitForURL(destinations.blog);
         results.push({ scenario, nativeNavigation: true });
         continue;
       }

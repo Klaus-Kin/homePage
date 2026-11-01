@@ -114,20 +114,32 @@ export async function createScene(
     renderer.domElement.remove();
   }
   init.cleanup(dispose);
+  /** 运行期故障只通知一次；先关闭循环和资源域，避免降级回调重入或异步画质任务恢复绘制。 */
+  function fail(error: unknown) {
+    if (disposed) return;
+    try { dispose(); }
+    finally { onFailure(error); }
+  }
+  /** 仅包围场景交付后的入口；初始化仍直接抛错，由调用方原有启动守卫接管。 */
+  function run(action: () => void | Promise<void>) {
+    if (disposed) return;
+    try { action()?.catch(fail); }
+    catch (error) { fail(error); }
+  }
   function contextLost(event: Event) {
     event.preventDefault();
-    dispose();
-    onFailure(new Error("WebGL context lost"));
+    fail(new Error("WebGL context lost"));
   }
   function updateLoop(draw = true) {
     if (disposed) return;
     lastTime = performance.now();
     if (document.hidden) promptClock?.pause();
     else promptClock?.sample(lastTime);
-    renderer.setAnimationLoop(!reduced && !document.hidden ? animate : null);
+    renderer.setAnimationLoop(!reduced && !document.hidden ? onAnimation : null);
     if (draw) render();
   }
-  function onVisibility() { updateLoop(); }
+  function onVisibility() { run(() => updateLoop()); }
+  function onAnimation(timestamp: number) { run(() => animate(timestamp)); }
   let chest: Awaited<ReturnType<typeof createChest>>,
     terrain: Awaited<ReturnType<typeof createTerrain>>,
     sky: Awaited<ReturnType<typeof createSky>>;
@@ -353,7 +365,9 @@ export async function createScene(
     // 矮屏和触控横屏继续采用轻量画质，但草的横向覆盖必须跟随实际相机构图。
     const quality = terrain.setQuality(size.mobile, size.width >= size.height || size.name !== "mobile").then(() => {
       if (!disposed && draw) { renderer.shadowMap.needsUpdate = true; recordResources = true; render(); }
-    }).catch((error) => { if (!disposed) { dispose(); onFailure(error); } });
+    });
+    // 同步布局若在返回 Promise 前抛错，画质任务也已有拒绝处理；初始化失败仍由 await 原样抛出。
+    void quality.catch(error => { if (draw) fail(error); });
     sky.group.position.set(0, 0, 0);
     sky.resize(camera, size.preset, size.mobile);
     const shadowSize =
@@ -436,13 +450,14 @@ export async function createScene(
     const firstSubmitMs = performance.now() - firstSubmit;
     performance.measure("moon-first-frame", { start: firstSubmit, end: performance.now() });
     // 正式首帧只提交一次；随后接上既有循环，后台变化仍沿用原来的暂停行为。
-    document.addEventListener("visibilitychange", onVisibility);
-    updateLoop(false);
     // 首次 GPU 提交单独记录，不计入可分批的 CPU 生成耗时。
     host.dataset.initialization = JSON.stringify({ batches: init.batches,
       phases: init.phases,
       firstSubmitMs });
     await init.checkpoint(true);
+    // 所有初始化等待结束后再交付事件和循环，确保异步回调不会逃过启动错误边界。
+    document.addEventListener("visibilitychange", onVisibility);
+    updateLoop(false);
   } catch (error) {
     dispose();
     throw error;
@@ -456,31 +471,40 @@ export async function createScene(
       recordResources = true;
     },
     cancelChoicePrompt() {
-      promptClock = null;
-      recordResources = true;
-      // 无条件提交闭合基准和熄光；即使取消恰好落在偏航为零的一帧，也不能遗留开盖或光环。
-      render();
+      run(() => {
+        promptClock = null;
+        recordResources = true;
+        // 无条件提交闭合基准和熄光；即使取消恰好落在偏航为零的一帧，也不能遗留开盖或光环。
+        render();
+      });
     },
     // 正常模式由唯一渲染循环提交，避免过渡回调与动画回调在同一帧重复绘制。
     setHover(value) {
-      hovered = value;
-      if (reduced) render();
+      run(() => {
+        hovered = value;
+        if (reduced) render();
+      });
     },
     setTransition(value) {
-      transition = value;
-      if (reduced) render();
+      run(() => {
+        transition = value;
+        if (reduced) render();
+      });
     },
     getLightScreenPosition,
     setReducedMotion(value) {
-      if (value && promptClock) promptStatic = true;
-      reduced = value;
-      resize();
-      updateLoop();
+      run(() => {
+        if (value && promptClock) promptStatic = true;
+        reduced = value;
+        const quality = resize();
+        updateLoop();
+        return quality;
+      });
     },
     setPointer(x, y) {
       if (!reduced) pointer.set(x, y);
     },
-    resize,
+    resize() { run(() => resize()); },
     dispose,
   };
   } catch (error) { init.dispose(); throw error; }

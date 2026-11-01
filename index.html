@@ -275,9 +275,11 @@
           void window.__moonBoot.ready();
         }
         function onError(event) {
-          // 构建后入口 id 可能消失；只识别第一个同源模块，统计脚本和第三方运行错误不能拆幕。
-          const entry = Array.from(document.scripts).find(script => script.type === "module" && script.src &&
+          // 构建后入口 id 可能消失；此时退回第一个同源模块，统计脚本和第三方运行错误不能拆幕。
+          // 开发服务会提前注入同源热更新模块，存在显式入口时优先使用它，避免错认 Vite 客户端。
+          const modules = Array.from(document.scripts).filter(script => script.type === "module" && script.src &&
             new URL(script.src, location.href).origin === location.origin);
+          const entry = modules.find(script => script.id === "entry-module") ?? modules[0];
           if (entry && ((event.target instanceof HTMLScriptElement && event.target === entry) ||
               (event instanceof ErrorEvent && event.filename === entry.src)))
             fail(event.message || "入口模块加载失败");

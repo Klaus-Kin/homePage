@@ -1,12 +1,12 @@
 // 自定义地址由测试页 URL 传入，所有导航均在浏览器边界拦截，不会访问真实博客。
 async (page) => {
   const expected = new URL(page.url()).searchParams.get("expectedBlogUrl");
-  if (!expected)
+  const world = new URL(page.url()).searchParams.get("expectedWorldUrl");
+  if (!expected || !world)
     throw new Error(
-      "请在测试页 URL 的 expectedBlogUrl 中传入本次配置的博客地址",
+      "请在测试页 URL 中显式传入 expectedBlogUrl 和 expectedWorldUrl 两个预期地址",
     );
   const origin = new URL(page.url()).origin;
-  const world = new URL(page.url()).searchParams.get("expectedWorldUrl") || "https://example.org/";
   const results = [];
   for (const javaScriptEnabled of [false, true]) {
     for (const selector of [
@@ -24,6 +24,9 @@ async (page) => {
         });
       try {
         const target = await context.newPage();
+        // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+        await context.route("**/*", route => new URL(route.request().url()).origin === origin
+          ? route.continue() : route.abort());
         await target.route(expected, (route) =>
           route.fulfill({
             status: 200,

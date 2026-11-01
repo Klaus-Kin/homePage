@@ -1,5 +1,14 @@
 // 在生产预览或开发服务中验证白幕实际 DOM、重复点击、键盘、触摸与滑动取消。
 async (page) => {
+  // 从当前服务的静态入口读取实际地址；独立无脚本文档不会启动额外的 WebGL 场景。
+  const linkContext = await page.context().browser().newContext({ javaScriptEnabled: false });
+  let destinations;
+  try {
+    const links = await linkContext.newPage();
+    await links.goto(new URL(page.url()).origin);
+    destinations = await links.locator("[data-entrance]").evaluateAll(links =>
+      Object.fromEntries(links.map(link => [link.dataset.entrance, link.href])));
+  } finally { await linkContext.close(); }
   const origin = new URL(page.url()).origin;
   const results = [];
   const browser = page.context().browser();
@@ -9,6 +18,9 @@ async (page) => {
       ...options,
     });
     const target = await context.newPage();
+    // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+    await context.route("**/*", route => new URL(route.request().url()).origin === origin
+      ? route.continue() : route.abort());
     const errors = [];
     target.on("pageerror", (error) => errors.push(error.message));
     let requests = 0,
@@ -16,7 +28,7 @@ async (page) => {
     await target.exposeFunction("recordVisualState", (value) => {
       atNavigation = value;
     });
-    await target.route("https://example.com/blog", async (route) => {
+    await target.route(destinations.blog, async (route) => {
       requests++;
       await route.fulfill({
         status: 200,
@@ -68,7 +80,7 @@ async (page) => {
     });
     const started = Date.now();
     await activate(target);
-    await target.waitForURL("https://example.com/blog", { timeout: 15000 });
+    await target.waitForURL(destinations.blog, { timeout: 15000 });
     const elapsed = Date.now() - started;
     if (
       requests !== 1 ||
@@ -185,8 +197,8 @@ async (page) => {
         throw new Error("Swipe activated box");
       const capped = await target.evaluate(
         () =>
-          document.querySelector("canvas").width /
-            document.querySelector("canvas").clientWidth <=
+          document.querySelector("#scene canvas").width /
+            document.querySelector("#scene canvas").clientWidth <=
           1.51,
       );
       if (!capped) throw new Error("Mobile DPR cap failed");

@@ -51,7 +51,7 @@ async (page) => {
     await page.setViewportSize({ width, height });
     // 多上下文检查后标签页可能被后台节流，等待真实 resize 提交，避免读取上一种尺寸。
     await page.waitForFunction(() => {
-      const canvas = document.querySelector('canvas');
+      const canvas = document.querySelector('#scene canvas');
       return canvas?.clientWidth === innerWidth && Math.abs(canvas.clientHeight - innerHeight) < 1;
     });
     await page.waitForTimeout(150);
@@ -83,7 +83,7 @@ async (page) => {
             height: b.bottom - b.top,
           };
         })(),
-        canvas = rect("canvas");
+        canvas = rect("#scene canvas");
       const overlaps = (a, b) =>
         a.x < b.right && a.right > b.x && a.y < b.bottom && a.bottom > b.y;
       // 检查宝盒内部网格的真实命中；容器边界或中心点正确并不代表盒面没有被入口遮挡。
@@ -102,7 +102,8 @@ async (page) => {
       }
       // 月亮是圆形投影，外接矩形的左下角为空白；文字不能接触月面本身。
       // 标题已改为同源小篆 SVG，必须检查实际图形，不能只检查辅助技术的隐藏文本。
-      textRects.push(...Array.from(document.querySelectorAll('.seal-title, .intro .seal-character svg'), el => {
+      // 行书正文与入口同样使用 SVG，实际图形边界必须参与月面遮挡检查。
+      textRects.push(...Array.from(document.querySelectorAll('.seal-title, .intro .seal-character svg, .intro .calligraphy-copy'), el => {
         const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom };
       }));
       const overlapsMoon = r => {
@@ -200,7 +201,7 @@ async (page) => {
           previous = now;
           if (now - start < 2500) requestAnimationFrame(frame);
           else {
-            const gl = document.querySelector("canvas").getContext("webgl2"),
+            const gl = document.querySelector("#scene canvas").getContext("webgl2"),
               extension = gl.getExtension("WEBGL_debug_renderer_info");
             intervals.sort((a, b) => a - b);
             resolve({

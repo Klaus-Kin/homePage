@@ -108,7 +108,7 @@ async (page) => {
         for (let i = 0; i < 3; i++) {
           sizes.push(
             await target.evaluate(() => {
-              const canvas = document.querySelector("canvas");
+              const canvas = document.querySelector("#scene canvas");
               return {
                 width: canvas.clientWidth,
                 height: canvas.clientHeight,

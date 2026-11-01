@@ -1,5 +1,14 @@
 // 生产页面的题词验收：独立笔画、精确背景像素、可见时间门禁、响应式重排和所有脚本可用的降级入口。
 async (page) => {
+  // 从当前服务的静态入口读取实际地址；独立无脚本文档不会启动额外的 WebGL 场景。
+  const linkContext = await page.context().browser().newContext({ javaScriptEnabled: false });
+  let destinations;
+  try {
+    const links = await linkContext.newPage();
+    await links.goto(new URL(page.url()).origin);
+    destinations = await links.locator("[data-entrance]").evaluateAll(links =>
+      Object.fromEntries(links.map(link => [link.dataset.entrance, link.href])));
+  } finally { await linkContext.close(); }
   const origin = new URL(page.url()).origin, browser = page.context().browser(), results = [];
   const phrase = "一念间,又是另一个世界";
   async function inspect(target) {
@@ -49,6 +58,9 @@ async (page) => {
   async function setup(options = {}, noWebgl = false) {
     const context = await browser.newContext({ viewport: { width:1366,height:768 }, ...options });
     const target = await context.newPage(), errors = [], announcements = [];
+    // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+    await context.route("**/*", route => new URL(route.request().url()).origin === origin
+      ? route.continue() : route.abort());
     let navigations = 0;
     target.on("pageerror", error => errors.push(error.message));
     await target.exposeFunction("recordInkAnnouncement", text => announcements.push(text));
@@ -56,7 +68,7 @@ async (page) => {
       const get = HTMLCanvasElement.prototype.getContext;
       HTMLCanvasElement.prototype.getContext = function(type,...args) { return /webgl/i.test(type) ? null : get.call(this,type,...args); };
     });
-    await target.route("https://example.com/blog", async route => {
+    await target.route(destinations.blog, async route => {
       navigations++;
       await route.fulfill({contentType:"text/html",body:"<h1>题词后的目的地</h1>"});
     });
@@ -98,7 +110,7 @@ async (page) => {
       if (Math.abs((groupLeft+groupRight)/2-width/2)>.6 || Math.abs((first.top+second.bottom)/2-height/2)>.6) throw new Error("题词组没有居中");
       await target.clock.runFor(1008); await target.screenshot({path:`output/playwright/inscription-${name}-before-navigation.png`});
       if (check.navigations()) throw new Error("落墨扩散尚未完成却提前导航");
-      await target.clock.runFor(1600); await target.waitForURL("https://example.com/blog");
+      await target.clock.runFor(1600); await target.waitForURL(destinations.blog);
       if (check.navigations()!==1 || check.errors.length || check.announcements.filter(text=>text===phrase).length!==1) throw new Error(JSON.stringify({errors:check.errors,announcements:check.announcements}));
       results.push({name,stages:{start:start.progress,half:half.progress,full:full.progress},pixels:halfPixels,announcedOnce:true});
     } finally { await context.close(); }
@@ -138,7 +150,7 @@ async (page) => {
         await target.clock.runFor(208); await target.screenshot({path:"output/playwright/inscription-reduced-full.png"});
       }
       // 剩余时间足够完成流程，重复激活不能产生第二次导航或第二次整句播报。
-      await target.clock.runFor(8000); await target.waitForURL("https://example.com/blog");
+      await target.clock.runFor(8000); await target.waitForURL(destinations.blog);
       if (check.navigations()!==1 || check.errors.length || check.announcements.filter(text=>text===phrase).length!==1) throw new Error(`${kind}: ${JSON.stringify(check.errors)}`);
       results.push({kind,navigations:check.navigations(),announcedOnce:true});
     } finally { await context.close(); }

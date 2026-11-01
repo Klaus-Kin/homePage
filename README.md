@@ -63,7 +63,7 @@ npm run dev
 | `sceneConfig.layout`、`layoutRules` | 相机位置、目标高度、视野、月亮位置和构图选择条件 |
 | `sceneConfig.quality` | 桌面与手机的像素比上限、阴影尺寸、植被及其他场景对象数量 |
 
-**部署前必须替换**当前示例地址：`blogUrl: "https://example.com/blog"`、`worldUrl: "https://example.org/"`。这两个地址不代表作者的实际站点，也不提供服务器状态查询功能。
+当前配置为 `blogUrl: "https://blog.jinsc.icu/"`、`worldUrl: "https://kk.jinsc.de5.net/"`。部署前核对两个目标是否适用于本次发布；使用其他站点时修改配置并重新构建。第二入口仅导航至配置地址，主页不执行服务器状态查询。
 
 [index.html](index.html) 中的静态 `<title>`、SEO description 和部分固定无脚本文字需按需同步；它们并非全部从 `pageConfig` 自动生成。宝盒选择提示的时长另见 [src/choice-prompt.ts](src/choice-prompt.ts)，入口图标动画见 [src/entry-motion.ts](src/entry-motion.ts)。修改相机或画质后需重新检查各视口，避免遮挡入口或裁切模型。
 
@@ -114,7 +114,7 @@ scripts/                   浏览器验收、录制、截图和可选素材工�
 
 ## 部署指南
 
-1. 替换两个示例地址，核对静态元信息与字形。
+1. 核对两个导航地址，按本次发布需要修改，并检查静态元信息与字形。
 2. 运行 `npm ci`、`npm test` 和 `npm run build`。
 3. 将 **`dist/` 内的内容**发布到静态托管服务，保留目录结构；不需要 Node 服务处理页面请求。
 4. 从实际发布地址检查资源加载、两个入口、手机构图与静态降级。
@@ -141,7 +141,11 @@ playwright-cli run-code --filename scripts/verify-layout.cjs
 playwright-cli run-code --filename scripts/verify-fallback.cjs
 ```
 
-地址需与当前服务一致；脚本通常从当前页面读取 origin。运行前阅读脚本头部和内容，确认它要求开发服务还是生产预览、截图目录等前提。Playwright CLI 不在项目 npm 依赖中，`npm test` 不会自动执行这些浏览器脚本。本文描述验收方法，不对未运行的视口、浏览器或设备作兼容性和性能承诺。
+地址需与当前服务一致；脚本通常从当前页面读取 origin。运行前创建 `output/playwright/`，阅读脚本头部和内容：导入 `/src/` 或拦截源码的脚本（如 `verify-scene-runtime.cjs`、`verify-entry-icon-fallbacks.cjs`）需要开发服务；生产验收应先构建，再在预览地址运行兼容构建产物的布局、交互、降级及历史返回脚本。
+
+普通导航验收从页面入口读取实际地址，并在浏览器网络边界提供本地目的页；未匹配的外部请求应中止，不能让测试访问真实站点。`verify-static-links.cjs` 用于核对自定义配置，调用前需在测试页 URL 中显式传入 URL 编码后的 `expectedBlogUrl` 和 `expectedWorldUrl`，不能省略第二个预期值。主页画布用 `#scene canvas` 定位，避免误读入口图标或落墨画布。
+
+Playwright CLI 不在项目 npm 依赖中，`npm test` 不会自动执行这些浏览器脚本。自动化通过仅表示所测环境中的结果；手机视口模拟不能代替 iPhone Safari 等实际设备验收，兼容性与性能结论需附浏览器、设备及测试范围。
 
 ## 常见问题
 
@@ -150,7 +154,7 @@ playwright-cli run-code --filename scripts/verify-fallback.cjs
 | Node 报未知参数或不支持语法 | 检查 `node --version` 与实际执行路径，使用推荐的 Node.js 22.18+，再按锁文件安装 |
 | 双击 HTML 后空白或出现占位符 | 使用 Vite 开发服务或构建后的 HTTP 静态服务；源码 HTML 需要 Vite 转换，不能通过 `file://` 使用 |
 | 只看到静态背景 | 检查控制台、WebGL、资源请求和加载错误；这是降级路径，文字入口应仍可访问 |
-| 入口打开示例站点 | 在 `src/config.ts` 替换 `blogUrl` 和 `worldUrl`，然后重新构建部署 |
+| 入口地址不符合预期 | 核对 `src/config.ts` 中的 `blogUrl` 和 `worldUrl`，修改后重新构建部署 |
 | 修改文案后缺字或构建失败 | 同步行书字形；标题与题词按各自资源维护，详见字形与素材维护 |
 | 子目录部署后图片丢失 | 排查根绝对资源路径；仅修改 Vite `base` 无法覆盖全部 `/assets/` 引用 |
 

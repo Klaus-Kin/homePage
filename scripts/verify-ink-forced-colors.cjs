@@ -1,14 +1,26 @@
 // 在亮色与暗色高对比度调色板中检查真实截图，覆盖墨水扩散和减少动态淡黑两条路径。
 async (page) => {
+  // 从当前服务的静态入口读取实际地址；独立无脚本文档不会启动额外的 WebGL 场景。
+  const linkContext = await page.context().browser().newContext({ javaScriptEnabled: false });
+  let destinations;
+  try {
+    const links = await linkContext.newPage();
+    await links.goto(new URL(page.url()).origin);
+    destinations = await links.locator("[data-entrance]").evaluateAll(links =>
+      Object.fromEntries(links.map(link => [link.dataset.entrance, link.href])));
+  } finally { await linkContext.close(); }
   const browser = page.context().browser(), origin = new URL(page.url()).origin, results = [];
   for (const colorScheme of ["light", "dark"]) for (const reduced of [false, true]) {
     const name = `forced-${colorScheme}-${reduced ? "reduced" : "normal"}`;
     const context = await browser.newContext({ viewport: { width: 640, height: 600 }, forcedColors: "active", colorScheme,
       reducedMotion: reduced ? "reduce" : "no-preference" });
     const target = await context.newPage(), errors = [];
+    // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
+    await context.route("**/*", route => new URL(route.request().url()).origin === origin
+      ? route.continue() : route.abort());
     let navigations = 0;
     target.on("pageerror", error => errors.push(error.message));
-    await target.route("https://example.com/blog", async route => {
+    await target.route(destinations.blog, async route => {
       navigations++;
       await route.fulfill({ contentType: "text/html", body: "<h1>Forced colors destination</h1>" });
     });
@@ -58,7 +70,7 @@ async (page) => {
       if (pixels.mismatch || black.layerColor !== "rgb(0, 0, 0)") throw new Error(`${name}: 全黑画面被替换 ${JSON.stringify({ black, pixels })}`);
       await target.clock.runFor(144);
       if (navigations) throw new Error(`${name}: 全黑停留不足160ms便导航`);
-      await target.clock.runFor(32); await target.waitForURL("https://example.com/blog");
+      await target.clock.runFor(32); await target.waitForURL(destinations.blog);
       if (navigations !== 1 || errors.length) throw new Error(`${name}: ${JSON.stringify({ navigations, errors })}`);
       results.push({ name, palette, pixels, navigations });
     } finally { await context.close(); }
