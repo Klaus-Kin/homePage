@@ -79,7 +79,7 @@ async (page) => {
         await target.waitForSelector(".staff-cursor-layer:not([hidden])");
         const restored = await target.locator(".staff-cursor-layer img").evaluate((image) => {
           const bounds = image.getBoundingClientRect();
-          return bounds.x === 697 && bounds.y === 397 && bounds.width === 72 && bounds.height === 72 &&
+          return bounds.x === 694 && bounds.y === 394 && bounds.width === 72 && bounds.height === 72 &&
             getComputedStyle(document.documentElement).cursor === "none";
         });
         if (!restored) throw new Error("就绪后未恢复原方向、尺寸和热点的金箍棒光标");
@@ -134,7 +134,7 @@ async (page) => {
         await target.waitForSelector(".staff-cursor-layer:not([hidden])");
         const stationary = await target.locator(".staff-cursor-layer img").evaluate((image) => {
           const bounds = image.getBoundingClientRect();
-          return bounds.x === 597 && bounds.y === 297;
+          return bounds.x === 594 && bounds.y === 294;
         });
         if (!stationary) throw new Error(`${exit}: 静止鼠标的光标交接位置错误`);
         results.push({ exit, stationary });

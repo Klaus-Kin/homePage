@@ -39,12 +39,15 @@ button:disabled {
 /* 桌面保留原生金箍棒回退；图片就绪后由固定热点的图层显示，使越界部分自然裁切且不改变方向。 */
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
   :root {
-    cursor: url("/assets/golden-staff-cursor.svg") 3 3, auto;
+    cursor: url("/assets/cursor-staff-native.png") 6 6, auto;
   }
-  /* 链接和宝盒按钮共用同一棒头热点；保留原生回退与禁用按钮的等待状态。 */
-  a,
-  #box-button:not(:disabled) {
-    cursor: url("/assets/golden-staff-cursor.svg") 3 3, pointer;
+  /* 无脚本和图片图层未就绪时也提供对应的原生手势；禁用按钮保留等待状态。 */
+  a { cursor: inherit; }
+  .journey-link {
+    cursor: url("/assets/cursor-point-native.png") 10 6, pointer;
+  }
+  #box-button:not(:disabled), #static-box {
+    cursor: url("/assets/cursor-grab-native.png") 25 22, grab;
   }
   #box-button:disabled {
     cursor: wait;
@@ -52,6 +55,7 @@ button:disabled {
   /* 仅在图层已经可见时隐藏系统光标，链接和宝盒继承同一显示策略；禁用按钮仍显示等待状态。 */
   :root.staff-cursor-active,
   .staff-cursor-active a,
+  .staff-cursor-active #static-box,
   .staff-cursor-active #box-button:not(:disabled) {
     cursor: none;
   }

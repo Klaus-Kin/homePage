@@ -1,7 +1,8 @@
 // 通过 playwright-cli run-code --filename 执行，使用 Vite 开发地址；在真实构建检查点取消并核对 GPU 与模型资源。
 async (page) => {
   const origin=new URL(page.url()).origin,results=[];
-  for(const [action,phase,checkpoint] of [["dispose","entry-model",4],["pagehide","entry-model",10],
+  // 参考图构建在纹理解码后一次生成轻网格，第二个检查点已拥有全部可释放资源。
+  for(const [action,phase,checkpoint] of [["dispose","entry-model",2],["pagehide","entry-model",2],
     ["moon-boot-failed","entry-gpu",2],["journey","entry-gpu",4]]) {
     const context=await page.context().browser().newContext({viewport:{width:800,height:600}});
     try {

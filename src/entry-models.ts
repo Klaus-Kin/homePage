@@ -156,7 +156,7 @@ function* buildCrown(init: Initialization): Generator<void, EntryModel> {
 }
 
 /** 丝带用一次分配的动态三角带；横向高斯分布同时保留细芯和柔光，无额外后处理画布。 */
-function redSilk(init: Initialization,root: THREE.Group, side: number, strand: number) {
+export function redSilk(init: Initialization,root: THREE.Group, side: number, strand: number) {
   const segments=36, positions=new Float32Array((segments+1)*2*3), uv=new Float32Array((segments+1)*2*2);
   const geometry=init.track(new THREE.BufferGeometry()), indices: number[]=[];
   for(let i=0;i<=segments;i++) for(let j=0;j<2;j++) {

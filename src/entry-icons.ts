@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { EntryMotion } from "./entry-motion.ts";
-import { createEntryModel } from "./entry-models.ts";
+import { createEntryArtwork } from "./entry-artwork.ts";
 import { Initialization } from "./scene/initialization.ts";
 import { warmScene } from "./scene/gpu-initialization.ts";
 import type { EntryModel } from "./entry-models.ts";
@@ -64,7 +64,7 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
   async function create(item: Item) {
     try {
       item.init.phase="entry-model";
-      item.model=await createEntryModel(item.link.dataset.entrance==="world"?"monkey":"crown",item.init);
+      item.model=await createEntryArtwork(item.link.dataset.entrance==="world"?"monkey":"crown",item.init);
       item.init.check();
       await item.init.checkpoint(true);
       const canvas=document.createElement("canvas");

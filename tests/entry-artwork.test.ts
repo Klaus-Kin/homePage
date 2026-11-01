@@ -1,0 +1,63 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import * as THREE from "three";
+import { buildEntryArtwork } from "../src/entry-artwork.ts";
+import { Initialization } from "../src/scene/initialization.ts";
+
+// 独立验证参考图的实际网格，防止只替换后备图而运行时仍绘制旧造型。
+test("reference crown bends independent feathers without moving their roots", () => {
+  const init = new Initialization();
+  const textures = [0, 1, 2].map(() => init.track(new THREE.Texture()));
+  const model = buildEntryArtwork("crown", textures, init);
+  const feathers = model.root.children.filter(object => object.name.startsWith("artwork-feather")) as THREE.Mesh[];
+  assert.equal(feathers.length, 2);
+  const buffers = feathers.map(mesh => mesh.geometry.getAttribute("position"));
+  model.update(0, 0, 0, 0);
+  const rest = buffers.map(buffer => Array.from(buffer.array));
+  // 找到每片羽根最近的实际顶点，检查变形不会把连接点从冠座顶部拉走。
+  const roots = buffers.map((buffer, side) => {
+    let nearest = 0, distance = Infinity;
+    for (let i = 0; i < buffer.count; i++) {
+      const current = (buffer.getX(i) - (side === 0 ? -3.8 : 3.8)) ** 2 + (buffer.getY(i) + 3.4) ** 2;
+      if (current < distance) { nearest = i; distance = current; }
+    }
+    return nearest;
+  });
+  model.update(1673, 1, 0, 0);
+  buffers.forEach((buffer, i) => {
+    assert.equal(feathers[i].geometry.getAttribute("position"), buffer);
+    assert.notDeepEqual(Array.from(buffer.array), rest[i]);
+    assert.ok(Array.from(buffer.array).every(Number.isFinite));
+    for (let axis = 0; axis < 3; axis++) {
+      const index = roots[i] * 3 + axis;
+      assert.equal(buffer.array[index], rest[i][index], "羽根顶点必须固定");
+    }
+  });
+  model.update(1673, 0, 0, 0);
+  buffers.forEach((buffer, i) => assert.deepEqual(Array.from(buffer.array), rest[i]));
+  init.dispose();
+});
+
+// 原时间参数继续控制整体转头、红眼和六条红丝；释放纹理与缓冲仍归同一个初始化域。
+test("reference monkey preserves turn, red eyes, silk and texture disposal", () => {
+  const init = new Initialization(), texture = init.track(new THREE.Texture());
+  let released = 0;
+  texture.addEventListener("dispose", () => released++);
+  const model = buildEntryArtwork("monkey", [texture], init);
+  model.update(0, 0, 0, 0);
+  const rest = model.root.rotation.y;
+  model.update(900, 1, 1, 1);
+  assert.ok(model.root.rotation.y - rest > .4);
+  const face = model.root.getObjectByName("artwork-monkey") as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  assert.equal(face.material.map, texture);
+  assert.equal(face.material.userData.eye.value, 1);
+  assert.ok(face.geometry.getAttribute("position").getZ(0) < 4);
+  const silk = model.root.children.filter(object => object.name === "artwork-silk");
+  assert.equal(silk.length, 6);
+  assert.ok(silk.every(object => object.visible));
+  model.update(1800, 1, 0, 0);
+  assert.equal(model.root.rotation.y, rest);
+  assert.ok(silk.every(object => !object.visible));
+  init.dispose(); init.dispose();
+  assert.equal(released, 1);
+});

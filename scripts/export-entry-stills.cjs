@@ -6,14 +6,16 @@ async (page) => {
     await target.route('**/__entry-still-export',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta charset="utf-8"><title>入口首帧导出</title>'}));
     await target.goto(`${origin}/__entry-still-export`);
     const frames=await target.evaluate(async()=>{
-      const {createCrown,createMonkey,disposeModel}=await import('/src/entry-models.ts');
+      const {createEntryArtwork}=await import('/src/entry-artwork.ts');
+      const {Initialization}=await import('/src/scene/initialization.ts');
       const {createEntryRenderer,createEntryScene,resizeEntryRenderer}=await import('/src/entry-rendering.ts');
       const canvas=document.createElement('canvas');
       const renderer=createEntryRenderer(canvas);
       const frames=[];
       try {
         for(const kind of ['crown','monkey']) {
-          const model=kind==='crown'?createCrown():createMonkey();
+          const init=new Initialization();
+          const model=await createEntryArtwork(kind,init);
           try {
             const {scene,camera}=createEntryScene(model);
             for(const size of [30,36,44]) for(const ratio of [1,2]) for(const eyes of kind==='crown'?[0]:[0,1]) {
@@ -24,7 +26,7 @@ async (page) => {
               const name=`entry-${kind}${eyes?'-active':''}-${size}${ratio===2?'@2x':''}.png`;
               frames.push({name,url:canvas.toDataURL('image/png'),width:canvas.width,height:canvas.height});
             }
-          } finally {disposeModel(model.root);}
+          } finally {init.dispose();}
         }
       } finally {renderer.dispose();renderer.forceContextLoss();}
       return frames;
