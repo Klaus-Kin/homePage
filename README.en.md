@@ -4,9 +4,11 @@
 
 A cinematic personal homepage built with TypeScript, Three.js, and Vite. A real-time 3D scene combines moonlight, rocks, grass, and a Moonlight Box, with two text links leading to a blog and another site.
 
+Live demo: [https://jinsc.icu](https://jinsc.icu).
+
 ![Moonlight Box scene background preview](public/assets/scene-desktop.webp)
 
-This existing repository image is a **scene background preview** and one of the static fallback assets. It does not include the complete page copy, links, or animation. This repository does not provide a live demo URL.
+This existing repository image is a **scene background preview** and one of the static fallback assets. It does not include the complete page copy, links, or animation. Visit the live demo above for the complete page and interactions.
 
 ## Features and interactions
 
@@ -204,3 +206,7 @@ Playwright CLI is not a project npm dependency, and `npm test` does not automati
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a bug, suggestion, or code change. Use the repository's Issue / PR templates to describe reproduction and verification.
 
 Original project code and documentation are available under the [MIT License](LICENSE), Copyright (c) 2026 Klaus-Kin. Third-party imagery, fonts, and derived glyphs retain their own terms; the repository's MIT license does not replace them. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution and preservation requirements.
+
+## Friends
+
+[LinuxDO Community](https://linux.do)

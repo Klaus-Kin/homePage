@@ -4,9 +4,11 @@
 
 基于 TypeScript、Three.js 和 Vite 的电影感个人主页：以月夜、山石、草地和月光宝盒构成实时 3D 场景，通过两个文字入口连接博客与另一个站点。
 
+在线演示：[https://jinsc.icu](https://jinsc.icu)。
+
 ![月光宝盒场景背景预览](public/assets/scene-desktop.webp)
 
-上图是仓库现有的**场景背景预览**，也是静态降级资源之一；不包含完整页面文案、入口和动态效果。本仓库未提供在线演示地址。
+上图是仓库现有的**场景背景预览**，也是静态降级资源之一；不包含完整页面文案、入口和动态效果。完整页面与交互效果可访问上方在线演示。
 
 ## 功能与交互
 
@@ -206,3 +208,7 @@ Playwright CLI 不在项目 npm 依赖中，`npm test` 不会自动执行这些�
 提交缺陷、建议或代码前请阅读 [贡献指南](CONTRIBUTING.md)，并使用仓库中的 Issue / PR 模板描述复现与验证情况。
 
 项目原创代码与文档采用 [MIT License](LICENSE)，Copyright (c) 2026 Klaus-Kin。第三方影像、字体及衍生字形遵循各自授权，不因本仓库使用 MIT 而改变；来源与保留要求见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+## 友情链接
+
+[LinuxDO 社区](https://linux.do)
