@@ -50,7 +50,9 @@ async (page) => {
         function sample(now) {
           samples.push([...document.querySelectorAll('[data-entrance]')].map(link=>{
             const copy=link.querySelector('.entry-copy'),matrix=new DOMMatrix(getComputedStyle(copy).transform);
+            const iconMatrix=new DOMMatrix(getComputedStyle(link.querySelector('.entry-icon')).transform);
             return {active:link.dataset.entryActive,x:matrix.m41,y:matrix.m42,frames:+link.querySelector('.entry-icon').dataset.frames,
+              iconX:iconMatrix.m41,iconY:iconMatrix.m42,
               childTransform:getComputedStyle(copy.querySelector('small')).transform};
           }));
           if(now-start<15000) setTimeout(()=>requestAnimationFrame(sample),100);else resolve(samples);
@@ -59,6 +61,7 @@ async (page) => {
       }));
       assert(samples.every(s=>s.every(v=>v.active==='true'&&v.childTransform==='none')),'双入口不能持续独立激活或英文发生二次位移');
       assert(Math.max(...samples.map(s=>s[0].y))>1.9&&Math.min(...samples.map(s=>s[0].y))< -1.9,'第一项未持续上下浮动');
+      assert(samples.every(s=>Math.abs(s[0].iconY-s[0].y)<.00001&&s[0].iconX===0),'冠体与文案未逐帧同步上下浮动');
       assert(Math.max(...samples.map(s=>s[1].x))>2.9&&Math.min(...samples.map(s=>s[1].x))<.1,'第二项未持续水平往返');
       for(let i=1;i<samples.length;i++) for(let j=0;j<2;j++) {
         const a=samples[i-1][j],b=samples[i][j];

@@ -156,7 +156,10 @@ function* buildCrown(init: Initialization): Generator<void, EntryModel> {
 }
 
 /** 丝带用一次分配的动态三角带；横向高斯分布同时保留细芯和柔光，无额外后处理画布。 */
-export function redSilk(init: Initialization,root: THREE.Group, side: number, strand: number) {
+export function redSilk(init: Initialization,root: THREE.Group, side: number, strand: number,
+  appearance: { width?: number; reach?: number; glow?: number } = {}) {
+  // 参考图入口可单独加强小尺寸红丝；默认参数保持原实体模型的曲线、宽度和光晕。
+  const { width: widthScale = 1, reach = 1, glow = .32 } = appearance;
   const segments=36, positions=new Float32Array((segments+1)*2*3), uv=new Float32Array((segments+1)*2*2);
   const geometry=init.track(new THREE.BufferGeometry()), indices: number[]=[];
   for(let i=0;i<=segments;i++) for(let j=0;j<2;j++) {
@@ -169,11 +172,11 @@ export function redSilk(init: Initialization,root: THREE.Group, side: number, st
   geometry.setIndex(indices);
   const material=init.track(new THREE.ShaderMaterial({
     transparent:true, depthWrite:false, depthTest:false, side:THREE.DoubleSide, toneMapped:false,
-    uniforms:{strength:{value:0}},
+    uniforms:{strength:{value:0},glow:{value:glow}},
     vertexShader:`varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-    fragmentShader:`varying vec2 vUv; uniform float strength;
-      void main(){float d=(vUv.x-.5)*2.;float core=exp(-d*d*75.);float glow=exp(-d*d*4.)*.32;
-      float tail=pow(1.-vUv.y,.6);gl_FragColor=vec4(vec3(1.,.075+core*.22,.055+core*.11), (core+glow)*tail*strength);}`,
+    fragmentShader:`varying vec2 vUv; uniform float strength; uniform float glow;
+      void main(){float d=(vUv.x-.5)*2.;float core=exp(-d*d*75.);float halo=exp(-d*d*4.)*glow;
+      float tail=pow(1.-vUv.y,.6);gl_FragColor=vec4(vec3(1.,.075+core*.22,.055+core*.11), (core+halo)*tail*strength);}`,
   }));
   const mesh=new THREE.Mesh(geometry,material);
   mesh.frustumCulled=false; mesh.renderOrder=10;
@@ -185,10 +188,11 @@ export function redSilk(init: Initialization,root: THREE.Group, side: number, st
     for(let i=0;i<=segments;i++) {
       const t=i/segments,p=silkPoint(t,time,side,strand,extension);
       // 收敛时长度和透明度一起衰减；根点不挪动，尾端的宽度精确减到零。
-      const width=p.width*5;
+      const width=p.width*5*widthScale;
       for(let j=0;j<2;j++) {
         const at=(i*2+j)*3;
-        positions[at]=p.x;positions[at+1]=p.y+(j?1:-1)*width;positions[at+2]=p.z+3;
+        positions[at]=side*12.4+(p.x-side*12.4)*reach;
+        positions[at+1]=.6+(p.y-.6)*reach+(j?1:-1)*width;positions[at+2]=p.z+3;
       }
     }
     geometry.getAttribute("position").needsUpdate=true;

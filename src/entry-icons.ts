@@ -121,6 +121,8 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
       const world=item.link.dataset.entrance==="world";
       const offset=world?1.5*(1-Math.cos(phase/1.8))*amount:2*Math.sin(phase/2.8)*amount;
       item.copy.style.transform=amount>0?`translate${world?"X":"Y"}(${offset}px)`:"none";
+      // 冠座与文案使用同一帧、同一位移，羽片在内部继续独立飘动；猴头保留原来的转头。
+      item.slot.style.transform=world?"none":item.copy.style.transform;
       item.link.dataset.entryActive=String(motion.active);
       if(item.ready && item.renderer && item.scene && item.camera && item.model && !contrastQuery.matches) {
         try {
@@ -192,6 +194,7 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
       item.link.classList.remove("entry-enhanced");
       delete item.link.dataset.entryActive;
       item.copy.style.removeProperty("transform");
+      item.slot.style.removeProperty("transform");
     });
   };
   return Object.assign(dispose,{cancelPending});

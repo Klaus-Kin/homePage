@@ -705,11 +705,13 @@ h1 > strong {
 .entry-copy { display: block; }
 /* 无脚本或模块加载失败时仍提供整体浮动；正常运行用可平滑反向的共享调度器。 */
 .journey-link:not(.world-link):not(.entry-enhanced):hover .entry-copy,
-.journey-link:not(.world-link):not(.entry-enhanced):focus-visible .entry-copy { animation: moon-entry-float 2.8s ease-in-out infinite; }
+.journey-link:not(.world-link):not(.entry-enhanced):focus-visible .entry-copy,
+.journey-link:not(.world-link):not(.entry-enhanced):hover > .entry-icon,
+.journey-link:not(.world-link):not(.entry-enhanced):focus-visible > .entry-icon { animation: moon-entry-float 2.8s ease-in-out infinite; }
 @keyframes moon-entry-float { 0%,100% { transform: translateY(0); } 25% { transform: translateY(-2px); } 75% { transform: translateY(2px); } }
 @media (max-width: 767px) { .entry-icon { width: 36px; height: 36px; } }
 @media (max-height: 600px) { .entry-icon { width: 30px; height: 30px; } }
-@media (prefers-reduced-motion: reduce) { .journey-link .entry-copy { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .journey-link .entry-copy, .journey-link .entry-icon { animation: none !important; } }
 @media (forced-colors: active) {
   .entry-canvas { display: none; }
   .entry-icon[data-model-ready="true"] .entry-fallback { visibility: visible; }

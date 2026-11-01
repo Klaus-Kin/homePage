@@ -4,7 +4,7 @@ import { redSilk } from "./entry-models.ts";
 import type { EntryModel } from "./entry-models.ts";
 import { Initialization } from "./scene/initialization.ts";
 
-/** 原稿保持自身色彩和高光，网格只负责羽片变形和转头透视，不再叠加场景灯光染色。 */
+/** 月夜素材保持烘焙后的冷金高光，网格只负责羽片变形和转头透视，不再叠加场景灯光染色。 */
 function artworkMesh(texture: THREE.Texture, width: number, height: number, init: Initialization) {
   const geometry = init.track(new THREE.PlaneGeometry(width, height, 48, 48));
   const material = init.track(new THREE.MeshBasicMaterial({
@@ -35,10 +35,12 @@ function feather(mesh: THREE.Mesh, side: number) {
   return (time: number, amount: number) => {
     for (let i = 0; i < position.count; i++) {
       const pose = featherPose(weights[i], time, side, amount);
+      // 参考图的拱顶权重较低，把弯摆扩大到原来的 5.2 倍，细梢扭转同步加强而羽根仍为零。
+      const bend = pose.bend * 5.2;
       const x = rest[i * 3] - rootX, y = rest[i * 3 + 1] - rootY;
-      const cos = Math.cos(pose.bend), sin = Math.sin(pose.bend);
+      const cos = Math.cos(bend), sin = Math.sin(bend);
       position.setXYZ(i, rootX + x * cos - y * sin, rootY + x * sin + y * cos,
-        rest[i * 3 + 2] + pose.twist * x * .2);
+        rest[i * 3 + 2] + pose.twist * x * .4);
     }
     position.needsUpdate = true;
   };
@@ -93,7 +95,7 @@ export function buildEntryArtwork(kind: "crown" | "monkey", textures: THREE.Text
   mesh.material.customProgramCacheKey = () => "reference-monkey-eyes-v1";
   // 复用六条红丝的原曲线和缓冲，仅把根点映射到新参考图的外眼角。
   const updates = [-1, 1].flatMap(side => [0, 1, 2].map(strand => {
-    const update = redSilk(init, root, side, strand);
+    const update = redSilk(init, root, side, strand, { width: 1.9, reach: 1.25, glow: .68 });
     const silk = root.children[root.children.length - 1];
     silk.name = "artwork-silk";
     silk.scale.set(.8, .8, 1);

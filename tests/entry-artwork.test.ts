@@ -33,6 +33,17 @@ test("reference crown bends independent feathers without moving their roots", ()
       assert.equal(buffer.array[index], rest[i][index], "羽根顶点必须固定");
     }
   });
+  // 长时间采样必须达到肉眼可辨的摆幅，同时保持既有缓冲和左右独立节奏。
+  let peak = 0;
+  for (let time = 0; time < 12000; time += 173) {
+    model.update(time, 1, 0, 0);
+    buffers.forEach((buffer, side) => {
+      for (let i = 0; i < buffer.count; i++) {
+        peak = Math.max(peak, Math.hypot(buffer.getX(i) - rest[side][i * 3], buffer.getY(i) - rest[side][i * 3 + 1]));
+      }
+    });
+  }
+  assert.ok(peak > 10 && peak < 30, `羽片最大摆幅应明显且受控：${peak}`);
   model.update(1673, 0, 0, 0);
   buffers.forEach((buffer, i) => assert.deepEqual(Array.from(buffer.array), rest[i]));
   init.dispose();
@@ -55,6 +66,10 @@ test("reference monkey preserves turn, red eyes, silk and texture disposal", () 
   const silk = model.root.children.filter(object => object.name === "artwork-silk");
   assert.equal(silk.length, 6);
   assert.ok(silk.every(object => object.visible));
+  const thread = silk[0] as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
+  const positions = thread.geometry.getAttribute("position");
+  assert.ok(Math.abs(positions.getY(0) - positions.getY(1)) > 4.5, "红丝根部需有更清晰的细芯和柔光宽度");
+  assert.ok(thread.material.uniforms.glow.value >= .6, "小尺寸红丝应保留可见柔光");
   model.update(1800, 1, 0, 0);
   assert.equal(model.root.rotation.y, rest);
   assert.ok(silk.every(object => !object.visible));
