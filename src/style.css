@@ -670,6 +670,19 @@ h1 > strong {
 }
 
 /* 两个入口共用固定图标列与提示外层；横向留白容纳完整的 ±6px 抖动。 */
+/* 短竖屏使用最终三维场景的专用截图，避免横屏 cover 把月球裁到标题后面。
+   热点来自同轮 320×480 导出的按钮边界，与背景共用同一平面。 */
+@media (max-height: 499px) and (orientation: portrait) {
+  #app {
+    --static-image: url("/assets/scene-short-portrait.webp");
+    --static-aspect: calc(320 / 480);
+    --static-box-x: calc(54.203125 / 320);
+    --static-box-y: calc(366.265625 / 480);
+    --static-box-w: calc(241.28125 / 320);
+    --static-box-h: calc(98.46875 / 480);
+  }
+}
+
 #journey-choices { max-width: calc(100vw - 12px); outline-offset: 3px; }
 .choice-motion { display: grid; justify-items: start; gap: 10px; padding-inline: 6px; margin-inline: -6px; }
 .journey-link {
@@ -736,6 +749,21 @@ h1 > strong {
 @media (forced-colors: active) {
   .entry-canvas { display: none; }
   .entry-icon[data-model-ready="true"] .entry-fallback { visibility: visible; }
+}
+
+/* 保留现有窄屏换行与字号，只把正文左右边缘限制在刘海和横屏安全区以内。
+   地址栏伸缩仍使用既有 --view-height 与 visualViewport，避免引入第二套高度同步。 */
+@media (max-width: 767px) {
+  .intro {
+    left: max(9%, calc(env(safe-area-inset-left) + 12px));
+    right: max(7%, calc(env(safe-area-inset-right) + 12px));
+  }
+}
+@media (max-height: 499px) {
+  .intro {
+    left: max(8%, calc(env(safe-area-inset-left) + 12px));
+    max-width: calc(100vw - max(8vw, env(safe-area-inset-left)) - env(safe-area-inset-right) - 12px);
+  }
 }
 @media (max-width: 767px) {
   .journey-link { grid-template-columns: 36px minmax(0, 1fr); }

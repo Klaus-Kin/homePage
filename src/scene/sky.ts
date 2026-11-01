@@ -20,7 +20,7 @@ export async function createSky(lunarMap: THREE.Texture, init: Initialization) {
       vertexShader: `varying vec3 vWorld; void main(){ vWorld=(modelMatrix*vec4(position,1.)).xyz; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
       fragmentShader: `varying vec3 vWorld;
       void main(){ float h=normalize(vWorld).y;
-      vec3 c=mix(vec3(.012,.028,.065),vec3(.0008,.002,.009),smoothstep(-.06,.4,h));
+      vec3 c=mix(vec3(.018,.056,.140),vec3(.0003,.006,.019),smoothstep(-.06,.25,h));
       gl_FragColor=vec4(c,1.);
       #include <colorspace_fragment>
       }`,
@@ -99,7 +99,8 @@ export async function createSky(lunarMap: THREE.Texture, init: Initialization) {
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({
         map: cloudMap,
-        color: i < 6 ? 0xb5bdce : 0x7893b5,
+        // 月缘云保持银蓝，谷雾提高蓝灰亮度，层间由真实山体深度遮挡。
+        color: i < 6 ? 0xa5b9d4 : 0x9db6d3,
         transparent: true,
         opacity: i < 6 ? 0.62 : 0.26,
         depthWrite: false,
@@ -203,16 +204,31 @@ export async function createSky(lunarMap: THREE.Texture, init: Initialization) {
             span * radius * (0.6 + (i % 2) * 0.2),
             1,
           );
+          // 最后两片月云延伸到左侧天空，形成参考图地平线前的稀薄卷云层。
+          if (i >= 4) {
+            cloud.position.copy(screenPoint(camera, x - .29 * (i - 3), y + .11 + (i - 4) * .05, 68));
+            cloud.scale.set(span * .95, span * .095, 1);
+          }
         } else {
           const j = i - 6;
+          // 错开四层谷雾的横向间距、高度与纵深，避免薄片在同一水平线上叠成条带。
+          const row = Math.floor(j / 6), column = j % 6;
           cloud.position.set(
-            ((j % 6) - 2.5) * 19,
-            -2.5 + Math.floor(j / 6) * 0.7,
-            -12 - Math.floor(j / 6) * 15,
+            (column - 2.5) * 17 + Math.sin(j * 2.7) * 5,
+            -4.2 + row * .9 + Math.sin(j * 1.9) * .9,
+            -13 - row * 19 + Math.cos(j * 1.3) * 3,
           );
-          cloud.scale.set(33 + (j % 3) * 8, 4 + (j % 2) * 2, 1);
+          cloud.scale.set(27 + (j % 3) * 5, 9 + (j % 2) * 3, 1);
+          // 最近一层在支峰前方的低谷铺开，遮住山脚而不吞没峰顶，形成可辨识的云海。
+          if (row === 0) {
+            cloud.position.y = -.5 + Math.sin(j * 1.9) * .6;
+            cloud.position.z = -5 + Math.cos(j * 1.3) * 2;
+            cloud.scale.set(22 + (j % 3) * 3, 5.5 + (j % 2), 1);
+          }
         }
         cloud.quaternion.copy(camera.quaternion);
+        // 轻微倾斜云片，使纹理内部的卷云方向交错，仍朝向当前相机。
+        if (i >= 6) cloud.rotateZ(Math.sin(i * 2.3) * .16);
         cloudBases[i].copy(cloud.position);
         cloudScales[i].copy(cloud.scale);
         // 手机保留两片月云和八片谷雾，减少数量时仍保留完整空间层次。
@@ -238,7 +254,7 @@ export async function createSky(lunarMap: THREE.Texture, init: Initialization) {
         clouds[i].position.x += motion.x;
         clouds[i].position.y += motion.y;
         clouds[i].scale.copy(cloudScales[i]).multiplyScalar(motion.scale);
-        clouds[i].material.opacity = motion.opacity;
+        clouds[i].material.opacity = motion.opacity * (i < 4 ? .76 : i < 6 ? .22 : 2.05);
       }
       const phase = time % 11;
       meteor.visible = !reduced && phase > 1 && phase < 2.4;

@@ -71,7 +71,8 @@ export async function createScene(
   renderer.shadowMap.autoUpdate = false;
   const scene = new THREE.Scene();
   ownTree(init, scene);
-  scene.fog = new THREE.FogExp2(0x203552, 0.009);
+  // 蓝灰距离雾把远山与地平线连在一起，近景仍保留墨绿和灰黑木色。
+  scene.fog = new THREE.FogExp2(0x304f79, 0.0105);
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 350);
   let disposed = false,
     frameCount = 0,

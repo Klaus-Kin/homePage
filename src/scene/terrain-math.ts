@@ -1,5 +1,12 @@
 import { chestPlacement, type ChestPlacement } from "./chest-placement.ts";
 
+// 参考图的近层峰位只在初始化时读取；所有画质档位共享这些固定锚点。
+const REFERENCE_SUMMITS = [
+  [-19.5, 18, 2.8, 5.2, 7.5],
+  [-12, 23, 3.2, 6.1, 6.5],
+  [-1, 19, 1.6, 4.2, 5.5],
+] as const;
+
 /** 可复现随机数使响应式重建保持同一片风景，也便于截图回归。 */
 export function seededRandom(seed: number) {
   return () => {
@@ -91,9 +98,32 @@ export function mountainHeight(x: number, z: number, layer: number) {
     frequency *= 2.13;
     amplitude *= 0.48;
   }
-  return (
+  let height = (
     -15 +
     envelope * (peak + ridge * 2.6) -
     Math.pow(envelope, 0.6) * Math.abs(offset) * 0.08
   );
+  // 主峰的低频轮廓不动，沿坡面刻入收敛的细脊，手机简化网格仍采样同一高度场。
+  const erosion = (1 - Math.abs(noise(x * 2.3 + z * .31, z * .83 + seed) * 2 - 1));
+  height -= envelope * erosion * .2;
+  if (layer === 0) {
+    // 近层支峰按参考图的三个轮廓锚点固定，纵深与远峰分开，云雾可以穿过中间的低谷。
+    for (const [cx, cz, top, sx, sz] of REFERENCE_SUMMITS) {
+      const dx = (x - cx) / sx, dz = (z - cz) / sz;
+      const distance = Math.hypot(dx, dz);
+      // 域扭曲和多尺度裂脊形成偏斜肩峰，避免独立支峰成为光滑圆锥。
+      const warp = Math.min(1, distance * 3);
+      const radius = Math.hypot(dx + (fbm(x * .65, z * .55) - .5) * .6 * warp,
+        dz + (fbm(x * .55 + 41, z * .7) - .5) * .45 * warp);
+      const shape = Math.exp(-Math.pow(radius, 1.6) * .85);
+      // 从峰顶向外辐射的沟壑与局部噪声共同打破圆锥，峰顶高度保持稳定。
+      const gully = Math.abs(Math.sin(Math.atan2(dz, dx) * 7 + radius * 3))
+        * Math.min(1, radius * 3) * shape;
+      const brokenRidge = Math.abs(noise(x * .95 + z * .31, z * .85) * 2 - 1)
+        * shape * warp * 3.2;
+      const branch = -15 + (top + 15) * shape - gully - brokenRidge;
+      height = Math.max(height, branch);
+    }
+  }
+  return height;
 }

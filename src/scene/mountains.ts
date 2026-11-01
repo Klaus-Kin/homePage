@@ -4,6 +4,7 @@ import { ownTree } from "./resources";
 import { createPlane, computeNormals } from "./geometry";
 import { fbm, mountainHeight } from "./terrain-math";
 import { surfaceTexture } from "./textures";
+import { addMountainSurface } from "./mountain-surface";
 
 /** 远山单独维护几何细节等级，手机减少顶点但保留相同山脊、材质和光照。 */
 export async function createMountains(init: Initialization) {
@@ -19,12 +20,16 @@ export async function createMountains(init: Initialization) {
   async function geometryFor(layer: number, mobile: boolean) {
     init.phase = `mountain-${layer}`;
     const columns = mobile ? (layer < 2 ? 170 : 110) : layer < 2 ? 420 : 270;
-    const rows = mobile ? 36 : 76;
+    // 近层包含独立支峰，纵向细分只增加在这一层；移动端仍有独立的顶点上限。
+    const rows = layer === 0 ? (mobile ? 56 : 130) : mobile ? 36 : 76;
     const geometry = await createPlane(280, 52, columns, rows, init);
     geometry.rotateX(-Math.PI / 2);
     const positions = geometry.attributes.position;
     for (let i = 0; i < positions.count; i++) {
       if (i % 32 === 0) { const pause = init.checkpoint(); if (pause) await pause; }
+      // 把同样数量的横向顶点集中到主要可见山群，外围仍延伸至原有边界。
+      const u = positions.getX(i) / 140;
+      positions.setX(i, Math.sign(u) * Math.pow(Math.abs(u), 1.5) * 140);
       positions.setY(
         i,
         mountainHeight(positions.getX(i), positions.getZ(i), layer),
@@ -47,7 +52,8 @@ export async function createMountains(init: Initialization) {
       color.setHSL(
         0.55 + cliff * 0.04,
         0.13 + (1 - cliff) * 0.1,
-        0.29 + cliff * 0.13 + grain * 0.13 + strata,
+        // 提高冷蓝中间调，月光面与雾中的山脊保留参考图的蓝灰层次。
+        0.34 + cliff * 0.15 + grain * 0.13 + strata,
       );
       color.toArray(colors, i * 3);
     }
@@ -60,10 +66,11 @@ export async function createMountains(init: Initialization) {
     const material = init.track(new THREE.MeshStandardMaterial({
       map: rock,
       bumpMap: rock,
-      bumpScale: layer < 2 ? 0.75 : 0.4,
+      bumpScale: layer < 2 ? 0.22 : 0.12,
       vertexColors: true,
       roughness: 1,
     }));
+    addMountainSurface(material);
     const mesh = new THREE.Mesh(await geometryFor(layer, lightweight), material);
     mesh.position.set(
       layer % 2 ? -12 : 10,
@@ -78,6 +85,9 @@ export async function createMountains(init: Initialization) {
   return {
     group,
     async setQuality(mobile: boolean) {
+      // 竖屏把主峰移入可见山谷，横屏恢复原构图；只移动背景山群，不改宝盒、地面或相机运动。
+      const aspect = window.innerWidth / Math.max(1, window.visualViewport?.height ?? window.innerHeight);
+      group.position.x = aspect < .6 ? 12 : aspect < 1 ? 16 : 0;
       if (mobile === lightweight) return;
       lightweight = mobile;
       // 只在桌面与轻量模式互换时重建；旧几何立即释放，普通 resize 不重复分配。

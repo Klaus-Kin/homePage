@@ -25,7 +25,8 @@ async function makeWood(face: "plain" | "spell" | "name" | "return", init: Initi
     glow = emission.getContext("2d", { willReadFrequently: face === "name" })!;
   glow.fillStyle = "#000000"; glow.fillRect(0, 0, emission.width, emission.height);
   const h = color.height;
-  ctx.fillStyle = "#64635b"; ctx.fillRect(0, 0, 1536, h);
+  // 旧木以中性蓝灰为底，暖金仅留在原刻字和开盒光效中。
+  ctx.fillStyle = "#626973"; ctx.fillRect(0, 0, 1536, h);
   bump.fillStyle = "#909090"; bump.fillRect(0, 0, 1536, h);
   // 不规则浅灰磨斑打散长条木纹，粗糙木质不会呈现拉丝金属的整齐反射。
   for (let i = 0; i < 190; i++) {
@@ -64,6 +65,14 @@ async function makeWood(face: "plain" | "spell" | "name" | "return", init: Initi
     const x = random() * 1536, y = random() > 0.5 ? random() * 9 : h - random() * 9;
     ctx.fillStyle = `rgba(159,143,114,${random() * 0.35})`;
     ctx.fillRect(x, y, random() * 35, 1 + random() * 2);
+  }
+  // 独立种子加入细小断纤维，不改变原木纹及磨边的随机序列，也不覆盖后续刻字。
+  const fibreRandom = seededRandom(8319);
+  for (let i = 0; i < 6000; i++) {
+    if (i % 256 === 0) { const pause = init.checkpoint(); if (pause) await pause; }
+    const x = fibreRandom() * 1536, y = fibreRandom() * h;
+    ctx.fillStyle = fibreRandom() > .5 ? "#c5cbd118" : "#080d1433";
+    ctx.fillRect(x, y, 1 + fibreRandom() * 8, .5 + fibreRandom() * 1.5);
   }
   // 三种纹理同步生成并旋转；展开侧面补偿真实转轴带来的倒置，字形本身不镜像。
   if (face === "spell") {

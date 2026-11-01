@@ -6,7 +6,8 @@ export function createMeadowBlade(segments = 9) {
   const positions: number[] = [], colors: number[] = [], indices: number[] = [];
   for (let i = 0; i <= segments; i++) {
     const t = i / segments;
-    const width = .026 * Math.pow(1 - t, .72) * (.8 + .35 * Math.sin(t * Math.PI));
+    // 略宽的叶腹保留中央折脊受光，宽度仍落在 vegetationReach 的既有避让包络内。
+    const width = .029 * Math.pow(1 - t, .72) * (.8 + .35 * Math.sin(t * Math.PI));
     const bend = .44 * t * t;
     for (let side = -1; side <= 1; side++) {
       positions.push(side * width, .82 * t - .25 * t ** 4, bend + (side === 0 ? .007 * Math.sin(t * Math.PI) : 0));

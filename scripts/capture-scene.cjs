@@ -8,6 +8,8 @@ async (page) => {
     ["tablet", 768, 1024],
     ["mobile", 390, 844],
     ["short", 844, 390],
+    // 短竖屏不能裁切横屏图，否则月亮会落到标题后方；单独导出相同短屏相机的实际画面。
+    ["short-portrait", 320, 480],
   ]) {
     await page.setViewportSize({ width, height });
     await page.goto(origin);
@@ -23,7 +25,8 @@ async (page) => {
     // 仅隐藏 HTML 文案，禁止修改相机、模型、灯光或画布内容。
     const style = await page.addStyleTag({
       content:
-        ".fade-content, #box-button, .scene-fallback { visibility: hidden !important; }",
+        // 截图保留最终场景像素，鼠标图层也必须隐藏，防止静态图烘入角落的金箍棒。
+        ".fade-content, #box-button, .scene-fallback, .staff-cursor-layer { visibility: hidden !important; }",
     });
     await page
       .locator("#scene canvas")

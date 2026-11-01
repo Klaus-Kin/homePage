@@ -4,7 +4,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 # 先检查所有输入，避免捕获不完整时只更新一部分降级图。
-names = ("desktop", "tablet", "mobile", "short")
+names = ("desktop", "tablet", "mobile", "short", "short-portrait")
 for name in names:
     source = ROOT / "output" / "playwright" / f"scene-{name}.png"
     if not source.is_file():

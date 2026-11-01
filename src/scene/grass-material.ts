@@ -5,8 +5,10 @@ export function createGrassMaterials(options: { strength?: number; flower?: bool
   const wind = { value: 0 }, windStrength = { value: 1 };
   const material = new THREE.MeshStandardMaterial({
     // 草叶色来自实例及叶身顶点，花株色来自完整几何；月夜亮部完全接受场景灯光。
-    color: 0xffffff, emissiveIntensity: 0, vertexColors: true,
-    roughness: .86, side: THREE.DoubleSide,
+    // 参考图草坡的银蓝叶尖由材质反射校色，根部仍由原顶点色压暗。
+    color: options.flower ? 0xffffff : new THREE.Color(1.18, 1.18, 1.4), emissiveIntensity: 0, vertexColors: true,
+    // 银蓝边光来自粗糙叶面的实际月光反射，不额外叠加发光描边。
+    roughness: .78, side: THREE.DoubleSide,
   });
   material.name = options.flower ? "meadow-flowers" : "meadow-foliage";
   const depth = new THREE.MeshDepthMaterial({

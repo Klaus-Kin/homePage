@@ -111,7 +111,9 @@ async (page) => {
         staticPage.width !== viewport.width ||
         staticPage.height !== viewport.height ||
         staticPage.overflow ||
-        (viewport.height < 500 && !staticPage.background.includes("scene-short.webp"))
+        // 短竖屏有独立静态图，不能再要求所有短屏都裁切同一张横图。
+        (viewport.height < 500 && !staticPage.background.includes(
+          viewport.width < viewport.height ? "scene-short-portrait.webp" : "scene-short.webp"))
       )
         throw new Error(
           `禁用脚本后静态场景或样式未正确加载：${JSON.stringify(staticPage)}`,

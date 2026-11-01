@@ -24,7 +24,8 @@ export const sceneConfig = {
       height: 4.0,
       targetY: 3.3,
       fov: 42,
-      moon: [0.79, 0.24, 0.12],
+      // 参考图月面中心为 (1324, 215)，直径约 186px；半径按画面高度维护。
+      moon: [0.792, 0.2285, 0.0955],
     },
     tablet: {
       cameraX: -1.8,

@@ -51,3 +51,14 @@ test("mountain ranges have distinct ridges and continuous branched slopes", () =
     Math.abs(mountainHeight(3.001, 2, 0) - mountainHeight(3, 2, 0)) < 0.1,
   );
 });
+
+// 固定的近层支峰在主峰前形成独立轮廓；不能靠随机网格碰巧获得正确构图。
+test("reference foreground summits remain distinct from the distant ridge", () => {
+  for (const [x, z] of [[-19.5, 18], [-12, 23], [-1, 19]]) {
+    const summit = mountainHeight(x, z, 0);
+    assert.ok(summit > -3, `固定支峰缺失 ${x},${z}`);
+    assert.ok(summit > mountainHeight(x - 3, z, 0) + 1.5);
+    assert.ok(summit > mountainHeight(x + 3, z, 0) + 1.5);
+    assert.ok(Math.abs(summit - mountainHeight(x + .001, z, 0)) < .03);
+  }
+});
