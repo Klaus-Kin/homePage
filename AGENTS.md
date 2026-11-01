@@ -6,6 +6,10 @@ This is a cinematic Moonlight Box homepage built with TypeScript, Three.js, and 
 
 Store static images and textures in `public/assets/`; bundled artwork lives in `src/assets/`. Tests belong in `tests/`, and browser verification and asset utilities in `scripts/`. Generated `dist/`, `output/`, and `.playwright-cli/` directories are ignored.
 
+Archive offline entry and cursor originals in `assets/source/entry-artwork/`; these files are authoring inputs, not runtime URLs. `scripts/prepare-entry-artwork.py` resolves this directory relative to the script and writes runtime textures and cursors to `public/assets/`. Entry first-frame export and the five static-scene captures use `output/playwright/` as temporary storage; commit the resulting runtime assets in `public/assets/`, not temporary captures, logs, or `dist/`.
+
+When moving or replacing artwork, update its generator inputs, source records, and documentation links together. Preserve existing runtime filenames and URLs unless a runtime change is explicitly requested. For a path-only move, compare original SHA256 values and regenerated image dimensions and pixels. Check for stale paths, run tests and build, and inspect desktop/mobile/short-screen rendering, both entry icons, three cursor states, and affected fallback paths. See README for the authoring commands; do not duplicate the workflow here.
+
 ## Build, Test, and Development Commands
 
 - `npm ci`: install dependencies from the lockfile.

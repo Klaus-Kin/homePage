@@ -30,6 +30,15 @@
 
 项目摘取实际使用字形并转换为归一化矢量轮廓；部分缺字由同源部件重组，简体文案采用对应传统字形。具体字例见现有授权记录。这些轮廓与改作仍需遵守来源条款及署名要求。
 
+## 入口图标与光标原稿
+
+- [assets/source/entry-artwork/staff-and-monkey-hands.png](assets/source/entry-artwork/staff-and-monkey-hands.png)：用户提供的金箍棒与猴手透明原稿，用于默认金箍棒、入口指向手与宝盒抓取手。
+- [assets/source/entry-artwork/crown-and-monkey-head.png](assets/source/entry-artwork/crown-and-monkey-head.png)：用户提供的王冠与猴脸透明原稿，用于冠座、左右冠羽和猴脸入口图标。
+- 现有制作脚本仅注明“用户提供的透明原稿”；仓库未提供可核验的作者、原始发布地址或明确许可文本。此处记录已有信息，不推定用户持有版权、不推定商业使用或再分发许可，也不将这些图像及其衍生资源归为项目 MIT 授权。进一步使用或再分发前应补齐权利来源与许可记录。
+- 衍生关系：[scripts/prepare-entry-artwork.py](scripts/prepare-entry-artwork.py) 对原稿进行裁切、冠羽遮罩分层、月夜调色与透明缩放，生成 `public/assets/entry-crown-{base,left,right}*.png`、`entry-monkey-artwork*.png` 和 `cursor-*.png`（含原色及原生光标尺寸版本）。运行时通过 [src/entry-artwork.ts](src/entry-artwork.ts) 使用这些纹理；[scripts/export-entry-stills.cjs](scripts/export-entry-stills.cjs) 与 [scripts/save-entry-stills.py](scripts/save-entry-stills.py) 再导出／保存冠与猴脸的多尺寸、月夜／原色及红眼首帧后备图 `public/assets/entry-*.png`。
+
+制作操作见 [README](README.md#入口原稿与生成流程)；本节只记录来源、授权现状和衍生关系。
+
 ## 场景预览与依赖
 
 [public/assets/scene-desktop.webp](public/assets/scene-desktop.webp) 及其他 `scene-*.webp` 为场景静态导出；使用这些图像时也应保留其中所含第三方素材的来源说明，不能把截图视为素材授权的替代。

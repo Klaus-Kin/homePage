@@ -79,10 +79,52 @@ These are **optional asset-authoring tools**, not routine startup or build steps
 | --- | --- |
 | `python scripts/build-inscription.py --copy-only` | Python, fontTools, and Shapely; generates static calligraphic glyphs. Downloads the font and OFL to ignored `output/calligraphy/` on first use |
 | `python scripts/build-inscription.py` | Same requirements; also rebuilds the inscription SVG and its attribution record. Inspect the script before overwriting manually adjusted resources |
-| `scripts/capture-scene.cjs` → `python scripts/build-assets.py` | Capture four scene layouts on the development page using the Playwright CLI workflow below, then use Python and Pillow to convert `output/playwright/scene-*.png` into `public/assets/scene-*.webp` |
-| `scripts/export-entry-stills.cjs` | Run through Playwright CLI on the development server to export entry PNG assets from the shared Three.js models |
+| `python scripts/prepare-entry-artwork.py` | Python and Pillow; generates layered crown and monkey textures, moonlight/color variants, and three cursor PNG sets from archived artwork |
+| `scripts/capture-scene.cjs` → `python scripts/build-assets.py` | Capture five scene layouts on the development page with Playwright CLI, then convert them to `public/assets/scene-*.webp`; see below |
+| `scripts/export-entry-stills.cjs` → `python scripts/save-entry-stills.py` | Export entry first frames from the development server, then save CLI output as `public/assets/entry-*.png`; see below |
 
 Prepare Python dependencies in a separate asset-authoring environment; the repository has no Python lockfile. Preserve source attribution, modification notes, and license records when replacing assets. See [third-party notices](THIRD_PARTY_NOTICES.md).
+
+### Entry artwork and generation workflow
+
+Offline source artwork is archived in [assets/source/entry-artwork/](assets/source/entry-artwork/) and is not loaded directly by the page:
+
+| Source | Purpose |
+| --- | --- |
+| [staff-and-monkey-hands.png](assets/source/entry-artwork/staff-and-monkey-hands.png) | Golden staff, pointing monkey hand, and grabbing monkey hand |
+| [crown-and-monkey-head.png](assets/source/entry-artwork/crown-and-monkey-head.png) | Crown base, left/right feathers, and monkey face |
+
+Install Pillow in the authoring environment once (`python -m pip install Pillow`). Run the following commands from the repository root; the generator itself resolves input and output paths relative to its script location. First run `python scripts/prepare-entry-artwork.py` to generate moonlight/color crown and monkey textures and layered/native `cursor-staff`, `cursor-point`, and `cursor-grab` assets. It does not generate entry first frames; export those next:
+
+1. Run `npm run dev` in another terminal and use its actual URL. This requires the development server because the exporter imports `/src/` modules.
+2. Prepare Playwright CLI and its browser, create `output/playwright/`, then run (adjust the URL to the terminal output):
+
+```sh
+playwright-cli open http://127.0.0.1:5173
+playwright-cli run-code --filename scripts/export-entry-stills.cjs > output/playwright/entry-stills.txt
+python scripts/save-entry-stills.py output/playwright/entry-stills.txt
+```
+
+The saver writes 36 transparent first frames to `public/assets/`: moonlight/color crown and monkey variants and red-eyed monkey variants, at 30, 36, and 44 sizes with 1×/2× pixel density. Commit changed source artwork, authoring scripts, runtime PNGs that actually changed, and attribution records. Keep existing filenames and `/assets/` URLs; exclude temporary export text. When replacing artwork, check that crop coordinates and transparency masks still fit, then follow [testing and acceptance](#testing-and-acceptance) for both entry icons, all three cursors, and fallback images.
+
+### Five static scenes
+
+Keep the development server running and execute on its open page:
+
+```sh
+playwright-cli run-code --filename scripts/capture-scene.cjs
+python scripts/build-assets.py
+```
+
+| Scene | Capture viewport | Runtime asset |
+| --- | --- | --- |
+| Desktop | 1920×1080 | `scene-desktop.webp` |
+| Tablet | 768×1024 | `scene-tablet.webp` |
+| Mobile | 390×844 | `scene-mobile.webp` |
+| Short landscape | 844×390 | `scene-short.webp` |
+| Short portrait | 320×480 | `scene-short-portrait.webp` |
+
+The capture script hides only text, interaction layers, and cursors, saving the real scene to `output/playwright/scene-*.png`. The converter requires all five inputs before producing WebP files under `public/assets/`. Short portrait uses its own image rather than a crop of the landscape image. Rebuild and check normal rendering, WebGL fallback, and JavaScript-disabled layouts in production preview; never capture an existing fallback background as a new scene.
 
 ## Project structure
 
@@ -103,7 +145,8 @@ src/
                            Pregenerated glyphs and text rendering
   style.css                Layout, responsive styles, and static backgrounds
   assets/                  Inscription SVG inlined at build time
-public/assets/             Lunar texture, static scenes, icon fallbacks, licenses
+assets/source/entry-artwork/ Offline entry and cursor originals, not loaded by the page
+public/assets/             Lunar texture, static scenes, entry textures, cursors, fallbacks, licenses
 tests/                     Node unit and regression tests
 scripts/                   Browser checks, recordings, captures, optional asset tools
 ```

@@ -3,6 +3,9 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageChops, ImageEnhance
 
 ROOT = Path(__file__).resolve().parent.parent
+# 原稿仅供离线制作，通过脚本位置定位，避免依赖调用时的工作目录或将大图打包到网页。
+SOURCE = ROOT / "assets" / "source" / "entry-artwork"
+# 生成资源继续使用既有目录和文件名，保持运行时纹理、静态后备与鼠标加载地址一致。
 ASSETS = ROOT / "public" / "assets"
 
 
@@ -33,7 +36,7 @@ def save_color_pair(image, name, limit=512):
     save(image.copy(), name.replace(".png", "-color.png"), limit)
 
 
-icons = Image.open(ROOT / "金羽王冠与猿王头像.png").convert("RGBA")
+icons = Image.open(SOURCE / "crown-and-monkey-head.png").convert("RGBA")
 crown = icons.crop((0, 0, 950, icons.height))
 monkey = trim(icons.crop((950, 0, icons.width, icons.height)))
 save_color_pair(monkey, "entry-monkey-artwork.png")
@@ -56,7 +59,7 @@ for name, region in [("base", None), ("left", (0, 0, 480, crown.height)),
     layer.putalpha(ImageChops.multiply(crown.getchannel("A"), mask))
     save_color_pair(layer.crop(bounds), f"entry-crown-{name}.png")
 
-cursor = Image.open(ROOT / "金红云纹金箍棒与猴手饰件.png").convert("RGBA")
+cursor = Image.open(SOURCE / "staff-and-monkey-hands.png").convert("RGBA")
 for name, left, right in [("staff", 0, 700), ("point", 700, 1350), ("grab", 1350, cursor.width)]:
     item = trim(cursor.crop((left, 0, right, cursor.height)))
     # 同一 72px 方形画幅保留 3px 外边距；棒头、指尖和抓取中心分别对齐各自热点。

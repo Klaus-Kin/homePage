@@ -81,10 +81,52 @@ npm run dev
 | --- | --- |
 | `python scripts/build-inscription.py --copy-only` | Python、fontTools、Shapely；生成静态行书字形。首次运行会下载字体和 OFL 到忽略目录 `output/calligraphy/` |
 | `python scripts/build-inscription.py` | 同上；另重建题词 SVG 与其授权记录。修改前检查脚本，不要无意覆盖人工调整 |
-| `scripts/capture-scene.cjs` → `python scripts/build-assets.py` | 先用下节的 Playwright CLI 在开发页面捕获四种场景，再用 Python 与 Pillow 将 `output/playwright/scene-*.png` 转为 `public/assets/scene-*.webp` |
-| `scripts/export-entry-stills.cjs` | 通过 Playwright CLI 在开发服务页面执行，导出共享 Three.js 模型的入口 PNG 资源 |
+| `python scripts/prepare-entry-artwork.py` | Python、Pillow；从归档原稿生成冠羽分层、猴脸纹理、月夜与原色版本，以及三种光标 PNG |
+| `scripts/capture-scene.cjs` → `python scripts/build-assets.py` | 先用 Playwright CLI 在开发页面捕获五种场景，再用 Python 与 Pillow 转为 `public/assets/scene-*.webp`，步骤见下文 |
+| `scripts/export-entry-stills.cjs` → `python scripts/save-entry-stills.py` | 在开发服务中导出入口首帧，再将 CLI 输出保存为 `public/assets/entry-*.png`，步骤见下文 |
 
 Python 工具依赖需在单独的素材制作环境中准备；仓库没有 Python 锁文件。更换素材时保留来源、改作说明和授权记录，详见 [第三方素材说明](THIRD_PARTY_NOTICES.md)。
+
+### 入口原稿与生成流程
+
+离线原稿归档在 [assets/source/entry-artwork/](assets/source/entry-artwork/)，不由网页直接加载：
+
+| 原稿 | 用途 |
+| --- | --- |
+| [staff-and-monkey-hands.png](assets/source/entry-artwork/staff-and-monkey-hands.png) | 金箍棒、指向猴手与抓取猴手 |
+| [crown-and-monkey-head.png](assets/source/entry-artwork/crown-and-monkey-head.png) | 冠座、左右冠羽与猴脸 |
+
+首次准备制作环境时安装 Pillow（`python -m pip install Pillow`）。以下命令从仓库根目录执行；生成脚本自身通过脚本位置定位原稿与输出目录。先运行 `python scripts/prepare-entry-artwork.py`，生成冠羽和猴脸的月夜／原色纹理，以及 `cursor-staff`、`cursor-point`、`cursor-grab` 的图层／原生光标资源。它不生成入口首帧；随后按以下顺序导出：
+
+1. 在另一个终端运行 `npm run dev`，使用实际开发地址。此步骤需要开发服务，因为导出器会导入 `/src/` 模块。
+2. 准备 Playwright CLI 及浏览器，创建 `output/playwright/`，执行（地址按终端输出调整）：
+
+```sh
+playwright-cli open http://127.0.0.1:5173
+playwright-cli run-code --filename scripts/export-entry-stills.cjs > output/playwright/entry-stills.txt
+python scripts/save-entry-stills.py output/playwright/entry-stills.txt
+```
+
+保存器将 36 张透明首帧写入 `public/assets/`：冠与猴脸的月夜／原色版、猴脸红眼版，覆盖 30、36、44 三种尺寸及 1×／2× 像素密度。提交修改的原稿、制作脚本、实际变化的运行 PNG 和来源记录；保持既有资源名及 `/assets/` 地址，临时导出文本不提交。替换原稿时需检查既有裁切坐标和透明遮罩是否仍适用，再按[测试与验收](#测试与验收)验证两个入口、三种光标和降级图。
+
+### 五种静态场景
+
+保持开发服务运行，在已打开的开发页面上执行：
+
+```sh
+playwright-cli run-code --filename scripts/capture-scene.cjs
+python scripts/build-assets.py
+```
+
+| 场景 | 捕获视口 | 运行资源 |
+| --- | --- | --- |
+| 桌面 | 1920×1080 | `scene-desktop.webp` |
+| 平板 | 768×1024 | `scene-tablet.webp` |
+| 手机 | 390×844 | `scene-mobile.webp` |
+| 矮横屏 | 844×390 | `scene-short.webp` |
+| 矮竖屏 | 320×480 | `scene-short-portrait.webp` |
+
+捕获器只隐藏文字、交互层与光标，保存真实场景到 `output/playwright/scene-*.png`；转换器要求五张输入齐全，再生成 `public/assets/` 下的 WebP。矮竖屏使用独立图像，不能以横屏裁切图替代。完成后重新构建，在生产预览检查正常、WebGL 降级及禁用 JavaScript 的布局；不要将降级背景再次捕获为新背景。
 
 ## 项目结构
 
@@ -105,7 +147,8 @@ src/
                            预生成字形与文字渲染
   style.css                排版、响应式样式与静态背景
   assets/                  构建时内联的题词 SVG
-public/assets/             月面纹理、静态场景、图标降级图和素材授权
+assets/source/entry-artwork/ 离线入口与光标原稿，不参与网页加载
+public/assets/             月面纹理、静态场景、入口纹理、光标、降级图和素材授权
 tests/                     Node 单元与回归测试
 scripts/                   浏览器验收、录制、截图和可选素材工具
 ```
