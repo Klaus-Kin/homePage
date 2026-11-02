@@ -34,12 +34,12 @@ async (page) => {
           return original.apply(this,args);
         };
       });
-      if(mode==='module-failure') await target.route(/\/src\/entry-icons\.ts(?:\?|$)/,route=>route.abort());
+      if(mode==='module-failure') await target.route(/\/(?:src\/entry-icons\.ts|assets\/entry-icons-[^/]+\.js)(?:\?|$)/,route=>route.abort());
       let release;
-      if(mode==='module-delay') await target.route(/\/src\/entry-icons\.ts(?:\?|$)/,async route=>{
+      if(mode==='module-delay') await target.route(/\/(?:src\/entry-icons\.ts|assets\/entry-icons-[^/]+\.js)(?:\?|$)/,async route=>{
         await new Promise(resolve=>{release=resolve;});await route.continue();
       });
-      if(mode==='boot-timeout') await target.route(/\/src\/scene\.ts(?:\?|$)/,async route=>{
+      if(mode==='boot-timeout') await target.route(/\/(?:src\/scene\.ts|assets\/scene-[^/]+\.js)(?:\?|$)/,async route=>{
         await new Promise(resolve=>{release=resolve;});await route.continue();
       });
       await target.goto(origin);

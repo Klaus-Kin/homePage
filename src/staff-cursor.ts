@@ -1,6 +1,7 @@
 import { CURSOR_STYLES, cursorKindForTarget } from "./cursor-state.ts";
 import type { CursorKind } from "./cursor-state.ts";
 import { colorRevealMask, decodeCursor, targetColorReveal, setColorRevealVisibility } from "./color-reveal.ts";
+import { diagnostics } from "./performance-policy.ts";
 
 /** 用视口内的透明图层显示参考图鼠标；72 像素尺寸固定，热点随形态切换，越界部分由 CSS 自然裁切。 */
 export function installStaffCursor() {
@@ -26,6 +27,14 @@ export function installStaffCursor() {
   const colors = { point: new Image(72, 72), grab: new Image(72, 72) };
   const motion = matchMedia("(prefers-reduced-motion: reduce)");
   let colorRaf = 0, disposed = false;
+  let nativeFallback = false, lastHit: Element | null = null, hitDirty = true;
+  let nativeImages: HTMLImageElement[] = [];
+  // 触屏页面不使用鼠标，避免为它预取三张图片而竞争首屏资源。
+  const preloadNative = () => {
+    if (!nativeImages.length) nativeImages = Object.values(CURSOR_STYLES).map(style => {
+      const image = new Image(); image.src = style.nativeSource; return image;
+    });
+  };
   let previousTarget: Element | null = null;
   let lastPoint: { x: number; y: number } | undefined;
   const hide = () => {
@@ -34,8 +43,13 @@ export function installStaffCursor() {
     layer.hidden = true;
   };
   const update = () => {
-    if (loader?.isConnected || app?.inert || app?.dataset.state === "loading" || !media.matches || !lastPoint || document.hidden) { hide(); return; }
-    const hit = document.elementFromPoint(lastPoint.x, lastPoint.y);
+    if (loader?.isConnected || app?.inert || app?.dataset.state === "loading" || !media.matches || !lastPoint || document.hidden) {
+      hide(); root.classList.remove("staff-cursor-native"); return;
+    }
+    if (nativeFallback) { hide(); root.classList.add("staff-cursor-native"); return; }
+    // 事件携带实际命中对象；只有取景改变或加载交接才补一次几何命中，避免每次移动强制刷新布局。
+    if (hitDirty) { lastHit = document.elementFromPoint(lastPoint.x, lastPoint.y); hitDirty = false; }
+    const hit = lastHit;
     const kind = cursorKindForTarget(hit);
     const active = kind;
     const target = hit?.closest(".journey-link, #box-button, #static-box") ?? null;
@@ -49,26 +63,40 @@ export function installStaffCursor() {
     if (layer.firstChild !== current) layer.replaceChildren(current);
     const color = active === "staff" ? undefined : colors[active];
     if (color && color.parentElement !== layer) layer.append(color);
-    layer.dataset.cursorKind = active;
-    // 在指针事件内直接提交位置，不插值、不使用动画或额外 RAF，保持棒头与实际点击位置一致。
+    if (layer.dataset.cursorKind !== active) layer.dataset.cursorKind = active;
+    // 每帧消费最新真实位置，不插值；高频设备的中间输入不会反复执行命中与样式更新。
     const transform = `translate3d(${lastPoint.x - style.x}px, ${lastPoint.y - style.y}px, 0)`;
     current.style.transform = transform;
     if (color) {
       color.style.transform = transform;
       color.style.maskImage = colorRevealMask(progress);
-      color.dataset.colorReveal = String(progress);
+      if (diagnostics) color.dataset.colorReveal = String(progress);
       // 复色只在进行中请求帧；静止指针也能完成，完成后停止调度。
       if (progress < 1 && target?.matches(":hover, :focus-visible") && !colorRaf)
         colorRaf = requestAnimationFrame(() => { colorRaf = 0; update(); });
     }
     if (layer.hidden) { layer.hidden = false; root.classList.add("staff-cursor-active"); }
   };
+  const schedule = () => {
+    if (!colorRaf) colorRaf = requestAnimationFrame(() => { colorRaf = 0; update(); });
+  };
+  const resize = () => { hitDirty = true; schedule(); };
+  const slowFrames = async () => {
+    if (nativeFallback || disposed || !media.matches) return;
+    preloadNative();
+    // 三种原生资源都可解码后才回退；失败时由浏览器保留系统手势，不产生不可见的鼠标。
+    await Promise.all(nativeImages.map(image => image.decode().catch(() => {})));
+    if (disposed) return;
+    nativeFallback = true; update();
+  };
   const leave = () => {
     if (previousTarget) targetColorReveal(previousTarget, performance.now(), motion.matches);
-    previousTarget = null; lastPoint = undefined; hide();
+    previousTarget = null; lastPoint = undefined; lastHit = null; hitDirty = true; hide();
+    root.classList.remove("staff-cursor-native");
   };
   const visibility = () => { setColorRevealVisibility(document.hidden, performance.now()); leave(); };
   const change = () => {
+    if (media.matches) preloadNative();
     // 仅桌面精细指针需要加载资源；图片成功加载前保持原生光标，避免出现完全不可见的指针。
     if (media.matches) for (const key of Object.keys(images) as CursorKind[]) {
       if (!images[key].getAttribute("src")) images[key].src = CURSOR_STYLES[key].source;
@@ -79,13 +107,23 @@ export function installStaffCursor() {
   const move = (event: PointerEvent) => {
     if (event.pointerType !== "mouse") { leave(); return; }
     lastPoint = { x: event.clientX, y: event.clientY };
-    update();
+    lastHit = event.target instanceof Element ? event.target : null;
+    // 起点仍取真实进入事件的时间；只合并绘制，不能把既有 700/900ms 复色延后一帧。
+    const target = lastHit?.closest(".journey-link, #box-button, #static-box") ?? null;
+    if (previousTarget !== target) {
+      const now = performance.now();
+      if (previousTarget) targetColorReveal(previousTarget, now, motion.matches);
+      previousTarget = target;
+      if (target) targetColorReveal(target, now, motion.matches);
+    }
+    hitDirty = false; schedule();
   };
   // 只观察加载层移除与页面门禁；两者均完成后立即断开，不给主页增加持续的 DOM 监听开销。
   // 鼠标静止时也要在加载结束后完成交接；图片未就绪、已离开窗口或已切到触屏时仍由 update 保留原生回退。
   const loadingObserver = new MutationObserver(() => {
     if (loader?.isConnected || app?.inert || app?.dataset.state === "loading") return;
     loadingObserver.disconnect();
+    hitDirty = true;
     update();
   });
   if (loader?.parentElement) loadingObserver.observe(loader.parentElement, { childList: true });
@@ -107,7 +145,8 @@ export function installStaffCursor() {
   window.addEventListener("pointermove", move, { passive: true });
   window.addEventListener("pointerover", move, { passive: true });
   window.addEventListener("blur", leave);
-  window.addEventListener("resize", update, { passive: true });
+  window.addEventListener("resize", resize, { passive: true });
+  window.addEventListener("moon-slow-frames", slowFrames);
   root.addEventListener("pointerleave", leave);
   document.addEventListener("visibilitychange", visibility);
   media.addEventListener("change", change);
@@ -119,13 +158,15 @@ export function installStaffCursor() {
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerover", move);
     window.removeEventListener("blur", leave);
-    window.removeEventListener("resize", update);
+    window.removeEventListener("resize", resize);
+    window.removeEventListener("moon-slow-frames", slowFrames);
     root.removeEventListener("pointerleave", leave);
     document.removeEventListener("visibilitychange", visibility);
     media.removeEventListener("change", change);
     disposed = true;
     imageEvents.abort();
     hide();
+    root.classList.remove("staff-cursor-native");
     layer.remove();
   };
 }

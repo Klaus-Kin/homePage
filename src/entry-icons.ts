@@ -2,10 +2,11 @@ import * as THREE from "three";
 import { EntryMotion } from "./entry-motion.ts";
 import { createEntryArtwork } from "./entry-artwork.ts";
 import { Initialization } from "./scene/initialization.ts";
-import { warmScene } from "./scene/gpu-initialization.ts";
+import { warmSceneBatched as warmScene } from "./scene/gpu-initialization.ts";
 import type { EntryModel } from "./entry-models.ts";
 import { createEntryRenderer, createEntryScene, resizeEntryRenderer } from "./entry-rendering.ts";
 import { targetColorReveal, synchronizeTargetColorReveal } from "./color-reveal.ts";
+import { coalesceFrame, diagnostics } from "./performance-policy.ts";
 
 /** 两个透明画布共用一个按需 RAF；交互文本独立于 WebGL，失败时仍可使用静态入口。 */
 export function installEntryIcons(links: HTMLAnchorElement[]) {
@@ -56,6 +57,7 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
     return synchronizeTargetColorReveal(item.link,progress,performance.now(),motionQuery.matches);
   }
   function activate(item: Item) {
+    item.motion.reduced=motionQuery.matches;
     // 延迟安装时也立即同步共享时钟，让鼠标在模型准备期间沿用已显示的复色进度。
     if(item.ready) targetColorReveal(item.link, performance.now(), motionQuery.matches);
     else synchronizeFallback(item);
@@ -108,7 +110,7 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
       // 最后一次取消检查之后没有异步间隙，迟到构建不能在旅程或离页后追加画布。
       item.slot.append(canvas);
       item.ready=true;
-      item.slot.dataset.colorReveal=String(colorReveal);
+      if (diagnostics) item.slot.dataset.colorReveal=String(colorReveal);
       item.slot.dataset.modelReady="true";
       item.dirty=true;
       wake();
@@ -125,6 +127,8 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
     previous=now;
     for(const item of items) {
       const {motion}=item;
+      // 部分浏览器在后台切换媒体偏好时会延后 change 事件；已有帧直接核对真实值，避免恢复后仍持续绘制。
+      if(motion.reduced!==motionQuery.matches) { motion.reduced=motionQuery.matches; item.dirty=true; }
       const needsFrame=item.dirty || motion.running;
       if(!needsFrame) continue;
       motion.advance(delta);
@@ -136,17 +140,17 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
       item.copy.style.transform=amount>0?`translate${world?"X":"Y"}(${offset}px)`:"none";
       // 冠座与文案使用同一帧、同一位移，羽片在内部继续独立飘动；猴头保留原来的转头。
       item.slot.style.transform=world?"none":item.copy.style.transform;
-      item.link.dataset.entryActive=String(motion.active);
+      if (diagnostics && item.link.dataset.entryActive!==String(motion.active)) item.link.dataset.entryActive=String(motion.active);
       if(item.ready && item.renderer && item.scene && item.camera && item.model && !contrastQuery.matches) {
         try {
           item.model.update(motion.time,amount,motion.eye,motion.silk);
           const colorReveal=targetColorReveal(item.link, now, motionQuery.matches);
           item.model.setColorReveal?.(colorReveal);
-          item.slot.dataset.colorReveal=String(colorReveal);
+          if (diagnostics) item.slot.dataset.colorReveal=String(colorReveal);
           item.renderer.render(item.scene,item.camera);
           // 首帧成功提交后才隐藏后备图；布局始终由固定占位和原图决定。
-          item.slot.dataset.modelReady="true";
-          item.slot.dataset.frames=String(++item.frames);
+          if(item.slot.dataset.modelReady!=="true") item.slot.dataset.modelReady="true";
+          if (diagnostics) item.slot.dataset.frames=String(++item.frames);
         } catch(error) {
           release(item);
           console.warn("入口立体图标绘制失败，已恢复静态图标：",error);
@@ -173,7 +177,9 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
     item.link.addEventListener("blur",()=>{item.focus=false;activate(item);},{signal:events.signal});
     activate(item);
   }
-  const resizeObserver=new ResizeObserver(()=>{items.forEach(resize);wake();});
+  // ResizeObserver 与窗口事件共用一个帧，避免停靠开发者工具时重复重置图标画布。
+  const resizeFrame=coalesceFrame(()=>{items.forEach(resize);wake();});
+  const resizeObserver=new ResizeObserver(()=>resizeFrame.request());
   items.forEach(item=>resizeObserver.observe(item.slot));
   const attributes=new MutationObserver(()=>items.forEach(activate));
   items.forEach(item=>attributes.observe(item.link,{attributes:true,attributeFilter:["aria-disabled"]}));
@@ -183,7 +189,7 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
   };
   motionQuery.addEventListener("change",preferences,{signal:events.signal});
   contrastQuery.addEventListener("change",preferences,{signal:events.signal});
-  window.addEventListener("resize",()=>{items.forEach(resize);wake();},{signal:events.signal,passive:true});
+  window.addEventListener("resize",()=>resizeFrame.request(),{signal:events.signal,passive:true});
   document.addEventListener("visibilitychange",()=>{
     cancelAnimationFrame(raf);raf=0;previous=undefined;
     if(!document.hidden) {items.forEach(item=>{item.dirty=true;});wake();}
@@ -192,9 +198,14 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
   void (async()=>{
     for(const item of items) {
       if(disposed || item.init.controller.signal.aborted) break;
+      // 装饰增强在低优先级任务里启动；先交还一帧给刚进入主页的输入和主场景。
+      await item.init.checkpoint(true);
+      while(document.hidden && !disposed && !item.init.controller.signal.aborted)
+        await item.init.waitFor(new Promise<void>(resolve=>setTimeout(resolve,50)));
+      if(disposed || item.init.controller.signal.aborted) break;
       await create(item);
     }
-  })();
+  })().catch(error=>{if(!disposed && !(error instanceof DOMException && error.name==="AbortError")) console.warn("入口增强已停止：",error);});
   const cancelPending=()=>items.forEach(item=>{if(!item.ready) release(item);});
   window.addEventListener("pagehide",cancelPending,{signal:events.signal});
   window.addEventListener("moon-boot-failed",cancelPending,{signal:events.signal});
@@ -204,6 +215,7 @@ export function installEntryIcons(links: HTMLAnchorElement[]) {
     disposed=true;
     events.abort();
     resizeObserver.disconnect();attributes.disconnect();
+    resizeFrame.dispose();
     cancelAnimationFrame(raf);
     items.forEach(item=>{
       release(item);

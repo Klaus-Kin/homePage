@@ -1,3 +1,5 @@
+import { diagnostics } from "../performance-policy.ts";
+
 /** 每批最多占用约 8ms；真正切换浏览器任务，让合成、输入和超时守卫获得执行机会。 */
 export class Initialization {
   readonly controller = new AbortController();
@@ -13,6 +15,8 @@ export class Initialization {
   private schedule: () => Promise<void>;
   private reportProgress: (phase: string) => void;
   private reportedPhase = "";
+  private owner?: Initialization;
+  private children: Initialization[] = [];
 
   constructor(now = () => performance.now(),
     schedule: () => Promise<void> = async () => {
@@ -21,11 +25,31 @@ export class Initialization {
       }).scheduler;
       if (scheduler) await scheduler.yield();
       else await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    }, reportProgress: (phase: string) => void = () => {}) {
+    }, reportProgress: (phase: string) => void = () => {}, owner?: Initialization) {
     this.now = now; this.schedule = schedule; this.started = now(); this.reportProgress = reportProgress;
+    this.owner = owner;
+  }
+
+  /** 同一初始化树共享下载缓存，子任务只独立计算自己的 CPU 时间预算。 */
+  get root(): Initialization { return this.owner?.root ?? this; }
+
+  /** 仅验收读取时合并所有并行预算，嵌套子任务也不能漏出长任务统计。 */
+  get stats(): { batches: number[]; phases: string[] } {
+    const children = this.children.map(child => child.stats);
+    return { batches: this.batches.concat(...children.map(child => child.batches)),
+      phases: this.phases.concat(...children.map(child => child.phases)) };
   }
 
   check() { this.controller.signal.throwIfAborted(); }
+
+  /** 并行生成使用独立 CPU 预算，共享上级资源所有权；一个任务的网络等待不抹掉另一个任务已用的时间。 */
+  fork() {
+    this.check();
+    const child = new Initialization(this.now, this.schedule, this.reportProgress, this);
+    this.children.push(child);
+    this.cleanup(() => child.dispose());
+    return child;
+  }
 
   /** 未到预算时不创建微任务；调用点只在返回 Promise 时 await。 */
   checkpoint(force = false): Promise<void> | undefined {
@@ -37,8 +61,10 @@ export class Initialization {
     }
     const duration = this.now() - this.started;
     if (!force && duration < 8) return;
-    this.batches.push(duration);
-    this.phases.push(this.phase);
+    if (diagnostics || typeof window === "undefined") {
+      this.batches.push(duration);
+      this.phases.push(this.phase);
+    }
     return this.schedule().then(() => { this.check(); this.started = this.now(); });
   }
 
@@ -46,6 +72,7 @@ export class Initialization {
   track<T extends { dispose(): void }>(resource: T): T {
     if (this.controller.signal.aborted) { resource.dispose(); this.check(); }
     this.resources.add(resource);
+    this.owner?.track(resource);
     return resource;
   }
 
@@ -72,7 +99,8 @@ export class Initialization {
     if (this.released.has(resource)) return;
     this.released.add(resource);
     this.resources.delete(resource);
-    resource.dispose();
+    if (this.owner) this.owner.release(resource);
+    else resource.dispose();
   }
 
   /** 纹理下载不能可靠中断时立即结束等待，并释放迟到结果。 */
@@ -97,5 +125,6 @@ export class Initialization {
     this.cleanups.clear();
     this.resources.forEach((resource) => this.release(resource));
     this.resources.clear();
+    this.children.length = 0;
   }
 }

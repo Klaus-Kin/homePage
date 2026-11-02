@@ -2,6 +2,22 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Initialization } from "../src/scene/initialization.ts";
 
+// 并行任务各自计时，上级与子级可能同时持有同一纹理；上级取消必须即时传播且只释放一次。
+test("parallel initialization scopes keep separate CPU budgets and deduplicate shared disposal", async () => {
+  let time = 0, releases = 0;
+  const parent = new Initialization(() => time, async () => {}), a = parent.fork(), b = parent.fork();
+  const resource = { dispose() { releases++; } };
+  a.track(resource); b.track(resource);
+  time = 6;
+  const pending = a.waitFor(Promise.resolve()); time = 400; await pending;
+  await b.checkpoint(); assert.deepEqual(b.batches, [400]);
+  assert.deepEqual(parent.stats.batches, [400]);
+  assert.equal(a.checkpoint(), undefined);
+  parent.release(resource); parent.dispose();
+  assert.equal(releases, 1); assert.throws(() => a.check(), { name: "AbortError" });
+  assert.throws(() => b.check(), { name: "AbortError" });
+});
+
 // 异步编译的墙钟等待不能伪装成 CPU 长批次，取消也不必等驱动轮询完成。
 test("GPU waits reset CPU batch time and reject immediately on cancellation", async () => {
   let time = 0;

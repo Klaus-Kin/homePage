@@ -1,9 +1,12 @@
 // 生产预览下普通刷新与忽略缓存刷新各五轮，覆盖 DPR 1/1.5；trace 保留连续画面供截图复核。
 async (page) => {
+  // 验收显式开启复色诊断，普通访问仍不写入逐帧属性。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin=new URL(page.url()).origin, results=[];
   const assert=(condition,message)=>{if(!condition) throw new Error(message);};
   for(const ratio of [1,1.5]) for(const ignoreCache of [false,true]) {
     const context=await page.context().browser().newContext({viewport:{width:1366,height:768},deviceScaleFactor:ratio});
+    await context.addInitScript(() => { window.__moonDiagnostics = true; });
     try {
       await context.addInitScript(()=>{
         window.__refreshFrames=[];

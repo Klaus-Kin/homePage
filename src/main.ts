@@ -1,4 +1,5 @@
 import { pageConfig } from "./config";
+import { coalesceFrame } from "./performance-policy.ts";
 import { installStaffCursor } from "./staff-cursor";
 import { Inscription } from "./inscription";
 import { INSCRIPTION_TEXT } from "./inscription-strokes";
@@ -74,11 +75,21 @@ document
     link.href = pageConfig.blogUrl;
   });
 
+let viewportQualityTimer = 0;
+let lastViewport = "";
+const viewportFrame = coalesceFrame(syncViewport);
+function queueViewport() { viewportFrame.request(); }
 function syncViewport() {
   // visualViewport 优先处理移动浏览器地址栏，固定遮罩仍覆盖整个布局视口与安全区。
   const height = window.visualViewport?.height ?? window.innerHeight;
+  const key = `${innerWidth}:${height}:${window.devicePixelRatio}`;
+  if (key === lastViewport) return;
+  lastViewport = key;
   document.documentElement.style.setProperty("--view-height", `${height}px`);
-  scene?.resize();
+  scene?.resize(false);
+  // 连续拖动开发者工具只更新取景，停止 150ms 后再提交昂贵的画质切换。
+  clearTimeout(viewportQualityTimer);
+  viewportQualityTimer = window.setTimeout(() => { if (!leaving) scene?.resize(true); }, 150);
   inkTransition.resize();
 }
 function showFallback(error: unknown) {
@@ -123,6 +134,7 @@ function animateTransition(now: number) {
   // 落墨后锁住已呈现的淡黄底幕和完整题词，偏好切换不允许回退到开盖或光圈阶段。
   const frame = inscriptionLocked ? { ...calculated, white: true, spread: 1, progress: 1 } : calculated;
   scene?.setTransition(frame.progress);
+  scene?.setCovered(frame.white && frame.spread >= 1);
   // 正常场景读取盒内锚点；降级时以截图热点中心定位，不依赖 WebGL。
   let source = scene?.getLightScreenPosition();
   if (!source) {
@@ -296,8 +308,8 @@ function onMotionChange() {
   scene?.setReducedMotion(motionPreference.matches);
 }
 motionPreference.addEventListener("change", onMotionChange);
-window.addEventListener("resize", syncViewport, { passive: true });
-window.visualViewport?.addEventListener("resize", syncViewport, {
+window.addEventListener("resize", queueViewport, { passive: true });
+window.visualViewport?.addEventListener("resize", queueViewport, {
   passive: true,
 });
 function onVisibilityChange() {
@@ -315,6 +327,10 @@ document.addEventListener("visibilitychange", onVisibilityChange);
 // bfcache 的最早遮挡与刷新由无依赖 HTML 守卫负责，主模块销毁后也不会露出旧题词。
 window.addEventListener("pagehide", () => {
   leaving = true;
+  viewportFrame.dispose();
+  clearTimeout(viewportQualityTimer);
+  window.removeEventListener("resize", queueViewport);
+  window.visualViewport?.removeEventListener("resize", queueViewport);
   cancelChoicePrompt();
   motionPreference.removeEventListener("change", onMotionChange);
   document.removeEventListener("visibilitychange", onVisibilityChange);

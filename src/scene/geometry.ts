@@ -23,7 +23,10 @@ export async function createPlane(width: number, height: number, columns: number
     const pause = init.checkpoint(); if (pause) await pause;
     for (let x = 0; x < columns; x++) {
       const a = x + (columns + 1) * y, b = a + columns + 1, c = b + 1, d = a + 1;
-      indices.set([a, b, d, b, c, d], (y * columns + x) * 6);
+      // 直接写入索引缓冲，保留三角形顺序，避免每个网格单元分配一个六元素数组。
+      const offset = (y * columns + x) * 6;
+      indices[offset] = a; indices[offset + 1] = b; indices[offset + 2] = d;
+      indices[offset + 3] = b; indices[offset + 4] = c; indices[offset + 5] = d;
     }
   }
   geometry.setIndex(new THREE.BufferAttribute(indices, 1));

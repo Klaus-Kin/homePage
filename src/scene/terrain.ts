@@ -18,6 +18,10 @@ export async function createTerrain(init: Initialization) {
   const group = ownTree(init, new THREE.Group());
   const random = seededRandom(842);
   const quality = sceneConfig.quality.desktop;
+  const initialMobile = window.innerWidth < 768 || window.innerHeight < 500 || matchMedia("(pointer: coarse)").matches;
+  // 山体计算先交给共享 Worker；主线程同时准备地面、木纹与岩石，减少原先串行等待。
+  const mountainsReady = createMountains(init.fork());
+  void mountainsReady.catch(() => {});
   const groundMap = await surfaceTexture("ground", init);
   const earth = init.track(new THREE.MeshStandardMaterial({
     map: groundMap,
@@ -53,7 +57,7 @@ export async function createTerrain(init: Initialization) {
   group.add(ground);
 
   // 数层真正的起伏山脊位于不同距离，距离雾统一衰减，不使用背景照片。
-  const mountains = await createMountains(init);
+  const mountains = await mountainsReady;
   group.add(mountains.group);
   init.phase = "vegetation";
 
@@ -111,7 +115,7 @@ export async function createTerrain(init: Initialization) {
   group.add(rocks);
 
   // 草甸使用独立随机种子，不消耗岩石序列；各层均参与取消、贴地、避让和阴影范围。
-  const meadow = await createMeadow(init, geometry, desktopGround, rockFootprints);
+  const meadow = await createMeadow(init, geometry, desktopGround, rockFootprints, initialMobile);
   group.add(meadow.group);
   rocks.count = rockCount;
   const phoneRocks = rocks.instanceMatrix.array.slice();
@@ -134,7 +138,7 @@ export async function createTerrain(init: Initialization) {
   const rockContacts = await createRockContacts(init, rockGeometry, [
     { matrices: pcRocks, count: pcRockCount, ground: desktopGround },
     { matrices: phoneRocks, count: Math.min(sceneConfig.quality.mobile.rocks, backgroundRocks.length), ground: geometry },
-  ]);
+  ], initialMobile);
   group.add(rockContacts.mesh);
   earth.userData.rockContacts = { mask: rockContacts.shadowMask, bounds: { value: rockContacts.maskBounds } };
   // 在首次画质截断前计算全部实例的包围盒；超宽屏、手机旋转和完整开盖共用稳定覆盖范围。
@@ -144,6 +148,7 @@ export async function createTerrain(init: Initialization) {
   return {
     group,
     shadowBounds,
+    setDetail(level: number) { meadow.setDetail(level); },
     update(time: number, reduced: boolean) {
       // 两层共享主渲染循环与阴影刷新节奏，不能用短路表达式漏掉第二层风场更新。
       const meadowChanged = meadow.update(time, reduced);
@@ -155,10 +160,11 @@ export async function createTerrain(init: Initialization) {
       // 在第一个 await 前清除手机前景，避免第一帧先显示石头、山体切换后才消失。
       const preset = sceneConfig.quality[mobile ? "mobile" : "desktop"];
       // 同属轻量画质的手机横竖屏也要更新草的覆盖，不能只由画质是否改变来判断。
-      meadow.setQuality(mobile, wideMeadow);
+      await Promise.all([meadow.setQuality(mobile, wideMeadow), rockContacts.setQuality(mobile), mountains.setQuality(mobile)]);
+      if (request !== qualityRevision || init.controller.signal.aborted) return;
+      shadowBounds.union(meadow.shadowBounds).union(rockContacts.shadowBounds);
       if (lastMobile !== mobile) {
         ground.geometry = mobile ? geometry : desktopGround;
-        rockContacts.setQuality(mobile);
         rocks.instanceMatrix.array.set(mobile ? phoneRocks : pcRocks);
         rocks.instanceMatrix.needsUpdate = true;
         rocks.count = mobile ? rockCount : pcRockCount;
@@ -166,8 +172,6 @@ export async function createTerrain(init: Initialization) {
         lastMobile = mobile;
       }
       rocks.count = Math.min(preset.rocks, mobile ? backgroundRocks.length : pcRockCount);
-      await mountains.setQuality(mobile);
-      if (request !== qualityRevision || init.controller.signal.aborted) return;
     },
   };
 }

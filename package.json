@@ -13,6 +13,7 @@
     "three": "0.186.1"
   },
   "devDependencies": {
+    "@playwright/cli": "0.1.23",
     "@types/three": "0.186.0",
     "typescript": "7.0.2",
     "vite": "8.3.5"

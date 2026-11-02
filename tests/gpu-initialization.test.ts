@@ -2,7 +2,61 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
 import { Initialization } from "../src/scene/initialization.ts";
-import { initializeTextures, warmScene } from "../src/scene/gpu-initialization.ts";
+import { initializeTextures, warmScene, warmSceneBatched } from "../src/scene/gpu-initialization.ts";
+
+// 驱动可以保持未完成，但编译提交本身也要按预算让出；不能等一个对象编完才提交下一个。
+test("shader compilation yields its CPU budget while all driver requests remain pending", async () => {
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera();
+  for (let i = 0; i < 6; i++) scene.add(new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial()));
+  let time = 0, partialYields = 0;
+  const compiled: THREE.Object3D[] = [];
+  let finish!: () => void;
+  const driver = new Promise<void>(resolve => { finish = resolve; });
+  const viewport = new THREE.Vector4(0, 0, 800, 600);
+  const renderer = { shadowMap: { needsUpdate: false },
+    getViewport: (target: THREE.Vector4) => target.copy(viewport),
+    setViewport(x: number | THREE.Vector4, y?: number, z?: number, w?: number) {
+      if (x instanceof THREE.Vector4) viewport.copy(x); else viewport.set(x, y!, z!, w!);
+    }, compileAsync(object: THREE.Object3D) { compiled.push(object); time += 5; return driver; }, render() {},
+  } as unknown as THREE.WebGLRenderer;
+  const init = new Initialization(() => time, async () => {
+    if (compiled.length > 0 && compiled.length < 6) partialYields++;
+  });
+  const warming = warmSceneBatched(renderer, scene, camera, init);
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(compiled, scene.children);
+    assert.ok(partialYields > 0);
+  } finally { finish(); await warming; init.dispose(); }
+});
+
+// 全部编译请求统一等待驱动；异常必须恢复实际视口与对象层，不能把小视口泄漏到主页。
+test("parallel warmup compiles all branches and restores viewport after upload failure", async () => {
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera();
+  for (let i = 0; i < 5; i++) scene.add(new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial()));
+  const viewport = new THREE.Vector4(0, 0, 1366, 768);
+  let compiles = 0, draws = 0, fail = false;
+  const renderer = { shadowMap: { needsUpdate: false }, getViewport: (target: THREE.Vector4) => target.copy(viewport),
+    setViewport(x: number | THREE.Vector4, y?: number, z?: number, w?: number) {
+      if (x instanceof THREE.Vector4) viewport.copy(x); else viewport.set(x, y!, z!, w!);
+    }, async compileAsync(object: THREE.Object3D, actualCamera: THREE.Camera, target: THREE.Scene) {
+      assert.ok(scene.children.includes(object)); assert.equal(actualCamera, camera); assert.equal(target, scene); compiles++;
+    },
+    render() {
+      assert.equal(viewport.z, 8);
+      assert.ok(scene.children.filter(object => object.layers.mask).every(object => !object.frustumCulled));
+      if (fail) throw new Error("upload failed"); draws++;
+    },
+  } as unknown as THREE.WebGLRenderer;
+  const init = new Initialization(() => 0, async () => {});
+  await warmSceneBatched(renderer, scene, camera, init);
+  assert.equal(compiles, 5); assert.equal(draws, 5); assert.equal(viewport.z, 1366);
+  fail = true; scene.children[0].position.x++;
+  await assert.rejects(warmSceneBatched(renderer, scene, camera, init), /upload failed/);
+  assert.equal(viewport.z, 1366); assert.ok(scene.children.every(object => object.layers.mask === 1));
+  assert.ok(scene.children.every(object => object.frustumCulled));
+  init.dispose();
+});
 
 // 使用真实场景树验证纹理去重、隐藏资源和实际绘制之间确实经过任务调度。
 test("GPU initialization uploads shared and hidden textures in separate tasks", async () => {

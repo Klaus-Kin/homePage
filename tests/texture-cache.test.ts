@@ -22,8 +22,10 @@ test("pixel loader recovers missing and truncated files and propagates cancellat
   const originalWarn = console.warn; console.warn = () => {};
   try {
     for (const response of [new Response(null, { status: 404 }), new Response(new Uint8Array(7))]) {
-      const actual = await loadTexturePixels("mountain", init, (async () => response) as typeof fetch);
+      const isolated = new Initialization();
+      const actual = await loadTexturePixels("mountain", isolated, (async () => response) as typeof fetch);
       assert.deepEqual(Buffer.from(actual), expected);
+      isolated.dispose();
     }
     let requested!: () => void;
     const started = new Promise<void>(resolve => { requested = resolve; });
@@ -31,4 +33,26 @@ test("pixel loader recovers missing and truncated files and propagates cancellat
     await started; init.dispose();
     await assert.rejects(pending, { name: "AbortError" });
   } finally { console.warn = originalWarn; init.dispose(); }
+});
+
+// 并行预取和实际消费者共用请求；取消后不能命中一个已经成功的旧像素缓存。
+test("texture consumers share an in-flight request within one initialization", async () => {
+  const init = new Initialization(); let calls = 0;
+  const request = (async () => { calls++; return new Response(new Uint8Array(256 * 256 * 4)); }) as typeof fetch;
+  const child = init.fork();
+  const [a, b] = await Promise.all([loadTexturePixels("ground", init, request), loadTexturePixels("ground", child, request)]);
+  assert.equal(calls, 1); assert.equal(a, b); init.dispose();
+  assert.throws(() => loadTexturePixels("ground", init, request), { name: "AbortError" });
+});
+
+// 一个子任务退出不能中断其他消费者的共享下载，退出者也不能接收迟到结果。
+test("cancelled texture consumer leaves the root request available to its sibling", async () => {
+  const root = new Initialization(), a = root.fork(), b = root.fork();
+  let resolve!: (response: Response) => void, calls = 0;
+  const request = (() => { calls++; return new Promise<Response>(done => { resolve = done; }); }) as typeof fetch;
+  const first = loadTexturePixels("ground", a, request), second = loadTexturePixels("ground", b, request);
+  a.dispose(); await assert.rejects(first, { name: "AbortError" });
+  resolve(new Response(new Uint8Array(256 * 256 * 4)));
+  assert.equal((await second).byteLength, 256 * 256 * 4); assert.equal(calls, 1);
+  root.dispose();
 });

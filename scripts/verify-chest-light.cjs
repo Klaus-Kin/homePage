@@ -1,5 +1,7 @@
 // 在独立浏览器上下文检查真实光源；验收注入只存在于被拦截的开发模块，不进入生产代码。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin = new URL(page.url()).origin, results = [];
   for (const [name, width, height, trigger] of [
     ['pc-box', 1920, 1080, '[data-entrance=blog]'], ['pc-link', 2560, 1080, '[data-entrance=blog]'],
@@ -7,7 +9,7 @@ async (page) => {
   ]) {
     const context = await page.context().browser().newContext({ viewport: { width, height } });
     try {
-      const target = await context.newPage(), errors = [];
+      const target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; }), errors = [];
       target.on('pageerror', error => errors.push(error.message));
       await target.route(/\/src\/scene\.ts(?:\?|$)/, async route => {
         const response = await route.fetch(), source = await response.text();

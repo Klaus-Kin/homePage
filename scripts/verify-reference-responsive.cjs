@@ -1,12 +1,14 @@
 // 通过 playwright-cli run-code --filename 执行；覆盖旋转、工具栏等效高度变化、开盒和静态热点。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin = new URL(page.url()).origin, browser = page.context().browser(), results = [];
   const sizes = [[1672,941],[1920,1080],[768,1024],[390,844],[320,480],[844,390]];
   const assert = (value, message) => { if (!value) throw new Error(message); };
   const context = await browser.newContext({hasTouch:true, reducedMotion:'reduce'});
   try {
     await context.route('**/*', route => new URL(route.request().url()).origin===origin?route.continue():route.abort());
-    const target = await context.newPage();
+    const target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; });
     await target.goto(origin);
     await target.waitForSelector('#app[data-state="idle"]:not([inert])');
     // 连续缩放经过手机、横屏及临界高度，再回到原尺寸，检查相机、热点及资源恢复。
@@ -56,7 +58,7 @@ async (page) => {
   for(const mode of ['no-js','no-webgl']){
     const c=await browser.newContext({javaScriptEnabled:mode!=='no-js',reducedMotion:'reduce'});
     try{
-      const target=await c.newPage();
+      const target=await c.newPage().then(async target => { await c.addInitScript(() => { window.__moonDiagnostics = true; }); return target; });
       if(mode==='no-webgl')await target.addInitScript(()=>{
         const get=HTMLCanvasElement.prototype.getContext;
         HTMLCanvasElement.prototype.getContext=function(type,...args){return /webgl/i.test(type)?null:get.call(this,type,...args);};

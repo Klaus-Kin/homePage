@@ -1,5 +1,44 @@
 import * as THREE from "three";
 import type { Initialization } from "./initialization.ts";
+import { diagnostics } from "../performance-policy.ts";
+
+/** 编译调用按 CPU 预算分批提交，统一等待驱动；上传继续逐对象进行，保留实际灯光组合。 */
+export async function warmSceneBatched(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
+  camera: THREE.Camera, init: Initialization) {
+  init.check();
+  const started = performance.now();
+  const phase = init.phase;
+  await init.checkpoint(true);
+  const targets: THREE.Object3D[] = [];
+  scene.traverse(object => {
+    if (object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points || object instanceof THREE.Sprite)
+      targets.push(object);
+  });
+  const drawables = new Set(targets), compilations: Promise<unknown>[] = [];
+  for (const object of targets) {
+    // compileAsync 会遍历子树；有可绘制祖先的对象已随祖先提交，避免重复扫描同一层级。
+    let parent = object.parent;
+    while (parent && !drawables.has(parent)) parent = parent.parent;
+    if (parent) continue;
+    init.check();
+    // Three.js 自己按实际程序缓存去重；全场景提供灯光、雾和环境，不按材质名猜测等价。
+    const compilation = renderer.compileAsync(object, camera, scene);
+    // 在下一批调度前接住拒绝；最终仍统一 await，取消或编译失败不会产生无人处理的 Promise。
+    void compilation.catch(() => {});
+    compilations.push(compilation);
+    const pause = init.checkpoint(); if (pause) await pause;
+  }
+  await init.waitFor(Promise.all(compilations));
+  init.check();
+  const viewport = renderer.getViewport(new THREE.Vector4());
+  // 后续对象编译命中 Three.js 缓存，已完成的程序立即返回；避免每个对象单独等待驱动轮询。
+  try {
+    // 小视口保持真实默认帧缓冲的色彩与曝光程序，避免离屏目标改变 toneMapping 组合。
+    renderer.setViewport(0, 0, 8, 8);
+    await warmScene(renderer, scene, camera, init, true);
+  } finally { renderer.setViewport(viewport); }
+  if (diagnostics) performance.measure(`moon-parallel-${phase}`, { start: started, end: performance.now() });
+}
 
 // 缓存跟随初始化生命周期，以实际对象和保守状态签名去重；不跨 WebGL 上下文复用编译结果。
 interface WarmupCache {
@@ -122,7 +161,7 @@ export async function initializeTextures(renderer: THREE.WebGLRenderer, scene: T
 
 /** 在真实场景灯光、阴影和材质组合下逐对象首次绘制；异常或取消时也完整恢复可见性。 */
 export async function warmScene(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
-  camera: THREE.Camera, init: Initialization) {
+  camera: THREE.Camera, init: Initialization, alreadyCompiled = false) {
   const warmupStart = performance.now(), phase = init.phase;
   const caches = warmupCaches.get(init) ?? [];
   if (!warmupCaches.has(init)) init.cleanup(() => warmupCaches.delete(init));
@@ -140,9 +179,11 @@ export async function warmScene(renderer: THREE.WebGLRenderer, scene: THREE.Scen
   });
   const state = `${lights.sort().join(",")}|${scene.fog?.constructor.name}|${scene.environment?.uuid}|${renderer.shadowMap.enabled}:${renderer.shadowMap.type}`;
   const objects: THREE.Object3D[]=[],layers=new Map<THREE.Object3D,number>();
+  const culling = new Map<THREE.Object3D, boolean>();
   scene.traverse(object=>{
     if(object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points || object instanceof THREE.Sprite) {
       objects.push(object);layers.set(object,object.layers.mask);
+      culling.set(object, object.frustumCulled);
     }
   });
   const active=new Set<THREE.Object3D>();
@@ -162,9 +203,11 @@ export async function warmScene(renderer: THREE.WebGLRenderer, scene: THREE.Scen
       // 只跳过实际成功绘制过的相同状态；编译成功不代表几何、深度材质和 uniform 已提交。
       if (cacheable && cache.submitted.get(object)?.has(submissionKey)) continue;
       object.layers.mask=layers.get(object)!;
+      // 云片漂移和镜头运动会带入屏外物体；预热上传不能被当前取景裁掉，正式渲染前恢复原值。
+      object.frustumCulled=false;
       // 编译目标限制到当前对象，第三个参数仍提供完整场景的实际灯光、雾和环境。
-      const key = compilationKey(object, state);
-      if (!cache.compiled.get(object)?.has(key)) {
+      const key = alreadyCompiled ? "" : compilationKey(object, state);
+      if (!alreadyCompiled && !cache.compiled.get(object)?.has(key)) {
         const compileStart=performance.now();
         const compilation=renderer.compileAsync(object,camera,scene);
         performance.measure("moon-gpu-object-compile-call",{start:compileStart,end:performance.now()});
@@ -197,6 +240,7 @@ export async function warmScene(renderer: THREE.WebGLRenderer, scene: THREE.Scen
     }
   } finally {
     layers.forEach((value,object)=>{object.layers.mask=value;});
+    culling.forEach((value,object)=>{object.frustumCulled=value;});
     renderer.shadowMap.needsUpdate=true;
     // 保留四轮预热各自的墙钟耗时，便于与下载、生成和首次点击逐项对照。
     performance.measure(`moon-${phase}`, { start: warmupStart, end: performance.now() });

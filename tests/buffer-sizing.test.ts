@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { fitCamera } from "../src/responsive.ts";
+import { fitCamera, sceneViewport } from "../src/responsive.ts";
 import { sceneConfig } from "../src/config.ts";
 
 // 回归画布重复重置：一次同时设置尺寸和 DPR，后续布局仍可调整相机但不能重新分配同尺寸缓冲。
@@ -18,6 +18,9 @@ test("camera layout allocates the drawing buffer once per actual size or DPR cha
         size.set(width, height); ratio = nextRatio; allocations.push([width, height, nextRatio]);
       } } as THREE.WebGLRenderer;
     const camera = new THREE.PerspectiveCamera(), host = { clientWidth: 1920, clientHeight: 1080 };
+    // 创建上下文前的物理像素尺寸与取景提交必须采用同一上限，不能只修复 DPR=1 的桌面。
+    assert.deepEqual(sceneViewport(host as HTMLElement), { width: 1920, height: 1080, mobile: false,
+      pixelRatio: Math.min(2, sceneConfig.quality.desktop.pixelRatio) });
     fitCamera(camera, renderer, host as HTMLElement);
     fitCamera(camera, renderer, host as HTMLElement);
     assert.deepEqual(allocations, [[1920, 1080, Math.min(2, sceneConfig.quality.desktop.pixelRatio)]]);

@@ -1,11 +1,13 @@
 // 用生产页面的真实动画时钟逐帧采样，并保存各阶段截图；不向页面添加可写场景接口。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const browser=page.context().browser(), origin=new URL(page.url()).origin, results=[];
   const stages=new Map([[320,'emerge'],[380,'left-emerge'],[440,'right-emerge'],[470,'back'],[560,'top'],[650,'front'],[850,'second-turn'],
     [1070,'two-turns'],[1140,'return'],[1220,'accelerating'],[1320,'inside'],[1370,'closed'],[1810,'rest']]);
   for (const [name,width,height] of [['desktop',1366,768],['phone',390,844],['short-phone',320,480]]) {
     const context=await browser.newContext({viewport:{width,height},reducedMotion:'no-preference'});
-    const target=await context.newPage(), errors=[];
+    const target=await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; }), errors=[];
     target.on('pageerror',error=>errors.push(error.message));
     try {
       await target.goto(origin);

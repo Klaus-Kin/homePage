@@ -1,5 +1,7 @@
 // 在生产预览用 playwright-cli run-code --filename 执行；截图及逐帧状态保存于 output/playwright/。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const browser = page.context().browser(), origin = new URL(page.url()).origin, results = [];
   const assert = (condition, message) => { if (!condition) throw new Error(message); };
   for (const [width, height, mode] of [[1920,1080,'webgl'],[390,844,'webgl'],[844,390,'webgl'],
@@ -7,7 +9,7 @@ async (page) => {
     const context = await browser.newContext({ viewport:{width,height}, javaScriptEnabled:mode!=='no-script',
       reducedMotion:mode==='reduce'?'reduce':'no-preference' });
     try {
-      const target = await context.newPage(), errors = [];
+      const target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; }), errors = [];
       target.on('pageerror', error => errors.push(error.message));
       if (mode==='fallback') await target.addInitScript(() => {
         const original = HTMLCanvasElement.prototype.getContext;
@@ -78,7 +80,7 @@ async (page) => {
           };requestAnimationFrame(sample);
         },{once:true});
       });
-      const target=await context.newPage();
+      const target=await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; });
       const gate=new Promise(resolve=>{release=resolve;});
       await target.route(/\/assets\/scene-[^/]+\.js$/,async route=>{await gate;await route.continue();});
       await target.goto(origin,{waitUntil:'domcontentloaded'});await target.bringToFront();
@@ -113,7 +115,7 @@ async (page) => {
         const decode=HTMLImageElement.prototype.decode;
         HTMLImageElement.prototype.decode=function(){return this.src.endsWith(failed)?Promise.reject(new Error('controlled decode failure')):decode.call(this);};
       },failed);
-      const target=await context.newPage();await target.goto(origin);await target.waitForSelector('#app[data-state="idle"]:not([inert])');
+      const target=await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; });await target.goto(origin);await target.waitForSelector('#app[data-state="idle"]:not([inert])');
       const selector=failed.includes('point')?'[data-entrance=blog]':'#box-button';
       await target.locator(selector).hover();
       const state=await target.locator(selector).evaluate(el=>({native:getComputedStyle(el).cursor,hidden:document.querySelector('.staff-cursor-layer').hidden}));

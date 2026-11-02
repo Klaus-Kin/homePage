@@ -27,7 +27,8 @@ export function sampleLeftMeadowBlade(random: () => number, layer: MeadowLayer, 
 /** 补草复用原有噪声、丛生、叶形比例和色彩分布；原分布调用顺序保持不变。 */
 function sampleBladeAt(random: () => number, layer: MeadowLayer, x: number, z: number, left: boolean) {
   const field = fbm(x * .31 + 12, z * .31 + 7);
-  const clump = fbm(x * 1.75 + 19, z * 1.75 + 3);
+  // 只有长叶密度使用聚簇噪声；细草和短草跳过无用的四层噪声，随机数序列保持不变。
+  const clump = layer === "long" ? fbm(x * 1.75 + 19, z * 1.75 + 3) : 0;
   const density = layer === "turf" ? .8 + field * .2
     : layer === "grass" ? .2 + field * .8
     : Math.max(.01, (clump - .47) * 4.8) * (.4 + field);

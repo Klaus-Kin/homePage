@@ -5,13 +5,12 @@ import { loadTexturePixels } from "./texture-cache.ts";
 /** 纯色表面贴图只描述材质，不烘焙草叶、月光或阴影。 */
 export async function surfaceTexture(kind: "ground" | "rock" | "mountain", init: Initialization) {
   init.phase = `texture-${kind}`;
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 256;
-  const context = canvas.getContext("2d")!;
   const pixels = await loadTexturePixels(kind, init);
-  const image = new ImageData(new Uint8ClampedArray(pixels), 256, 256);
-  context.putImageData(image, 0, 0);
-  const texture = init.track(new THREE.CanvasTexture(canvas));
+  // 直接上传已生成像素，省去 ImageData 复制与 Canvas 栅格队列；方向和 mipmap 沿用原 CanvasTexture。
+  const texture = init.track(new THREE.DataTexture(pixels, 256, 256));
+  texture.flipY = true; texture.generateMipmaps = true;
+  texture.magFilter = THREE.LinearFilter; texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.needsUpdate = true;
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(kind === "ground" ? 25 : 2, kind === "ground" ? 20 : 2);
@@ -22,14 +21,11 @@ export async function surfaceTexture(kind: "ground" | "rock" | "mountain", init:
 /** 云边缘使用连续密度场，四周衰减到透明；不会出现圆盘或矩形裁切边。 */
 export async function cloudTexture(init: Initialization) {
   init.phase = "texture-cloud";
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 256;
-  const context = canvas.getContext("2d")!;
   const data = await loadTexturePixels("cloud", init);
-  const pixels = new ImageData(new Uint8ClampedArray(data), 512, 256);
-  context.putImageData(pixels, 0, 0);
-  const texture = init.track(new THREE.CanvasTexture(canvas));
+  const texture = init.track(new THREE.DataTexture(data, 512, 256));
+  texture.flipY = true; texture.generateMipmaps = true;
+  texture.magFilter = THREE.LinearFilter; texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.needsUpdate = true;
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }

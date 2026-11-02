@@ -1,5 +1,7 @@
 // 记录连续视频、浏览器合成原因与长任务，覆盖冷/热启动及三种构图的 CPU 降速。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin = new URL(page.url()).origin;
   const results = [];
   const recordings = [];
@@ -20,7 +22,7 @@ async (page) => {
         };
         requestAnimationFrame(sample);
       });
-      const target = await context.newPage();
+      const target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; });
       await target.bringToFront();
       const errors = []; target.on("pageerror", (error) => errors.push(error.message));
       const cdp = await context.newCDPSession(target);

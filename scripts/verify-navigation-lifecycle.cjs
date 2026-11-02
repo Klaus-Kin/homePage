@@ -1,11 +1,13 @@
 // 通过 playwright-cli run-code --filename 执行。地址可带 ?view=desktop|phone|short 缩小录制矩阵。
 // 真实跨站导航、慢响应、阻塞首屏和历史回退；所有网络延迟有固定终点，不在路由回调中等待页面操作。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   // 从当前服务的静态入口读取实际地址；独立无脚本文档不会启动额外的 WebGL 场景。
   const linkContext = await page.context().browser().newContext({ javaScriptEnabled: false });
   let destinations;
   try {
-    const links = await linkContext.newPage();
+    const links = await linkContext.newPage().then(async target => { await linkContext.addInitScript(() => { window.__moonDiagnostics = true; }); return target; });
     await links.goto(new URL(page.url()).origin);
     destinations = await links.locator("[data-entrance]").evaluateAll(links =>
       Object.fromEntries(links.map(link => [link.dataset.entrance, link.href])));
@@ -23,7 +25,7 @@ async (page) => {
         const context = await (historyMode === "cached" ? browser : ordinaryBrowser).newContext({
           viewport: { width, height }, isMobile: viewportName === "phone",
           hasTouch: viewportName === "phone", reducedMotion: "no-preference" });
-        const target = await context.newPage(), events = [], errors = [];
+        const target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; }), events = [], errors = [];
         // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
         await context.route("**/*", route => new URL(route.request().url()).origin === origin
           ? route.continue() : route.abort());
@@ -56,7 +58,9 @@ async (page) => {
               const matrix = rotor ? new DOMMatrixReadOnly(getComputedStyle(rotor).transform) : null;
               const data = { event, persisted, time: performance.now(), epoch: performance.timeOrigin + performance.now(),
                 // 合成动画按文档时间轴采样；同时保留墙钟，单独暴露主线程迟到造成的绘制停顿。
-                frameEpoch: performance.timeOrigin + (event.startsWith("hoop") ? document.timeline.currentTime : performance.now()),
+                // 普通事件读取实际 CSS 文档帧；BFCache 的 pageshow 尚未刷新旧时间轴，刚同步对齐的金箍以墙钟核对。
+                frameEpoch: performance.timeOrigin + (persisted && event === "pageshow-after"
+                  ? performance.now() : document.timeline.currentTime ?? performance.now()),
                 documentOrigin: performance.timeOrigin, animationTime: spin?.currentTime,
                 angle: matrix ? ((Math.atan2(matrix.b, matrix.a) * 180 / Math.PI) + 360) % 360 : null, url: location.href,
                 state: app?.dataset.state, revealing: app?.dataset.revealing, returning: document.documentElement.dataset.moonReturning,

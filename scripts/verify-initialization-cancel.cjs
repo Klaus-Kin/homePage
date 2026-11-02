@@ -3,7 +3,7 @@ async (page) => {
   const origin = new URL(page.url()).origin, results = [];
   for (const event of ["moon-boot-failed", "pagehide"]) {
     // 植被流程已有细分阶段；使用确实会执行检查点的岩石阶段，并覆盖本轮调整的上传与预热等待。
-    for (const phase of ["mountain-0", "weathered-rock-geometry", "meadow-turf-desktop", "meadow-flowers-mobile", "wood-spell",
+    for (const phase of ["mountain-0", "weathered-rock-geometry", "meadow-turf-desktop", "meadow-flowers-desktop", "wood-spell",
       "gpu-textures", "gpu-choice-1", "gpu-opening-3"]) {
       const context = await page.context().browser().newContext();
       try {
@@ -71,7 +71,17 @@ async (page) => {
     const quality = await target.evaluate(async () => {
       const { Initialization } = await import("/src/scene/initialization.ts");
       const { createTerrain } = await import("/src/scene/terrain.ts");
+      // 首次切换尚未缓存时连续请求同一档位，实际线程作业也必须只生成一次。
+      const jobs = new Map(), postMessage = Worker.prototype.postMessage;
+      Worker.prototype.postMessage = function (message, ...args) {
+        if (message.job) {
+          const job = message.job, key = `${job.type}:${job.kind ?? job.layer}:${job.mobile}`;
+          jobs.set(key, (jobs.get(key) ?? 0) + 1);
+        }
+        return postMessage.call(this, message, ...args);
+      };
       const init = new Initialization(), terrain = await createTerrain(init);
+      await Promise.all([true, true, false, true].map(mobile => terrain.setQuality(mobile)));
       const meshes=[]; terrain.group.traverse(item=>{ if(item.isInstancedMesh) meshes.push(item); });
       // 先串行取得各模式的稳定数量：各层植被独立预算，PC 岩石避让也可能减少实例数。
       // 基线与并发检查复用同一地形，避免硬编码数量后随生成规则变化再次产生误报。
@@ -90,7 +100,9 @@ async (page) => {
         transitions.push({ choices, expected, actual });
       }
       init.dispose();
-      return { rapidQualityChanges: true, transitions, finalCounts: meshes.map((mesh) => mesh.count), released: init.resources.size === 0 };
+      Worker.prototype.postMessage = postMessage;
+      if ([...jobs.values()].some(count => count !== 1)) throw new Error(`地形重复生成：${JSON.stringify([...jobs])}`);
+      return { rapidQualityChanges: true, transitions, jobs: [...jobs], finalCounts: meshes.map((mesh) => mesh.count), released: init.resources.size === 0 };
     });
     results.push(quality);
   } finally { await context.close(); }

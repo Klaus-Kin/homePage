@@ -1,5 +1,7 @@
 // 通过 playwright-cli run-code --filename 调用，检查布局、真实浏览器帧率并保存验收截图。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin = new URL(page.url()).origin;
   const sizes = [
     [1920, 1080],

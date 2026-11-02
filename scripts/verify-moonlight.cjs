@@ -1,5 +1,7 @@
 // 通过 playwright-cli run-code --filename 调用；先检查生产页连续缩放，再用同一模型与灯光读取真实阴影像素。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin = new URL(page.url()).origin, layouts = [], errors = [];
   const onError = error => errors.push(error.message);
   page.on('pageerror', onError);

@@ -34,7 +34,7 @@ function artworkMesh(texture: THREE.Texture, width: number, height: number, init
 }
 
 /** 用原稿上的弯曲羽轴计算柔度；羽根严格固定，羽梢沿原来的异步阵风缓慢摆动。 */
-function feather(mesh: THREE.Mesh, side: number) {
+function feather(mesh: THREE.Mesh, side: number, gpu = false) {
   const position = mesh.geometry.getAttribute("position") as THREE.BufferAttribute;
   position.setUsage(THREE.DynamicDrawUsage);
   const rest = new Float32Array(position.array), weights = new Float32Array(position.count);
@@ -52,6 +52,36 @@ function feather(mesh: THREE.Mesh, side: number) {
     }
   }
   mesh.frustumCulled = false;
+  if (gpu) {
+    // 静态权重只上传一次；GPU 使用与 featherPose 相同的相位和公式，悬停时不再逐点改写位置缓冲。
+    mesh.geometry.setAttribute("featherWeight", new THREE.BufferAttribute(weights, 1));
+    const seconds = { value: 0 }, intensity = { value: 0 };
+    const material = mesh.material as THREE.Material;
+    const compile = material.onBeforeCompile.bind(material), key = material.customProgramCacheKey();
+    material.userData.featherMotion = { seconds, intensity, side };
+    material.onBeforeCompile = (shader, renderer) => {
+      compile(shader, renderer);
+      shader.uniforms.featherSeconds = seconds; shader.uniforms.featherAmount = intensity;
+      shader.vertexShader = `attribute float featherWeight; uniform float featherSeconds; uniform float featherAmount;\n${shader.vertexShader}`;
+      shader.vertexShader = shader.vertexShader.replace("#include <begin_vertex>", `
+        #include <begin_vertex>
+        float featherSide = ${side.toFixed(1)};
+        float featherPhase = ${side < 0 ? ".37" : "2.13"} - featherWeight * 1.65;
+        float featherWind = .62 * sin(featherSeconds * 6.28318530718 / ${side < 0 ? "4.3" : "3.7"} + featherPhase)
+          + .26 * sin(featherSeconds * 6.28318530718 / 6.71 + featherPhase * 2.)
+          + .12 * sin(featherSeconds * 6.28318530718 / 2.93 + featherPhase * .7);
+        float featherResponse = featherWeight * featherWeight * featherAmount;
+        float featherBend = featherResponse * featherWind * .13962634016 * 5.2;
+        vec2 featherRoot = vec2(featherSide * 3.8, -3.4);
+        vec2 featherRest = position.xy - featherRoot;
+        float featherCos = cos(featherBend), featherSin = sin(featherBend);
+        transformed.xy = featherRoot + mat2(featherCos, featherSin, -featherSin, featherCos) * featherRest;
+        transformed.z += featherResponse * sin(featherSeconds * 6.28318530718 / 4.7 + featherPhase) * .18 * featherRest.x * .4;
+      `);
+    };
+    material.customProgramCacheKey = () => `${key}:feather-gpu-v1:${side}`;
+    return (time: number, amount: number) => { seconds.value = time / 1000; intensity.value = amount; };
+  }
   return (time: number, amount: number) => {
     for (let i = 0; i < position.count; i++) {
       const pose = featherPose(weights[i], time, side, amount);
@@ -80,7 +110,7 @@ function monkeySurface(mesh: THREE.Mesh, width: number, height: number) {
 
 /** 静态后备导出与运行时共用造型工厂，保留原来的 update 接口及初始化资源域。 */
 export function buildEntryArtwork(kind: "crown" | "monkey", textures: THREE.Texture[], init: Initialization,
-  colors: THREE.Texture[] = []): EntryModel {
+  colors: THREE.Texture[] = [], gpuFeathers = false): EntryModel {
   const root = new THREE.Group();
   const reveal = { value: 0 };
   const setColorReveal = (progress: number) => { reveal.value = THREE.MathUtils.clamp(progress, 0, 1); };
@@ -92,7 +122,7 @@ export function buildEntryArtwork(kind: "crown" | "monkey", textures: THREE.Text
       mesh.position.y = 3;
       mesh.position.z = i === 0 ? 2 : 0;
       root.add(mesh);
-      if (i > 0) updates.push(feather(mesh, i === 1 ? -1 : 1));
+      if (i > 0) updates.push(feather(mesh, i === 1 ? -1 : 1, gpuFeathers));
     }
     root.rotation.y = -.1;
     return { root, setColorReveal, update(time, amount) { updates.forEach(update => update(time, amount)); } };
@@ -146,6 +176,6 @@ export async function createEntryArtwork(kind: "crown" | "monkey", init: Initial
       return texture;
     }));
     init.check();
-    return buildEntryArtwork(kind, textures.filter((_, i) => i % 2 === 0), init, textures.filter((_, i) => i % 2 === 1));
+    return buildEntryArtwork(kind, textures.filter((_, i) => i % 2 === 0), init, textures.filter((_, i) => i % 2 === 1), true);
   } catch (error) { init.dispose(); throw error; }
 }

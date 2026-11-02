@@ -1,8 +1,10 @@
 // 真实 RAF 采样提示前后及重复播放的 GPU 资源；手机是桌面浏览器模拟，报告不代表真机帧率。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const results = [], browser = page.context().browser(), origin = new URL(page.url()).origin;
   for (const [width,height] of [[1366,768],[390,844]]) {
-    const context = await browser.newContext({viewport:{width,height}}), target = await context.newPage(), errors=[];
+    const context = await browser.newContext({viewport:{width,height}}), target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; }), errors=[];
     try {
       target.on('pageerror',error=>errors.push(error.message));
       await target.goto(origin); await target.waitForSelector('#app[data-state="idle"]:not([inert])');

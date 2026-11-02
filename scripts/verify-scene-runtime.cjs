@@ -1,11 +1,13 @@
 // 仅开发服务：拦截主场景源码注入故障，验证真实生命周期与降级旅程；不向产品暴露测试接口。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin = new URL(page.url()).origin, results = [];
   const modes = new URL(page.url()).searchParams.get("modes")?.split(",") ||
     ["animation", "resize", "preference", "hover", "transition", "cancel", "visibility", "quality", "context", "initialization", "dispose"];
   for (const mode of modes) {
     const context = await page.context().browser().newContext({ viewport: { width: 390, height: 844 } });
-    const target = await context.newPage(), errors = [], external = [];
+    const target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; }), errors = [], external = [];
     target.on("pageerror", error => errors.push(error.message));
     // 所有非本地请求均被截断；稍后只为当前入口地址提供受控目的页。
     await context.route("**/*", route => new URL(route.request().url()).origin === origin
@@ -52,8 +54,8 @@ async (page) => {
         renderer.dispose = () => { review.rendererDisposals++; destroy(); };
         renderer.forceContextLoss = () => { review.losses++; lose(); };
         renderer.outputColorSpace =`);
-      inject("terrain = await createTerrain(init);", `
-        terrain = await createTerrain(init);
+      inject("syncLandscapeLight = preserveLandscapeLight(terrain.group);", `
+        syncLandscapeLight = preserveLandscapeLight(terrain.group);
         const quality = terrain.setQuality.bind(terrain);
         terrain.setQuality = (...args) => {
           if (review.fault === "quality") { review.faults++; return Promise.reject(new Error("injected quality failure")); }

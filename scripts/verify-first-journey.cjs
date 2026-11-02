@@ -1,10 +1,12 @@
 // 使用生产构建和受控浏览器时钟验证首次点击；注入长帧后仍须完整呈现开盖、书写、墨滴与全黑。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin = new URL(page.url()).origin, browser = page.context().browser(), results = [];
   for (const [name, width, height] of [["desktop",1920,1080], ["phone",390,844], ["short",844,390], ["small",320,480]]) {
     const context = await browser.newContext({ viewport: { width, height }, isMobile: name !== "desktop",
       hasTouch: name !== "desktop", reducedMotion: "no-preference" });
-    const target = await context.newPage(), errors = [];
+    const target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; }), errors = [];
     target.setDefaultTimeout(30000);
     target.on("pageerror", error => errors.push(error.message));
     try {

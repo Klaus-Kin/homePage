@@ -59,6 +59,17 @@ button:disabled {
   .staff-cursor-active #box-button:not(:disabled) {
     cursor: none;
   }
+  /* 低性能访问改由浏览器移动同主题原生光标，热点与 72px 图层保持一致。 */
+  :root.staff-cursor-native {
+    cursor: url("/assets/cursor-staff-native.png") 6 6, default;
+  }
+  .staff-cursor-native .journey-link,
+  .staff-cursor-native .journey-link * {
+    cursor: url("/assets/cursor-point-native.png") 10 6, pointer;
+  }
+  .staff-cursor-native #box-button:not(:disabled), .staff-cursor-native #static-box {
+    cursor: url("/assets/cursor-grab-native.png") 25 22, grab;
+  }
   :root:has(#box-button:disabled:hover) .staff-cursor-layer {
     visibility: hidden;
   }

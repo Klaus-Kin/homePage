@@ -1,5 +1,7 @@
 // 真实 GPU 像素验收：花株风摆、同步投影、减少动态、画质缓存及开盖；测试接口只在路由内注入。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin = new URL(page.url()).origin, results = [];
   await page.route(/\/src\/scene\.ts(?:\?|$)/, async route => {
     const response = await route.fetch(), source = await response.text();

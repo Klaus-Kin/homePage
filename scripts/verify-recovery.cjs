@@ -99,8 +99,10 @@ async (page) => {
       )
         throw new Error(`${kind}: 未恢复可见原生入口`);
       if (late) {
+        // 等到被刻意延迟的响应真实到达；Worker 终止后的取消请求不应变成整页 networkidle 的隐含前提。
+        const response = target.waitForResponse(pattern);
         release();
-        await target.waitForLoadState("networkidle");
+        await (await response).finished();
         await target.waitForTimeout(150);
       }
       const recovered = await target.evaluate(() => ({

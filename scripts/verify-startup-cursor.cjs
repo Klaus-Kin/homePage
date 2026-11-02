@@ -1,5 +1,7 @@
 // 冷/热启动期间持续移动鼠标；加载和拉幕阶段必须保留浏览器原生光标，避免主线程阻塞拖住指针。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin = new URL(page.url()).origin, results = [];
   for (const rate of [1, 4]) {
     const context = await page.context().browser().newContext({ viewport: { width: 1366, height: 768 } });
@@ -31,7 +33,7 @@ async (page) => {
               native: getComputedStyle(document.documentElement).cursor !== "none" });
         }, { passive: true });
       });
-      target = await context.newPage();
+      target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; });
       await target.bringToFront();
       const cdp = await context.newCDPSession(target);
       await cdp.send("Emulation.setCPUThrottlingRate", { rate });
@@ -101,7 +103,7 @@ async (page) => {
     const context = await page.context().browser().newContext({
       viewport: { width: 1366, height: 768 }, reducedMotion: "reduce",
     });
-    const target = await context.newPage();
+    const target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; });
     await target.bringToFront();
     let release;
     try {

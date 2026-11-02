@@ -1,16 +1,23 @@
 import * as THREE from "three";
 import { sceneConfig, selectSceneLayout } from "./config.ts";
 
+/** 首次创建画布与后续取景共用相同的尺寸、触控判断和 DPR 上限，防止高 DPI 首帧重复分配。 */
+export function sceneViewport(host: HTMLElement) {
+  const width = Math.max(1, host.clientWidth), height = Math.max(1, host.clientHeight);
+  const mobile = width < 768 || height < 500 || matchMedia("(pointer: coarse)").matches;
+  const pixelRatio = Math.min(window.devicePixelRatio || 1,
+    sceneConfig.quality[mobile ? "mobile" : "desktop"].pixelRatio);
+  return { width, height, mobile, pixelRatio };
+}
+
 /** 横屏手机仍使用轻量画质，但构图切换为左右布局。 */
 export function fitCamera(
   camera: THREE.PerspectiveCamera,
   renderer: THREE.WebGLRenderer,
   host: HTMLElement,
+  resolutionScale = 1,
 ) {
-  const width = Math.max(1, host.clientWidth),
-    height = Math.max(1, host.clientHeight);
-  const mobile =
-    width < 768 || height < 500 || matchMedia("(pointer: coarse)").matches;
+  const { width, height, mobile, pixelRatio } = sceneViewport(host);
   // 选择构图时同时考虑可用横向空间，避免大尺寸竖屏套用偏右的桌面相机。
   const name = selectSceneLayout(width, height);
   const preset = sceneConfig.layout[name];
@@ -20,8 +27,7 @@ export function fitCamera(
   camera.lookAt(preset.cameraX, preset.targetY, 0);
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
-  const ratio = Math.min(window.devicePixelRatio || 1,
-    sceneConfig.quality[mobile ? "mobile" : "desktop"].pixelRatio);
+  const ratio = pixelRatio * resolutionScale;
   const previous = renderer.getSize(new THREE.Vector2());
   // 像素比和尺寸一次更新；相同尺寸不重复重置画布，避免驱动在后续布局时再次分配绘图缓冲。
   if (previous.x !== width || previous.y !== height || renderer.getPixelRatio() !== ratio)

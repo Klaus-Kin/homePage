@@ -4,6 +4,26 @@ import * as THREE from "three";
 import { buildEntryArtwork } from "../src/entry-artwork.ts";
 import { Initialization } from "../src/scene/initialization.ts";
 
+// 运行时使用静态位置缓冲和共享 uniform；复色着色器仍需与羽毛顶点变形一起保留。
+test("GPU feathers animate without uploading the position buffer each frame", () => {
+  const init = new Initialization();
+  const textures = [0, 1, 2].map(() => init.track(new THREE.Texture()));
+  const model = buildEntryArtwork("crown", textures, init, textures, true);
+  const feather = model.root.getObjectByName("artwork-feather-1") as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  const positions = feather.geometry.getAttribute("position") as THREE.BufferAttribute;
+  const version = positions.version, before = positions.array.slice();
+  for (let time = 0; time < 3000; time += 16) model.update(time, 1, 0, 0);
+  assert.equal(positions.version, version); assert.deepEqual(positions.array, before);
+  assert.ok(feather.geometry.getAttribute("featherWeight").count === positions.count);
+  const shader = { uniforms: {}, vertexShader: "#include <begin_vertex>", fragmentShader: "#include <map_fragment>" } as THREE.WebGLProgramParametersWithUniforms;
+  feather.material.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
+  assert.equal(shader.uniforms.featherAmount.value, 1);
+  assert.ok(shader.uniforms.featherSeconds.value > 2.9);
+  assert.match(shader.fragmentShader, /artworkReveal/);
+  model.update(3000, 0, 0, 0); assert.equal(shader.uniforms.featherAmount.value, 0);
+  init.dispose();
+});
+
 // 独立验证参考图的实际网格，防止只替换后备图而运行时仍绘制旧造型。
 test("reference crown bends independent feathers without moving their roots", () => {
   const init = new Initialization();

@@ -176,6 +176,12 @@ export async function createSky(lunarMap: THREE.Texture, init: Initialization) {
   return {
     group,
     moon,
+    /** 流星平时不可见，预热时临时显现，避免第一次划过天空才创建几何与着色器。 */
+    async prepare(compile: () => Promise<void>) {
+      const visible = meteor.visible;
+      try { meteor.visible = true; await compile(); }
+      finally { meteor.visible = visible; }
+    },
     resize(
       camera: THREE.PerspectiveCamera,
       preset: (typeof sceneConfig.layout)[keyof typeof sceneConfig.layout],

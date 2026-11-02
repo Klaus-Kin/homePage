@@ -74,53 +74,66 @@ export function groundHeight(x: number, z: number, placement: ChestPlacement = c
 }
 
 /** 域扭曲改变山脊走向，分形锐脊形成支脉和冲沟；各层使用独立种子而非平移复制。 */
-export function mountainHeight(x: number, z: number, layer: number) {
+/** 每列不随 z 改变的低频参数只算一次；默认调用仍保留原来的数值与运算顺序。 */
+export function mountainColumn(x: number, layer: number) {
   const seed = layer * 17.73;
   const center =
     (fbm(x * 0.037 + seed, 3 + seed) - 0.5) * 19 +
     Math.sin(x * 0.051 + layer) * 3;
-  const offset = z - center;
   const span = 15 + noise(x * 0.075 + seed, 9) * 7;
-  const envelope = Math.pow(Math.max(0, 1 - Math.abs(offset) / span), 1.15);
   const peak = 11 + Math.pow(noise(x * 0.085 + seed, seed + 5), 1.5) * 11;
-  const warpedX = x * 0.19 + (fbm(x * 0.11, z * 0.12 + seed) - 0.5) * 2;
-  const warpedZ = z * 0.16 + seed;
-  let ridge = 0,
-    amplitude = 1,
-    frequency = 1,
-    weight = 1;
-  for (let octave = 0; octave < 5; octave++) {
-    let signal =
-      1 - Math.abs(noise(warpedX * frequency, warpedZ * frequency) * 2 - 1);
-    signal *= signal * weight;
-    ridge += signal * amplitude;
-    weight = Math.min(1, signal * 2.4);
-    frequency *= 2.13;
-    amplitude *= 0.48;
+  return { center, span, peak };
+}
+
+export function mountainHeight(x: number, z: number, layer: number, column = mountainColumn(x, layer)) {
+  const seed = layer * 17.73;
+  const { center, span, peak } = column;
+  const offset = z - center;
+  const envelope = Math.pow(Math.max(0, 1 - Math.abs(offset) / span), 1.15);
+  // 包络外所有主峰项的权重精确为零，直接保留 -15；支峰仍在下方照常计算，不改变山脚或边界。
+  let height = -15;
+  if (envelope > 0) {
+    const warpedX = x * 0.19 + (fbm(x * 0.11, z * 0.12 + seed) - 0.5) * 2;
+    const warpedZ = z * 0.16 + seed;
+    let ridge = 0,
+      amplitude = 1,
+      frequency = 1,
+      weight = 1;
+    for (let octave = 0; octave < 5; octave++) {
+      let signal =
+        1 - Math.abs(noise(warpedX * frequency, warpedZ * frequency) * 2 - 1);
+      signal *= signal * weight;
+      ridge += signal * amplitude;
+      weight = Math.min(1, signal * 2.4);
+      frequency *= 2.13;
+      amplitude *= 0.48;
+    }
+    height = (
+      -15 +
+      envelope * (peak + ridge * 2.6) -
+      Math.pow(envelope, 0.6) * Math.abs(offset) * 0.08
+    );
+    // 主峰的低频轮廓不动，沿坡面刻入收敛的细脊，手机简化网格仍采样同一高度场。
+    const erosion = (1 - Math.abs(noise(x * 2.3 + z * .31, z * .83 + seed) * 2 - 1));
+    height -= envelope * erosion * .2;
   }
-  let height = (
-    -15 +
-    envelope * (peak + ridge * 2.6) -
-    Math.pow(envelope, 0.6) * Math.abs(offset) * 0.08
-  );
-  // 主峰的低频轮廓不动，沿坡面刻入收敛的细脊，手机简化网格仍采样同一高度场。
-  const erosion = (1 - Math.abs(noise(x * 2.3 + z * .31, z * .83 + seed) * 2 - 1));
-  height -= envelope * erosion * .2;
   if (layer === 0) {
+    // 三座支峰共用同一位置噪声，避免每个顶点重复求三遍；乘法顺序保持原样以维持 Float32 输出。
+    const warpX = (fbm(x * .65, z * .55) - .5) * .6;
+    const warpZ = (fbm(x * .55 + 41, z * .7) - .5) * .45;
+    const ridgeNoise = Math.abs(noise(x * .95 + z * .31, z * .85) * 2 - 1);
     // 近层支峰按参考图的三个轮廓锚点固定，纵深与远峰分开，云雾可以穿过中间的低谷。
     for (const [cx, cz, top, sx, sz] of REFERENCE_SUMMITS) {
       const dx = (x - cx) / sx, dz = (z - cz) / sz;
       const distance = Math.hypot(dx, dz);
       // 域扭曲和多尺度裂脊形成偏斜肩峰，避免独立支峰成为光滑圆锥。
       const warp = Math.min(1, distance * 3);
-      const radius = Math.hypot(dx + (fbm(x * .65, z * .55) - .5) * .6 * warp,
-        dz + (fbm(x * .55 + 41, z * .7) - .5) * .45 * warp);
+      const radius = Math.hypot(dx + warpX * warp, dz + warpZ * warp);
       const shape = Math.exp(-Math.pow(radius, 1.6) * .85);
       // 从峰顶向外辐射的沟壑与局部噪声共同打破圆锥，峰顶高度保持稳定。
       const gully = Math.abs(Math.sin(Math.atan2(dz, dx) * 7 + radius * 3))
         * Math.min(1, radius * 3) * shape;
-      const brokenRidge = Math.abs(noise(x * .95 + z * .31, z * .85) * 2 - 1)
-        * shape * warp * 3.2;
+      const brokenRidge = ridgeNoise * shape * warp * 3.2;
       const branch = -15 + (top + 15) * shape - gully - brokenRidge;
       height = Math.max(height, branch);
     }

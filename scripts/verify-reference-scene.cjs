@@ -1,5 +1,7 @@
 // 通过 playwright-cli run-code --filename 执行；同一脚本记录修改前后取景和真实渲染开销。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin = new URL(page.url()).origin;
   const phase = new URL(page.url()).searchParams.get("phase") || "after";
   const results = [];

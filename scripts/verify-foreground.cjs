@@ -1,10 +1,12 @@
 // 仅在测试上下文读取真实相机和岩石实例；生产场景不新增可变的调试接口。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin = new URL(page.url()).origin, results = [];
   for (const [width,height] of [[393,852],[430,932],[480,1040],[600,1000]]) {
     const context = await page.context().browser().newContext({viewport:{width,height},isMobile:true,hasTouch:true,reducedMotion:'reduce'});
     try {
-      const target = await context.newPage();
+      const target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; });
       await target.route(/\/src\/scene\.ts(?:\?|$)/, async route => {
         const response = await route.fetch();
         const body = (await response.text()).replace('const firstSubmit = performance.now();',

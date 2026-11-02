@@ -1,11 +1,13 @@
 // 通过 playwright-cli run-code --filename 执行；生产预览可用，检查真实图标、命中区域、边缘裁切和降级。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const browser = page.context().browser(), origin = new URL(page.url()).origin, results = [];
   const assert = (value, message) => { if (!value) throw new Error(message); };
   for (const [width, height] of [[1920, 1080], [390, 844], [844, 390]]) {
     const context = await browser.newContext({ viewport: { width, height } });
     try {
-      const target = await context.newPage(), errors = [];
+      const target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; }), errors = [];
       target.on('pageerror', error => errors.push(error.message));
       await target.goto(origin);
       await target.waitForSelector('#app[data-state="idle"]:not([inert])');
@@ -61,7 +63,7 @@ async (page) => {
       javaScriptEnabled: mode !== 'no-script', hasTouch: mode === 'touch', isMobile: mode === 'touch',
       reducedMotion: 'reduce' });
     try {
-      const target = await context.newPage();
+      const target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; });
       if (mode === 'texture-failure') await target.route('**/entry-monkey-artwork.png', route => route.abort());
       if (mode === 'cursor-failure') await target.route('**/cursor-*.png', route => route.abort());
       await target.goto(origin);

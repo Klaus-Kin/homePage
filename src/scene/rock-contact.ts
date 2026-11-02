@@ -11,11 +11,12 @@ type RockLayout = { matrices: ArrayLike<number>; count: number; ground: THREE.Bu
 
 /** 右侧石边补少量同款弯叶，另用局部权重恢复真实投影的深度；权重本身不绘制阴影。 */
 export async function createRockContacts(init: Initialization, rockGeometry: THREE.BufferGeometry,
-  layouts: readonly RockLayout[]) {
+  layouts: readonly RockLayout[], initialMobile = false) {
   const geometry = init.track(createMeadowBlade(7));
   const wind = createGrassMaterials({ strength: .75 });
   init.track(wind.material); init.track(wind.depth);
-  const caches: { matrices: number[]; colors: number[]; bounds: THREE.Box3; mask: THREE.DataTexture }[] = [];
+  const caches = new Map<boolean, { matrices: number[]; colors: number[]; bounds: THREE.Box3; mask: THREE.DataTexture }>();
+  const pending = new Map<boolean, Promise<void>>();
   const maskBounds = new THREE.Vector4(-17, -9, 34, 28), maskSize = 256;
   const matrix = new THREE.Matrix4(), dummy = new THREE.Object3D(), color = new THREE.Color();
   const p = new THREE.Vector3(), scale = new THREE.Vector3(), rotation = new THREE.Quaternion();
@@ -23,7 +24,7 @@ export async function createRockContacts(init: Initialization, rockGeometry: THR
   const ray = new THREE.Raycaster(), origin = new THREE.Vector3(), down = new THREE.Vector3(0, -1, 0);
   // 射线仅用于初始化，探针的临时材质提前登记，取消场景时也能统一释放。
   init.track(probe.material);
-  for (let layoutIndex = 0; layoutIndex < layouts.length; layoutIndex++) {
+  async function prepare(layoutIndex: number) {
     const layout = layouts[layoutIndex], mobile = layoutIndex === 1;
     init.phase = `rock-contact-${mobile ? "mobile" : "desktop"}`;
     const sampleGround = createGroundSampler(layout.ground), placement = selectChestPlacement(mobile);
@@ -91,28 +92,46 @@ export async function createRockContacts(init: Initialization, rockGeometry: THR
     }
     const mask = init.track(new THREE.DataTexture(pixels, maskSize, maskSize, THREE.RedFormat));
     mask.magFilter = mask.minFilter = THREE.LinearFilter; mask.needsUpdate = true;
-    caches.push({ matrices, colors, bounds, mask });
+    caches.set(mobile, { matrices, colors, bounds, mask });
   }
-  init.release(probe.material);
-  const capacity = Math.max(1, ...caches.map(cache => cache.matrices.length / 16));
+  // 只生成当前构图；另一套石边草与权重在真正切换时准备，探针材质由初始化域统一释放。
+  await prepare(initialMobile ? 1 : 0);
+  const initial = caches.get(initialMobile)!;
+  const capacity = Math.max(1, initial.matrices.length / 16);
   const mesh = new THREE.InstancedMesh(geometry, wind.material, capacity);
   mesh.name = "terrain-rock-grass";
   mesh.customDepthMaterial = wind.depth;
   mesh.castShadow = mesh.receiveShadow = true;
   mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
-  const shadowMask = { value: caches[0].mask };
-  const shadowBounds = caches.reduce((bounds, cache) => bounds.union(cache.bounds), new THREE.Box3());
+  const shadowMask = { value: initial.mask };
+  const shadowBounds = initial.bounds.clone();
   let previousMobile: boolean | undefined;
-  function setQuality(mobile: boolean) {
+  let revision = 0;
+  async function setQuality(mobile: boolean) {
+    const request = ++revision;
     if (previousMobile === mobile) return;
-    const cache = caches[mobile ? 1 : 0];
+    if (!caches.has(mobile)) {
+      if (!pending.has(mobile)) pending.set(mobile, prepare(mobile ? 1 : 0).finally(() => pending.delete(mobile)));
+      await pending.get(mobile);
+    }
+    if (request !== revision) return;
+    init.check();
+    const cache = caches.get(mobile)!;
+    const count = cache.matrices.length / 16;
+    if (count > mesh.instanceMatrix.count) {
+      // 实例容量扩展时释放旧实例绑定；几何、材质与缓存保持原有资源所有权。
+      mesh.dispose();
+      mesh.instanceMatrix = new THREE.InstancedBufferAttribute(new Float32Array(count * 16), 16);
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+    }
     mesh.instanceMatrix.array.set(cache.matrices); mesh.instanceColor!.array.set(cache.colors);
     mesh.count = cache.matrices.length / 16;
     mesh.instanceMatrix.needsUpdate = mesh.instanceColor!.needsUpdate = true;
     mesh.boundingBox = cache.bounds.clone(); mesh.boundingSphere = cache.bounds.getBoundingSphere(new THREE.Sphere());
     shadowMask.value = cache.mask;
+    shadowBounds.union(cache.bounds);
     previousMobile = mobile;
   }
-  setQuality(false);
+  await setQuality(initialMobile);
   return { mesh, shadowMask, maskBounds, shadowBounds, setQuality, update: wind.update };
 }

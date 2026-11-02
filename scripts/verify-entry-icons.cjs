@@ -1,10 +1,12 @@
 // 真实浏览器连续观察三档尺寸；截图与 GPU 调用计数共同验证可视效果和按需绘制。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const browser=page.context().browser(),origin=new URL(page.url()).origin,results=[];
   const assert=(value,message)=>{if(!value) throw new Error(message);};
   for(const [width,height,size] of [[1366,768,44],[390,844,36],[640,500,30]]) {
     const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:3});
-    const target=await context.newPage(),errors=[];
+    const target=await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; }),errors=[];
     target.on('pageerror',error=>errors.push(error.message));
     try {
       await target.addInitScript(()=>{
@@ -96,7 +98,8 @@ async (page) => {
       const reduced=await target.locator('.entry-icon').evaluateAll(slots=>slots.map(el=>+el.dataset.frames));
       await target.screenshot({path:`output/playwright/entry-icons-${size}px-reduced.png`});
       await target.waitForTimeout(300);
-      assert(await target.locator('.entry-icon').evaluateAll((slots,before)=>slots.every((el,i)=>+el.dataset.frames===before[i]),reduced),'减少动态仍有循环绘制');
+      const reducedAfter=await target.locator('.entry-icon').evaluateAll(slots=>slots.map(el=>+el.dataset.frames));
+      assert(reducedAfter.every((frames,i)=>frames===reduced[i]),`减少动态仍有循环绘制：${JSON.stringify({width,height,reduced,reducedAfter})}`);
       assert(await target.locator('.entry-copy').evaluateAll(copies=>copies.every(el=>el.style.transform==='none')),'减少动态仍有文字位移');
       // 离页事件必须移除画布，并释放全部已创建的入口缓冲和程序。
       await target.evaluate(()=>window.dispatchEvent(new Event('pagehide')));

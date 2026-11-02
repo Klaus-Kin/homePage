@@ -33,10 +33,10 @@ test("rock edge grass is grounded outside the stone and preserves its input tran
   // 手机没有这块前景石头时，补草和阴影权重必须一并消失；切回桌面后恢复原缓存。
   const count = contact.mesh.count, snapshot = contact.mesh.instanceMatrix.array.slice();
   assert.ok((contact.shadowMask.value.image.data as Uint8Array).some(value => value > 0));
-  contact.setQuality(true);
+  await contact.setQuality(true);
   assert.equal(contact.mesh.count, 0);
   assert.ok((contact.shadowMask.value.image.data as Uint8Array).every(value => value === 0));
-  contact.setQuality(false);
+  await contact.setQuality(false);
   assert.equal(contact.mesh.count, count);
   assert.deepEqual(contact.mesh.instanceMatrix.array, snapshot);
   init.dispose(); contact.mesh.dispose(); geometry.dispose(); ground.dispose(); probe.material.dispose();

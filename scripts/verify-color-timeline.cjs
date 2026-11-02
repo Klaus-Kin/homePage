@@ -1,6 +1,9 @@
 // 生产预览中用受控时钟冻结复色起点、中段和终点；只检查交互时间，不用墙钟截图耗时推断进度。
 async (page) => {
+  // 验收显式开启复色诊断，普通访问仍不写入逐帧属性。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const context=await page.context().browser().newContext({viewport:{width:1920,height:1080}});
+  await context.addInitScript(() => { window.__moonDiagnostics = true; });
   const results=[];
   const assert=(value,message)=>{if(!value) throw new Error(message);};
   try {
@@ -18,6 +21,8 @@ async (page) => {
       const selector=kind==='chest'?'#box-button':`[data-entrance=${kind}] .entry-copy`;
       const box=await target.locator(selector).boundingBox();
       await target.mouse.move(box.x+box.width/2,box.y+box.height/2);
+      // 输入只更新最新坐标，绘制在下一帧合并执行；先交付一帧再采样，时序容差仍小于 5%。
+      await target.clock.runFor(16);
       const duration=kind==='chest'?900:700, snapshots=[];
       for(const [phase,advance] of [['start',0],['middle',duration/2],['end',duration/2+20]]) {
         if(advance) await target.clock.runFor(advance);
@@ -43,6 +48,7 @@ async (page) => {
     for(const kind of ['blog','world','blog']) {
       const box=await target.locator(`[data-entrance=${kind}] .entry-copy`).boundingBox();
       await target.mouse.move(box.x+box.width/2,box.y+box.height/2);
+      await target.clock.runFor(16);
       assert((await read()).cursor<.05,`${kind}: 跨入口没有重新开始`);
       await target.clock.runFor(200);
     }

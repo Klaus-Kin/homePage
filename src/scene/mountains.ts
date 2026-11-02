@@ -1,8 +1,7 @@
 import * as THREE from "three";
 import type { Initialization } from "./initialization";
 import { ownTree } from "./resources";
-import { createPlane, computeNormals } from "./geometry";
-import { fbm, mountainHeight } from "./terrain-math";
+import { computeTerrain } from "./terrain-worker-client.ts";
 import { surfaceTexture } from "./textures";
 import { addMountainSurface } from "./mountain-surface";
 
@@ -17,47 +16,23 @@ export async function createMountains(init: Initialization) {
   const rock = await surfaceTexture("mountain", init);
   rock.repeat.set(45, 9);
 
-  async function geometryFor(layer: number, mobile: boolean) {
+  const geometryCache = new Map<string, Promise<THREE.BufferGeometry>>();
+  function geometryFor(layer: number, mobile: boolean) {
+    const key = `${mobile}:${layer}`;
+    let pending = geometryCache.get(key);
+    if (!pending) {
+      pending = buildGeometry(layer, mobile).catch(error => { geometryCache.delete(key); throw error; });
+      geometryCache.set(key, pending);
+    }
+    return pending;
+  }
+  async function buildGeometry(layer: number, mobile: boolean) {
     init.phase = `mountain-${layer}`;
-    const columns = mobile ? (layer < 2 ? 170 : 110) : layer < 2 ? 420 : 270;
-    // 近层包含独立支峰，纵向细分只增加在这一层；移动端仍有独立的顶点上限。
-    const rows = layer === 0 ? (mobile ? 56 : 130) : mobile ? 36 : 76;
-    const geometry = await createPlane(280, 52, columns, rows, init);
-    geometry.rotateX(-Math.PI / 2);
-    const positions = geometry.attributes.position;
-    for (let i = 0; i < positions.count; i++) {
-      if (i % 32 === 0) { const pause = init.checkpoint(); if (pause) await pause; }
-      // 把同样数量的横向顶点集中到主要可见山群，外围仍延伸至原有边界。
-      const u = positions.getX(i) / 140;
-      positions.setX(i, Math.sign(u) * Math.pow(Math.abs(u), 1.5) * 140);
-      positions.setY(
-        i,
-        mountainHeight(positions.getX(i), positions.getZ(i), layer),
-      );
-    }
-    const pause = init.checkpoint(); if (pause) await pause;
-    await computeNormals(geometry, init);
-    const normals = geometry.attributes.normal;
-    const colors = new Float32Array(positions.count * 3),
-      color = new THREE.Color();
-    for (let i = 0; i < positions.count; i++) {
-      if (i % 32 === 0) { const pause = init.checkpoint(); if (pause) await pause; }
-      const x = positions.getX(i),
-        y = positions.getY(i),
-        z = positions.getZ(i);
-      // 陡壁裸岩、缓坡暗植被和细碎岩层随真实坡度变化；不把远近层统一涂成蓝色。
-      const cliff = 1 - Math.max(0, normals.getY(i));
-      const grain = fbm(x * 1.6 + layer * 13, z * 1.9);
-      const strata = Math.sin(y * 5 + fbm(x * 0.15, z * 0.2) * 8) * 0.025;
-      color.setHSL(
-        0.55 + cliff * 0.04,
-        0.13 + (1 - cliff) * 0.1,
-        // 提高冷蓝中间调，月光面与雾中的山脊保留参考图的蓝灰层次。
-        0.34 + cliff * 0.15 + grain * 0.13 + strata,
-      );
-      color.toArray(colors, i * 3);
-    }
-    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    const data = await computeTerrain({ type: "mountain", layer, mobile }, init);
+    const geometry = init.track(new THREE.BufferGeometry());
+    for (const name of ["position", "normal", "uv", "color"] as const)
+      geometry.setAttribute(name, new THREE.BufferAttribute(data[name], name === "uv" ? 2 : 3));
+    geometry.setIndex(new THREE.BufferAttribute(data.index, 1));
     return geometry;
   }
 
@@ -85,20 +60,20 @@ export async function createMountains(init: Initialization) {
   return {
     group,
     async setQuality(mobile: boolean) {
+      const request = ++revision;
       // 竖屏把主峰移入可见山谷，横屏恢复原构图；只移动背景山群，不改宝盒、地面或相机运动。
       const aspect = window.innerWidth / Math.max(1, window.visualViewport?.height ?? window.innerHeight);
       group.position.x = aspect < .6 ? 12 : aspect < 1 ? 16 : 0;
       if (mobile === lightweight) return;
-      lightweight = mobile;
-      // 只在桌面与轻量模式互换时重建；旧几何立即释放，普通 resize 不重复分配。
-      const request = ++revision;
-      for (const [layer, mesh] of meshes.entries()) {
-        const geometry = await geometryFor(layer, mobile);
-        if (request !== revision) { init.release(geometry); return; }
-        const old = mesh.geometry;
-        mesh.geometry = geometry;
-        init.release(old);
+      // 两档几何随场景缓存；切回已使用画质直接复用，准备期间保持整套旧山体可见。
+      const prepared: THREE.BufferGeometry[] = [];
+      for (let layer = 0; layer < meshes.length; layer++) {
+        prepared.push(await geometryFor(layer, mobile));
+        if (request !== revision) return;
       }
+      init.check();
+      meshes.forEach((mesh, layer) => { mesh.geometry = prepared[layer]; });
+      lightweight = mobile;
     },
   };
 }

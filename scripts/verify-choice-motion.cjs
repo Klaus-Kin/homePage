@@ -1,10 +1,12 @@
 // 对生产构建使用真实可见时间采样；暂停页面后截图，避免截图等待跨过短暂的合盖/冲击阶段。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   // 从当前服务的静态入口读取实际地址；独立无脚本文档不会启动额外的 WebGL 场景。
   const linkContext = await page.context().browser().newContext({ javaScriptEnabled: false });
   let destinations;
   try {
-    const links = await linkContext.newPage();
+    const links = await linkContext.newPage().then(async target => { await linkContext.addInitScript(() => { window.__moonDiagnostics = true; }); return target; });
     await links.goto(new URL(page.url()).origin);
     destinations = await links.locator("[data-entrance]").evaluateAll(links =>
       Object.fromEntries(links.map(link => [link.dataset.entrance, link.href])));
@@ -13,7 +15,7 @@ async (page) => {
   const assert = (ok, message) => { if (!ok) throw new Error(message); };
   async function setup(viewport = {width:1366,height:768}, reducedMotion = 'no-preference') {
     const context = await browser.newContext({viewport, reducedMotion});
-    const target = await context.newPage(), errors = [], navigations = [];
+    const target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; }), errors = [], navigations = [];
     // 未匹配受控目的页的外部请求一律中止，防止验收意外访问真实站点。
     await context.route("**/*", route => new URL(route.request().url()).origin === origin
       ? route.continue() : route.abort());

@@ -1,10 +1,12 @@
 // 在各类视口逐段验证真实上翻动画，覆盖竖直抬升中途与完全落到左侧时的投影范围。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin = new URL(page.url()).origin;
   const context = await page.context().browser().newContext();
   const results = [];
   try {
-    const target = await context.newPage();
+    const target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; });
     // 中止未受控的外部请求，短时采样也不能意外导航到真实站点。
     await context.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
     for (const [width, height] of [

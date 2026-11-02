@@ -1,8 +1,10 @@
 // 草甸性能 self-review：检查分批初始化、重复缩放资源上界、真实帧间隔和完整释放。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin=new URL(page.url()).origin;
   const context=await page.context().browser().newContext({viewport:{width:1440,height:900},reducedMotion:'reduce'});
-  const target=await context.newPage();
+  const target=await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; });
   try {
     await target.route(/\/src\/scene\.ts(?:\?|$)/,async route=>{
       const response=await route.fetch(),source=await response.text();

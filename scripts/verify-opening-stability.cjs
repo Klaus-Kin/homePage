@@ -1,12 +1,14 @@
 // 连续采样近景到展开的镜头轨迹：起始帧不能跳变，中途不能阈值突跳或反复摆动，模型始终完整可见。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin = new URL(page.url()).origin, results = [];
   for (const [width, height] of [[360, 800], [390, 844], [393, 852], [430, 932], [480, 1040]]) {
     const context = await page.context().browser().newContext({
       viewport: { width, height }, isMobile: true, hasTouch: true,
     });
     try {
-      const target = await context.newPage();
+      const target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; });
       // 中止未受控的外部请求，短时采样也不能意外导航到真实站点。
       await context.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
       await target.goto(origin);

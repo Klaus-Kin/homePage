@@ -1,5 +1,7 @@
 // 记录设备、视口与帧间隔；手机模拟仍使用桌面 GPU，不能据此宣称真机达到目标。
 async (page) => {
+  // 验收显式开启详细采样，生产访问不再维护逐帧 DOM 数据。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin = new URL(page.url()).origin;
   const browser = page.context().browser();
   const results = [];
@@ -27,7 +29,7 @@ async (page) => {
   ]) {
     const { name, cpuRate, ...contextOptions } = options;
     const context = await browser.newContext(contextOptions);
-    const target = await context.newPage();
+    const target = await context.newPage().then(async target => { await context.addInitScript(() => { window.__moonDiagnostics = true; }); return target; });
     const errors = [];
     target.on("pageerror", (error) => errors.push(error.message));
     if (cpuRate) {

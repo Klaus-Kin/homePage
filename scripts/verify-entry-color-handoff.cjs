@@ -1,9 +1,12 @@
 // 在新鲜生产预览中使用 playwright-cli run-code --filename 执行；延迟真实图标模块并采集 GPU uniform 和连续交接帧。
 async (page) => {
+  // 验收显式开启复色诊断，普通访问仍不写入逐帧属性。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const browser=page.context().browser(), origin=new URL(page.url()).origin, results=[];
   const assert=(condition,message)=>{if(!condition) throw new Error(message);};
   for(const kind of ['blog','world']) for(const input of ['hover','focus']) for(const progress of [0,.5,1]) {
     const context=await browser.newContext({viewport:{width:1366,height:768}});
+    await context.addInitScript(() => { window.__moonDiagnostics = true; });
     let release;
     try {
       // 记录实际传给 GPU 的复色值，避免只检查 DOM 上的诊断属性而遗漏首帧绘制。
@@ -85,6 +88,7 @@ async (page) => {
   // 预热的零进度可以成功，但同步后的实际首帧提交失败时，整张后备图仍必须可见。
   for(const kind of ['blog','world']) {
     const context=await browser.newContext({viewport:{width:1366,height:768}});
+    await context.addInitScript(() => { window.__moonDiagnostics = true; });
     let release;
     try {
       await context.addInitScript(()=>{

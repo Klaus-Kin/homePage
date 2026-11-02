@@ -21,8 +21,10 @@ export function createEntryRenderer(canvas: HTMLCanvasElement) {
 
 /** 图片和实时画布使用相同的透明留白及像素取整规则；DPR 仍限制在 2。 */
 export function resizeEntryRenderer(renderer: THREE.WebGLRenderer, size: number, ratio: number) {
-  renderer.setPixelRatio(Math.min(ratio,2));
-  renderer.setSize(size*1.6,size*1.6,false);
+  const width=size*1.6, dpr=Math.min(ratio,2), previous=renderer.getSize(new THREE.Vector2());
+  // 只在实际尺寸或 DPR 变化时分配一次缓冲，重复通知不清空相同画布。
+  if(previous.x!==width || previous.y!==width || renderer.getPixelRatio()!==dpr)
+    renderer.setDrawingBufferSize(width,width,dpr);
 }
 
 /** 首帧导出复用运行时的模型、相机与三盏灯，后续修改造型后只需重新生成图片。 */
