@@ -84,7 +84,7 @@ test("separate documents align the hoop before page content using a shared 1.8 s
   assert.equal(first.rotor.style.visibility, "visible");
   first.advance(800); first.frame(); first.frame();
   assert.equal(first.alignedTimes.length, 1);
-  assert.match(html, /<\/div>\s*<script>[\s\S]*?<\/script>\s*<main id="app"/);
+  assert.ok(html.indexOf("alignHoop(initialLoader)") < html.indexOf('<main id="app"'));
 });
 
 test("cached return aligns the restored hoop before reloading and the new document continues its phase", () => {
@@ -94,6 +94,8 @@ test("cached return aligns the restored hoop before reloading and the new docume
   state.dispatch("pageshow", { persisted: false });
   assert.equal(state.alignedTimes.length, 1);
   state.dispatch("pageshow", { persisted: true });
+  assert.equal(state.reloaded(), false);
+  state.frame(); state.frame();
   assert.equal(state.reloaded(), true);
   assert.equal(state.alignedTimes[1], (origin + 9354) % 1800);
   const refreshed = boot(false, origin + 13_000, 1227);
@@ -107,6 +109,7 @@ test("reduced motion and missing rotation animation skip alignment without block
     state.window.__moonBoot.ready(); state.frame(); state.frame(); state.finishTimer();
     assert.equal(state.removed(), true);
     state.dispatch("pageshow", { persisted: true });
+    state.frame(); state.frame();
     assert.equal(state.reloaded(), true);
     assert.deepEqual(state.alignedTimes, []);
     assert.equal(state.rotor.style.visibility, "visible");
@@ -133,6 +136,13 @@ test("golden hoop and critical styles exist before the module entry", () => {
   assert.equal(calligraphyGlyphs[","].path, inscription.match(/id="ink-0-3-full" d="([^"]+)"/)![1]);
   assert.equal((html.match(/class="loading-label"/g) ?? []).length, 1);
   assert.doesNotMatch(html, /class="(?:site-header|brand|night-note)\b/);
+});
+
+// 加载图形必须先于体积较大的共享字形到达，暗色提示也不能依赖外链样式表。
+test("first paint declares dark colors and parses the hoop before shared glyph definitions", () => {
+  assert.match(html, /<meta name="color-scheme" content="dark"/);
+  assert.ok(html.indexOf('id="moon-loader"') < html.indexOf('class="seal-glyph-bank"'));
+  assert.ok(html.indexOf("alignHoop(initialLoader)") < html.indexOf('class="calligraphy-glyph-bank"'));
 });
 
 test("ready reveals the scene behind curtains and waits before allowing input", async () => {
@@ -248,6 +258,10 @@ test("persisted pageshow restores the loader and hides stale content before relo
   assert.equal(state.removed(), false);
   assert.equal(state.app.dataset.state, "loading");
   assert.equal(state.app.inert, true);
+  assert.equal(state.reloaded(), false);
+  state.frame();
+  assert.equal(state.reloaded(), false);
+  state.frame();
   assert.equal(state.reloaded(), true);
 });
 

@@ -2,6 +2,8 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <!-- 浏览器尚未取得外部样式或绘制正文时，也按暗色文档准备画布。 -->
+    <meta name="color-scheme" content="dark" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
@@ -18,9 +20,10 @@
     <style>
       /* 首屏关键样式不依赖 CSS 或模块下载，隐藏内容仍保留尺寸供相机计算。 */
       html, body { margin: 0; background: #080f20; }
+      :root { color-scheme: dark; }
       #app[data-state="loading"] { visibility: hidden; }
       /* 主场景先在幕布后显示；inert 由启动守卫维护，拉开完成前不接受鼠标和键盘输入。 */
-      /* 生产外链 CSS 排在内联样式后，必须高于 loading 规则，才能在拉幕过程中真正显露场景。 */
+      /* 生产页面完整样式排在关键样式后，必须高于 loading 规则，才能在拉幕过程中真正显露场景。 */
       #app[data-state="loading"][data-revealing="true"] { visibility: visible; }
       #moon-loader { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; justify-items: center; overflow: hidden; isolation: isolate; color: #cbb77f; }
       /* 缓存恢复先显示独立加载画面，再刷新；旧光幕、题词和出站黑壳不能参与恢复首帧。 */
@@ -97,8 +100,6 @@
     >
   </head>
   <body>
-    __MOON_SEAL_GLYPHS__
-    __MOON_CALLIGRAPHY_GLYPHS__
     <!-- 金箍直接内联，Three.js 尚未下载时也有独立、可访问的加载反馈。 -->
     <div id="moon-loader" role="status" aria-live="polite" aria-label="正在加载月光宝盒">
       <span class="loader-curtain loader-curtain-left" aria-hidden="true"></span>
@@ -147,10 +148,14 @@
           app.inert = true;
           // 恢复层与刷新后文档各对齐一次，跨过完整旋转周期也不会重新从零起转。
           alignHoop(loader);
-          window.location.reload();
+          // 第一帧提交恢复层，下一帧再刷新；同步 reload 会让浏览器丢弃刚插入的金箍。
+          requestAnimationFrame(() => requestAnimationFrame(() => window.location.reload()));
         });
       })();
     </script>
+    <!-- 共享字形较大，放在独立金箍之后；慢速响应也不必等完整字库才能给出加载反馈。 -->
+    __MOON_SEAL_GLYPHS__
+    __MOON_CALLIGRAPHY_GLYPHS__
     <main id="app" data-state="loading">
       <!-- 静态图由同一新场景导出，只在 WebGL 失败或禁用脚本时显示。 -->
       <div class="scene-fallback">

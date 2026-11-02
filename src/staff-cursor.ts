@@ -26,7 +26,7 @@ export function installStaffCursor() {
   // 原色图与月夜图共用热点与尺寸；只有两层都解码后才接管该手势。
   const colors = { point: new Image(72, 72), grab: new Image(72, 72) };
   const motion = matchMedia("(prefers-reduced-motion: reduce)");
-  let colorRaf = 0, disposed = false;
+  let colorRaf = 0, handoffRaf = 0, disposed = false;
   let nativeFallback = false, lastHit: Element | null = null, hitDirty = true;
   let nativeImages: HTMLImageElement[] = [];
   // 触屏页面不使用鼠标，避免为它预取三张图片而竞争首屏资源。
@@ -39,6 +39,7 @@ export function installStaffCursor() {
   let lastPoint: { x: number; y: number } | undefined;
   const hide = () => {
     cancelAnimationFrame(colorRaf); colorRaf = 0;
+    cancelAnimationFrame(handoffRaf); handoffRaf = 0;
     root.classList.remove("staff-cursor-active");
     layer.hidden = true;
   };
@@ -64,7 +65,7 @@ export function installStaffCursor() {
     const color = active === "staff" ? undefined : colors[active];
     if (color && color.parentElement !== layer) layer.append(color);
     if (layer.dataset.cursorKind !== active) layer.dataset.cursorKind = active;
-    // 每帧消费最新真实位置，不插值；高频设备的中间输入不会反复执行命中与样式更新。
+    // 输入事件直接提交最新位置，不再额外等一轮 RAF；复色动画仍使用独立的按需帧。
     const transform = `translate3d(${lastPoint.x - style.x}px, ${lastPoint.y - style.y}px, 0)`;
     current.style.transform = transform;
     if (color) {
@@ -75,7 +76,17 @@ export function installStaffCursor() {
       if (progress < 1 && target?.matches(":hover, :focus-visible") && !colorRaf)
         colorRaf = requestAnimationFrame(() => { colorRaf = 0; update(); });
     }
-    if (layer.hidden) { layer.hidden = false; root.classList.add("staff-cursor-active"); }
+    if (layer.hidden) layer.hidden = false;
+    if (!root.classList.contains("staff-cursor-active") && !handoffRaf) {
+      // 先让已解码图片获得一次真实绘制机会，再隐藏同热点的原生光标，避免交接时出现空白指针。
+      // hide 会取消这两帧；切到后台、离开页面或图片失效都不能被迟到回调重新接管。
+      handoffRaf = requestAnimationFrame(() => {
+        handoffRaf = requestAnimationFrame(() => {
+          handoffRaf = 0;
+          if (!layer.hidden && !disposed) root.classList.add("staff-cursor-active");
+        });
+      });
+    }
   };
   const schedule = () => {
     if (!colorRaf) colorRaf = requestAnimationFrame(() => { colorRaf = 0; update(); });
@@ -116,7 +127,9 @@ export function installStaffCursor() {
       previousTarget = target;
       if (target) targetColorReveal(target, now, motion.matches);
     }
-    hitDirty = false; schedule();
+    hitDirty = false;
+    // 只读事件命中对象，update 不读取布局；避免鼠标始终显示上一次输入的位置。
+    update();
   };
   // 只观察加载层移除与页面门禁；两者均完成后立即断开，不给主页增加持续的 DOM 监听开销。
   // 鼠标静止时也要在加载结束后完成交接；图片未就绪、已离开窗口或已切到触屏时仍由 update 保留原生回退。

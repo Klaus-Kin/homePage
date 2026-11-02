@@ -144,6 +144,9 @@ async (page) => {
           },32);
           await target.goBack({ waitUntil: "commit" });
           await target.waitForFunction(() => !!document.querySelector("#moon-loader:not(.revealing)"));
+          // 缓存文档先绘制两帧加载层再刷新；截图等新文档接管，避免恰好跨导航提交触发 CDP 截图错误。
+          // 旧文档的可见金箍仍由上方 pageshow 采样和持续 screencast 独立验收。
+          await target.waitForFunction(() => document.documentElement.dataset.moonReturning !== "true");
           await target.screenshot({ path: `output/playwright/lifecycle-${name}-return-loader.png` });
           await target.waitForFunction(() => document.querySelector("#app")?.dataset.state === "idle" && !document.querySelector("#moon-loader"));
           await target.waitForFunction(()=>document.querySelectorAll('.entry-icon[data-model-ready="true"]').length===2);
