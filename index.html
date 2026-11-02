@@ -54,9 +54,10 @@
       .seal-character { display: inline-block; width: 1em; height: 1em; margin-inline-end: .12em; vertical-align: -.12em; }
       .seal-character svg { display: block; width: 100%; height: 100%; }
       .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-      /* 欢迎语与金箍分别占据网格行，始终可见，减少动态时保持相同布局。 */
+      /* 欢迎语与金箍分别占据网格行，减少动态时保持相同布局。 */
       /* 欢迎语字号增至 24px，提高行书细笔画的可读性，窄屏仍完整居中显示。 */
-      #moon-loader .loading-label { margin-top: 24px; font: 24px/1.5 serif; letter-spacing: .18em; }
+      /* 先保留整行尺寸，等节点和九个字形解析完成再一次显露，防止流式响应中逐字补齐。 */
+      #moon-loader .loading-label { margin-top: 24px; font: 24px/1.5 serif; letter-spacing: .18em; visibility: hidden; }
       /* 行书轮廓继承原金色；尺寸来自离线字框，不添加字体声明或影响金箍动画。 */
       #moon-loader .loading-calligraphy { display: block; margin-block: .25em; overflow: visible; }
       @media (forced-colors: active) {
@@ -114,11 +115,18 @@
       </span>
       <span class="loading-label">__MOON_LOADING__</span>
     </div>
+    <!-- 欢迎语的最小字库紧随加载层，不等待后面的小篆和正文行书字库。 -->
+    __MOON_LOADING_GLYPHS__
     <script>
       // 紧随加载层执行，首次绘制前就使用跨文档一致的时间基准，后续旋转仍全部交给 CSS。
       (() => {
         const initialLoader = document.querySelector("#moon-loader");
         const loaderTemplate = initialLoader.cloneNode(true);
+        // 同步脚本位于欢迎语及最小字库之后；首次解析和缓存恢复都只显露已完整就绪的整行。
+        function showLoadingLabel(loader) {
+          const label = loader.querySelector(".loading-label");
+          if (label) label.style.visibility = "visible";
+        }
         function alignHoop(loader) {
           const rotor = loader.querySelector(".hoop-rotor");
           try {
@@ -135,6 +143,7 @@
           }
         }
         alignHoop(initialLoader);
+        showLoadingLabel(initialLoader);
         window.addEventListener("pageshow", event => {
           if (!event.persisted) return;
           // 同步遮住缓存文档，再刷新已经销毁的场景；入口模块失败时该恢复路径也独立存在。
@@ -148,6 +157,7 @@
           app.inert = true;
           // 恢复层与刷新后文档各对齐一次，跨过完整旋转周期也不会重新从零起转。
           alignHoop(loader);
+          showLoadingLabel(loader);
           // 第一帧提交恢复层，下一帧再刷新；同步 reload 会让浏览器丢弃刚插入的金箍。
           requestAnimationFrame(() => requestAnimationFrame(() => window.location.reload()));
         });

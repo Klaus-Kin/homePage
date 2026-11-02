@@ -10,8 +10,13 @@ async (page) => {
         // 在 load 时注册，确保监听顺序晚于 HTML 同步恢复守卫；事件监听器之间的微任务不能保证这个顺序。
         addEventListener("load", () => addEventListener("pageshow", event => {
           if (event.persisted) {
+            // 恢复守卫同步显露欢迎语；真实历史返回时也必须拥有全部九个可绘制字形。
+            const label = document.querySelector("#moon-loader .loading-label");
+            const uses = [...(label?.querySelectorAll("use") ?? [])];
             sessionStorage.setItem("__bootReturn", JSON.stringify({ persisted: true,
               loader: !!document.querySelector("#moon-loader"),
+              welcomeComplete: !!label && getComputedStyle(label).visibility === "visible" && uses.length === 9 &&
+                uses.every(use => { const bounds = use.getBBox(); return bounds.width > 0 && bounds.height > 0; }),
               state: document.querySelector("#app")?.dataset.state,
               returning: document.documentElement.dataset.moonReturning,
             }));
@@ -40,7 +45,7 @@ async (page) => {
         black: document.querySelector("#ink-transition")?.dataset.black === "true",
       }));
       if (restored.inert || restored.black || restored.fallback || errors.length ||
-          (cached && (!restored.cached?.persisted || !restored.cached.loader || restored.cached.state !== "loading")))
+          (cached && (!restored.cached?.persisted || !restored.cached.loader || !restored.cached.welcomeComplete || restored.cached.state !== "loading")))
         throw new Error(JSON.stringify({ cached, restored, errors }));
       await target.screenshot({ path: `output/playwright/startup-return-${cached ? "cached" : "ordinary"}.png` });
       results.push({ mode: cached ? "cached" : "ordinary", restored, errors });

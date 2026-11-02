@@ -29,7 +29,9 @@ function boot(reduced = false, timeOrigin = 0, initialTime = 0, animationAvailab
   const classes = new Set<string>();
   const classList = { add(...names: string[]) { names.forEach(name => classes.add(name)); }, remove() {}, toggle() {} };
   const app = { dataset: { state: "loading" } as Record<string, string>, inert: false, classList };
-  const loader: any = { classList, querySelector: () => rotor, remove() { removed = true; },
+  // 欢迎语与金箍使用独立可见性，便于验证首次解析和缓存恢复都一次显露整行。
+  const label = { style: { visibility: "hidden" } };
+  const loader: any = { classList, querySelector: (selector: string) => selector === ".loading-label" ? label : rotor, remove() { removed = true; },
     addEventListener(name: string, listener: (event: any) => void) { listeners.set(name, listener); },
     removeEventListener(name: string) { listeners.delete(name); } };
   loader.cloneNode = () => loader;
@@ -71,6 +73,7 @@ function boot(reduced = false, timeOrigin = 0, initialTime = 0, animationAvailab
     reloaded: () => reloaded, expired: () => timeout(), removed: () => removed,
     frame: () => { const pending = [...frames.values()]; frames.clear(); pending.forEach(callback => callback()); },
     advance: (delta: number) => { time += delta; }, timers, timerDelays, measurements, alignedTimes, rotor,
+    label,
     animationEnd: (name: string) => listeners.get("animationend")?.({ animationName: name, target: loader }),
     finishTimer: () => { for (const callback of [...timers.values()]) callback(); } };
 }
@@ -142,7 +145,35 @@ test("golden hoop and critical styles exist before the module entry", () => {
 test("first paint declares dark colors and parses the hoop before shared glyph definitions", () => {
   assert.match(html, /<meta name="color-scheme" content="dark"/);
   assert.ok(html.indexOf('id="moon-loader"') < html.indexOf('class="seal-glyph-bank"'));
-  assert.ok(html.indexOf("alignHoop(initialLoader)") < html.indexOf('class="calligraphy-glyph-bank"'));
+  assert.ok(html.indexOf("alignHoop(initialLoader)") < html.lastIndexOf('class="calligraphy-glyph-bank"'));
+});
+
+// 按真实解析顺序检查每个引用：欢迎语必须在其显露脚本之前取得全部字形，且全页不重复定义。
+test("welcome glyphs precede its reveal and remain unique across both banks", () => {
+  const banks = [...html.matchAll(/<svg class="calligraphy-glyph-bank"[\s\S]*?<\/svg>/g)];
+  assert.equal(banks.length, 2);
+  const expected = [...loadingSvg.matchAll(/href="#([^"]+)"/g)].map(match => match[1]);
+  const early = [...banks[0][0].matchAll(/<symbol id="([^"]+)"/g)].map(match => match[1]);
+  assert.equal(early.length, 9);
+  assert.deepEqual(new Set(early), new Set(expected));
+  const reveal = html.indexOf("showLoadingLabel(initialLoader)");
+  assert.ok(banks[0].index! + banks[0][0].length < reveal);
+  assert.ok(html.indexOf('<span class="loading-label">') < reveal);
+  assert.ok(reveal < html.indexOf('class="seal-glyph-bank"'));
+  const allIds = [...html.matchAll(/<symbol id="([^"]+)"/g)].map(match => match[1]);
+  assert.equal(new Set(allIds).size, allIds.length);
+  for (const match of html.matchAll(/href="#(calligraphy-[^"]+)"/g)) assert.ok(allIds.includes(match[1]));
+  assert.match(html, /#moon-loader \.loading-label\s*\{[^}]*visibility: hidden/);
+});
+
+test("welcome becomes visible as a whole on initial load and cached return without a timer", () => {
+  const state = boot();
+  assert.equal(state.label.style.visibility, "visible");
+  const timers = [...state.timerDelays];
+  state.label.style.visibility = "hidden";
+  state.dispatch("pageshow", { persisted: true });
+  assert.equal(state.label.style.visibility, "visible");
+  assert.deepEqual(state.timerDelays, timers);
 });
 
 test("ready reveals the scene behind curtains and waits before allowing input", async () => {

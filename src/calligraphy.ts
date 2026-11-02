@@ -6,8 +6,10 @@ const escapeText = (text: string) => text.replace(/[&<>"']/g, character =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
 
 /** 全页静态行书只定义一次轮廓；加载页、介绍和入口的颜色均从各自父元素继承。 */
-export function renderCalligraphyGlyphDefinitions(lines: readonly string[]): string {
+export function renderCalligraphyGlyphDefinitions(lines: readonly string[], definedCharacters = ""): string {
   const characters = new Set(lines.join(""));
+  // 加载层已前置的字形继续供正文引用，后面的字库不再输出相同 symbol，避免重复 ID。
+  for (const character of definedCharacters) characters.delete(character);
   const symbols = [...characters].map(character => {
     const glyph = calligraphyGlyphs[character];
     if (!glyph) throw new Error(`页面静态行书缺少字形：${character}；请重新运行 scripts/build-inscription.py --copy-only`);

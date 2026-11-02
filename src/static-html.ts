@@ -31,8 +31,10 @@ export function renderStaticHtml(html: string, blogUrl: string, inscriptionSvg =
       .map(part => `<span class="world-line">${renderCalligraphyCopy(part)}</span>`).join(""))
     // 欢迎语仍使用 24px 原金色，字形与其余静态行书共用，首屏不依赖字体请求或主模块执行。
     .replaceAll("__MOON_LOADING__", () => renderCalligraphyCopy(pageConfig.loadingLabel, true))
+    // 九个欢迎语字形先完整到达；其余静态字形仍留在后面，且共用同一份轮廓定义。
+    .replaceAll("__MOON_LOADING_GLYPHS__", () => renderCalligraphyGlyphDefinitions([pageConfig.loadingLabel]))
     .replaceAll("__MOON_SEAL_GLYPHS__", () => renderSealGlyphDefinitions(pageConfig.titleLines))
     .replaceAll("__MOON_CALLIGRAPHY_GLYPHS__", () => renderCalligraphyGlyphDefinitions([
       ...pageConfig.description, pageConfig.entranceLabel, pageConfig.worldLabel, pageConfig.loadingLabel,
-    ]));
+    ], pageConfig.loadingLabel));
 }
