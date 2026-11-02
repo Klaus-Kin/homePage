@@ -3,6 +3,7 @@ import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 import type { Initialization } from "./initialization";
 import { fbm } from "./terrain-math.ts";
 import { loadTexturePixels } from "./texture-cache.ts";
+import { computeNormals } from "./geometry.ts";
 
 /** 参考风化岩块的宽断面与不规则缺口；仅向旧凸包内部雕刻，保留原有落点和避让范围。 */
 export async function createWeatheredRockGeometry(envelope: THREE.BufferGeometry, init: Initialization) {
@@ -43,9 +44,16 @@ export async function createWeatheredRockGeometry(envelope: THREE.BufferGeometry
   }
   source.deleteAttribute("normal");
   source.deleteAttribute("uv");
-  const geometry = mergeVertices(source);
+  // 焊接与法线原先紧接雕刻批次执行，CPU 降速下会叠成长任务；保留算法与顶点顺序，只拆任务边界。
+  init.phase = "weathered-rock-merge";
+  await init.checkpoint(true);
+  const geometry = init.track(mergeVertices(source));
   init.release(source);
-  geometry.computeVertexNormals();
+  // 焊接结果在下一次让出前登记；取消或离页也能释放半成品，避免异步法线带来新的所有权空隙。
+  init.phase = "weathered-rock-normals";
+  await init.checkpoint(true);
+  geometry.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3));
+  await computeNormals(geometry, init);
   return geometry;
 }
 

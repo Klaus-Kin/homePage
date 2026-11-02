@@ -4,6 +4,8 @@ async (page) => {
   const assert=(value,message)=>{if(!value) throw new Error(message);};
   for(const [width,height,size,cpu] of [[1366,768,44,1],[390,844,36,1],[640,500,30,1],[390,844,36,4]]) {
     const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:2});
+    // 激活状态属于显式诊断数据，新建上下文不能继承驱动页的开关。
+    await context.addInitScript(() => { window.__moonDiagnostics = true; });
     const target=await context.newPage(),errors=[];
     target.on('pageerror',error=>errors.push(error.message));
     try {

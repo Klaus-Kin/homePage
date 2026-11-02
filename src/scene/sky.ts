@@ -12,6 +12,9 @@ import { cloudMotion } from "./cloud-motion";
 export async function createSky(lunarMap: THREE.Texture, init: Initialization) {
   const group = ownTree(init, new THREE.Group()),
     random = seededRandom(942);
+  // 月面下载可能在其他生成任务的微任务内完成；先切开任务，避免天空构建接在它们的 CPU 批次后。
+  init.phase = "sky-dome";
+  await init.checkpoint(true);
   const dome = new THREE.Mesh(
     new THREE.SphereGeometry(240, 32, 20),
     new THREE.ShaderMaterial({
@@ -30,6 +33,9 @@ export async function createSky(lunarMap: THREE.Texture, init: Initialization) {
   group.add(dome);
   const glow = init.track(glowTexture()),
     cloudMap = await cloudTexture(init);
+  // 缓存命中时 await 不会让浏览器绘制；明确分开星点与月球，保留原随机序列和几何精度。
+  init.phase = "sky-stars";
+  await init.checkpoint(true);
   const starPositions = new Float32Array(sceneConfig.quality.desktop.stars * 3);
   const colors = new Float32Array(starPositions.length);
   for (let i = 0; i < starPositions.length / 3; i++) {
@@ -45,6 +51,7 @@ export async function createSky(lunarMap: THREE.Texture, init: Initialization) {
     );
     const intensity = 0.4 + Math.pow(random(), 3) * 0.6;
     colors.set([intensity * 0.8, intensity * 0.88, intensity], i * 3);
+    if (i % 128 === 127) { const pause = init.checkpoint(); if (pause) await pause; }
   }
   const starsGeometry = new THREE.BufferGeometry();
   starsGeometry.setAttribute(
@@ -67,6 +74,8 @@ export async function createSky(lunarMap: THREE.Texture, init: Initialization) {
       }),
     ),
   );
+  init.phase = "sky-moon";
+  await init.checkpoint(true);
   const moon = new THREE.Mesh(
     new THREE.SphereGeometry(1, 64, 48),
     new THREE.MeshBasicMaterial({
@@ -94,6 +103,8 @@ export async function createSky(lunarMap: THREE.Texture, init: Initialization) {
   const clouds: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[] = [];
   const cloudBases: THREE.Vector3[] = [];
   const cloudScales: THREE.Vector3[] = [];
+  init.phase = "sky-clouds";
+  await init.checkpoint(true);
   for (let i = 0; i < sceneConfig.quality.desktop.clouds; i++) {
     const cloud = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
@@ -112,6 +123,7 @@ export async function createSky(lunarMap: THREE.Texture, init: Initialization) {
     cloudBases.push(new THREE.Vector3());
     cloudScales.push(new THREE.Vector3());
     group.add(cloud);
+    const pause = init.checkpoint(); if (pause) await pause;
   }
   // 流星使用有宽度的渐变三角带，局部 +X 为前端，旋转完全由速度得到。
   const meteor = new THREE.Group();

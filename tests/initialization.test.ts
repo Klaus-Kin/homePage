@@ -95,3 +95,19 @@ test("initialization reports each new phase once and stops reports after cancell
   assert.throws(() => init.checkpoint(true), { name: "AbortError" });
   assert.deepEqual(phases, ["setup", "ground"]);
 });
+
+// 默认续体排到后台优先级，让输入与浏览器绘制先执行；旧调度器继续使用原有 yield 兼容路径。
+test("default initialization scheduling uses background tasks with a legacy yield fallback", async t => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "scheduler");
+  t.after(() => { if (previous) Object.defineProperty(globalThis, "scheduler", previous); else delete (globalThis as any).scheduler; });
+  const priorities: string[] = [];
+  Object.defineProperty(globalThis, "scheduler", { configurable: true, value: {
+    async postTask(callback: () => void, options: { priority: string }) { priorities.push(options.priority); callback(); },
+  } });
+  await new Initialization().checkpoint(true);
+  assert.deepEqual(priorities, ["background"]);
+  let yielded = 0;
+  Object.defineProperty(globalThis, "scheduler", { configurable: true, value: { async yield() { yielded++; } } });
+  await new Initialization().checkpoint(true);
+  assert.equal(yielded, 1);
+});

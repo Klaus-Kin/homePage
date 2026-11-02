@@ -3,7 +3,7 @@ async (page) => {
   const origin = new URL(page.url()).origin, results = [];
   for (const event of ["moon-boot-failed", "pagehide"]) {
     // 植被流程已有细分阶段；使用确实会执行检查点的岩石阶段，并覆盖本轮调整的上传与预热等待。
-    for (const phase of ["mountain-0", "weathered-rock-geometry", "meadow-turf-desktop", "meadow-flowers-desktop", "wood-spell",
+    for (const phase of ["mountain-0", "sky-dome", "sky-stars", "sky-moon", "sky-clouds", "weathered-rock-geometry", "weathered-rock-merge", "weathered-rock-normals", "meadow-turf-desktop", "meadow-flowers-desktop", "wood-spell",
       "gpu-textures", "gpu-choice-1", "gpu-opening-3"]) {
       const context = await page.context().browser().newContext();
       try {
@@ -30,7 +30,13 @@ async (page) => {
           Initialization.prototype.track = function (item) {
             if (!tracked.has(item)) {
               tracked.set(item, 0);
-              item.addEventListener("dispose", () => tracked.set(item, tracked.get(item) + 1));
+              if (typeof item.addEventListener === "function")
+                item.addEventListener("dispose", () => tracked.set(item, tracked.get(item) + 1));
+              else {
+                // 位图等通用 disposable 不发送 Three.js 事件，直接计数 dispose，避免把检查器抛错当成泄漏。
+                const dispose = item.dispose.bind(item);
+                item.dispose = () => { tracked.set(item, tracked.get(item) + 1); dispose(); };
+              }
             }
             return originalTrack.call(this, item);
           };

@@ -1,5 +1,7 @@
 // 验证环境动画生命周期，并连续记录流星三个时刻；不向生产场景注入测试控制接口。
 async (page) => {
+  // 后台与减少动态检查依赖诊断帧计数，不能把两个 null 当作已经停止渲染。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const origin = new URL(page.url()).origin;
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto(origin);
@@ -40,6 +42,7 @@ async (page) => {
     .browser()
     .newContext({ viewport: { width: 1366, height: 768 } });
   const target = await context.newPage();
+  await context.addInitScript(() => { window.__moonDiagnostics = true; });
   // 中止未受控的外部请求，短时采样也不能意外导航到真实站点。
   await context.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   // 虚拟时钟只控制真实 requestAnimationFrame，位移和朝向仍由生产算法生成。

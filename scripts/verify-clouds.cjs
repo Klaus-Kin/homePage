@@ -1,10 +1,13 @@
 // 录制真实时间的桌面和手机画面，验证云雾几秒内可见的运动与场景暂停恢复。
 async (page) => {
+  // 渲染计数仅在诊断模式写入，驱动页与每个新上下文都必须显式启用。
+  await page.context().addInitScript(() => { window.__moonDiagnostics = true; });
   const browser = page.context().browser(), origin = new URL(page.url()).origin;
   const results = [];
   for (const [name, width, height] of [["desktop", 1366, 768], ["mobile", 390, 844]]) {
     const context = await browser.newContext({ viewport: { width, height },
       isMobile: name === "mobile", hasTouch: name === "mobile" });
+    await context.addInitScript(() => { window.__moonDiagnostics = true; });
     const target = await context.newPage(), errors = [];
     target.on("pageerror", (error) => errors.push(error.message));
     try {

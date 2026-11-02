@@ -76,13 +76,14 @@ async (page) => {
             fallback: document.querySelector("#app").classList.contains("fallback"), firstFrames: host.dataset.frames };
         });
         if (sample.fallback || !sample.stats || errors.length) throw new Error(JSON.stringify({ name, rate, cache, errors, sample }));
-        // 上下文创建是同步浏览器工作，单独列出；门禁针对应用生成批次。
-        const maximumBatch = Math.max(...sample.stats.batches.filter((_, i) => sample.stats.phases[i] !== "setup"));
-        const generationLongTasks = sample.longTasks.filter((task) => task.start >= sample.start && task.start < sample.end);
-        if (maximumBatch >= 50 || generationLongTasks.length)
-          throw new Error(`生成阶段超过 50ms：${JSON.stringify({ name, rate, cache, maximumBatch, generationLongTasks,
+        // 批次记录是检查点间的墙钟跨度，可能包含 Worker 或兄弟任务等待；真正冻结由 Long Tasks API 判定。
+        const maximumBatchWallMs = Math.max(...sample.stats.batches.filter((_, i) => sample.stats.phases[i] !== "setup"));
+        // 浏览器任务可能先于阶段标记开始；区间有交集就计入，避免漏掉跨过开始边界的冻结。
+        const generationLongTasks = sample.longTasks.filter((task) => task.start + task.duration > sample.start && task.start < sample.end);
+        if (generationLongTasks.length)
+          throw new Error(`生成阶段存在浏览器长任务：${JSON.stringify({ name, rate, cache, maximumBatchWallMs, generationLongTasks,
             phases: sample.stats.batches.map((ms, i) => ({ ms, phase: sample.stats.phases[i] })).filter((batch) => batch.ms >= 30) })}`);
-        results.push({ name, rate, cache, compositing, ...sample, maximumBatch });
+        results.push({ name, rate, cache, compositing, ...sample, maximumBatchWallMs });
         await cdp.send("Page.stopScreencast");
         if (cache === "cold") await target.unroute(pattern);
       }

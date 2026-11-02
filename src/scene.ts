@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { AdaptiveQuality, diagnostics } from "./performance-policy.ts";
 import { prefetchTexturePixels } from "./scene/texture-cache.ts";
 import { Initialization } from "./scene/initialization";
+import { loadLunarTexture } from "./scene/decoded-texture.ts";
 import { initializeTextures, warmSceneBatched as warmScene } from "./scene/gpu-initialization";
 import { ownTree } from "./scene/resources";
 import { fitCamera, sceneViewport, projectBounds, keepBoundsInView, openingCameraPosition, fitChoiceCamera } from "./responsive";
@@ -51,12 +52,8 @@ export async function createScene(
   // 原始素材及使用信息：https://svs.gsfc.nasa.gov/4720/
   onProgress("moon-texture");
   prefetchTexturePixels(init);
-  const downloadStart = performance.now();
-  const lunarMap = init.wait(new THREE.TextureLoader().loadAsync(
-    "/assets/moon-lroc.jpg",
-  )).then(texture => {
-  // 下载阶段包含图片解码；与后续生成和 GPU 上传分开，避免只看到一个笼统的等待时长。
-  performance.measure("moon-texture-download", { start: downloadStart, end: performance.now() });
+  const lunarMap = loadLunarTexture("/assets/moon-lroc.jpg", init).then(texture => {
+    // 下载与位图解码已分别测量；颜色空间和采样质量保持原设置，首帧仍等待完整月面。
     texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = 4;
     return texture;
   });

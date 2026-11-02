@@ -6,6 +6,8 @@ async (page) => {
   await page.waitForSelector('#app[data-state="idle"]');
   await page.mouse.move(600,400);
   await page.waitForSelector('.staff-cursor-layer:not([hidden])', {timeout:3000});
+  // 图层先呈现两帧才隐藏原生光标，必须等交接门禁完成后再读取 cursor。
+  await page.waitForSelector('html.staff-cursor-active');
   const desktop = await page.evaluate(() => {
     const selectors = ['html','#scene canvas','[data-entrance=blog]','#box-button'];
     return selectors.map(selector => ({selector, cursor:getComputedStyle(document.querySelector(selector)).cursor}));
@@ -71,6 +73,7 @@ async (page) => {
       await target.waitForSelector('#app[data-state="idle"]');
       await target.mouse.move(640,799);
       await target.waitForSelector('.staff-cursor-layer:not([hidden])');
+      await target.waitForSelector('html.staff-cursor-active');
       const scaled=await target.locator('.staff-cursor-layer img').evaluate(image=>({
         top:image.getBoundingClientRect().top,width:image.getBoundingClientRect().width,
         source:image.getAttribute('src'),cursor:getComputedStyle(document.documentElement).cursor,

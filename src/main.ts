@@ -1,5 +1,6 @@
 import { pageConfig } from "./config";
 import { coalesceFrame } from "./performance-policy.ts";
+import { NavigationRecovery } from "./navigation-recovery.ts";
 import { installStaffCursor } from "./staff-cursor";
 import { Inscription } from "./inscription";
 import { INSCRIPTION_TEXT } from "./inscription-strokes";
@@ -38,6 +39,26 @@ const state = new JourneyState();
 let scene: MoonScene | undefined;
 // 离页时动态导入可能仍在等待，后续回调必须保持终止状态。
 let leaving = false;
+// 原生导航成功提交前旧文档仍在；仅明确取消才重载，复用现有加载层完整重建全部旅程状态。
+let recoveringNavigation = false;
+const navigationRecovery = new NavigationRecovery(
+  (window as Window & { navigation?: EventTarget }).navigation,
+  recoverCancelledNavigation,
+);
+function recoverCancelledNavigation() {
+  if (leaving || recoveringNavigation || state.phase !== "redirect") return;
+  recoveringNavigation = true;
+  navigationRecovery.dispose();
+  window.location.reload();
+}
+function onNavigationEscape(event: KeyboardEvent) {
+  // 旧浏览器没有导航取消信号时，Escape 仍提供显式恢复；不在慢请求上设置猜测性的倒计时。
+  if (event.key !== "Escape" || event.defaultPrevented || state.phase !== "redirect" || leaving) return;
+  event.preventDefault();
+  window.stop();
+  recoverCancelledNavigation();
+}
+window.addEventListener("keydown", onNavigationEscape);
 // 图标有独立失败边界；不影响主场景、静态入口或旅程导航的既有启动门禁。
 let disposeEntryIcons: ReturnType<typeof import("./entry-icons").installEntryIcons> | undefined;
 // 入口超时后才抵达的模块直接沿用静态入口，禁止再次初始化和覆盖已显示的页面。
@@ -172,7 +193,12 @@ function animateTransition(now: number) {
   if (black && canNavigate) {
     state.redirect();
     app.dataset.state = state.phase;
-    window.location.assign(state.destination!);
+    navigationRecovery.watch(state.destination!);
+    try { window.location.assign(state.destination!); }
+    catch (error) {
+      console.warn("旅程导航未能启动，正在恢复主页：", error);
+      recoverCancelledNavigation();
+    }
     return;
   }
   transitionRaf = requestAnimationFrame(animateTransition);
@@ -327,6 +353,8 @@ document.addEventListener("visibilitychange", onVisibilityChange);
 // bfcache 的最早遮挡与刷新由无依赖 HTML 守卫负责，主模块销毁后也不会露出旧题词。
 window.addEventListener("pagehide", () => {
   leaving = true;
+  navigationRecovery.dispose();
+  window.removeEventListener("keydown", onNavigationEscape);
   viewportFrame.dispose();
   clearTimeout(viewportQualityTimer);
   window.removeEventListener("resize", queueViewport);

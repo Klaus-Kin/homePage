@@ -21,9 +21,11 @@ export class Initialization {
   constructor(now = () => performance.now(),
     schedule: () => Promise<void> = async () => {
       const scheduler = (globalThis as typeof globalThis & {
-        scheduler?: { yield(): Promise<void> };
+        scheduler?: { postTask?(callback: () => void, options: { priority: "background" }): Promise<void>; yield(): Promise<void> };
       }).scheduler;
-      if (scheduler) await scheduler.yield();
+      // yield 的续体优先级可能让连续批次跨过多个绘制机会；后台任务允许输入与浏览器绘制先执行。
+      if (scheduler?.postTask) await scheduler.postTask(() => {}, { priority: "background" });
+      else if (scheduler) await scheduler.yield();
       else await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }, reportProgress: (phase: string) => void = () => {}, owner?: Initialization) {
     this.now = now; this.schedule = schedule; this.started = now(); this.reportProgress = reportProgress;
@@ -33,7 +35,7 @@ export class Initialization {
   /** 同一初始化树共享下载缓存，子任务只独立计算自己的 CPU 时间预算。 */
   get root(): Initialization { return this.owner?.root ?? this; }
 
-  /** 仅验收读取时合并所有并行预算，嵌套子任务也不能漏出长任务统计。 */
+  /** 仅验收读取时合并批次墙钟；包含并行等待，不能把 batches 当作浏览器 longtask 时长。 */
   get stats(): { batches: number[]; phases: string[] } {
     const children = this.children.map(child => child.stats);
     return { batches: this.batches.concat(...children.map(child => child.batches)),

@@ -99,10 +99,13 @@ async (page) => {
       )
         throw new Error(`${kind}: 未恢复可见原生入口`);
       if (late) {
-        // 等到被刻意延迟的响应真实到达；Worker 终止后的取消请求不应变成整页 networkidle 的隐含前提。
-        const response = target.waitForResponse(pattern);
+        // 模块可能迟到，绑定 AbortSignal 的月面请求也可能已经取消；两种结果都必须真实结束。
+        const request = await requested;
+        const response = request.response();
         release();
-        await (await response).finished();
+        const received = await response;
+        if (received) await received.finished();
+        else if (kind !== "late-moon" || !request.failure()) throw new Error("迟到资源既未返回也未确认取消");
         await target.waitForTimeout(150);
       }
       const recovered = await target.evaluate(() => ({
